@@ -1,124 +1,112 @@
 (function () {
   const items = Array.from(document.querySelectorAll(".accordion-item"));
   if (!items.length) return;
-  const headers = items.map((item) => item.querySelector(".accordion-header"));
-  const headings = items.map((item) => item.querySelector(".accordion-heading"));
 
-  const root = items[0].closest(".slide");
-  const bottomStack = document.getElementById("bottom-stack");
-  if (!root || !bottomStack) return;
+  const page = items[0].closest(".page-professional");
+  if (!page) return;
 
-  const headerHpx = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--header-h")) || 110;
+  const TRANSITION_MS = 650; // matches the accordion-item flex-grow transition (0.6s) plus a buffer
 
-  function openItem(item) {
-    items.forEach((el) => {
-      const isTarget = el === item;
-      el.classList.toggle("is-open", isTarget);
-      el.querySelector(".accordion-header").setAttribute("aria-expanded", String(isTarget));
-      el.querySelector(".accordion-collapse").setAttribute("aria-hidden", String(!isTarget));
+  let activeIndex = items.findIndex((item) => item.classList.contains("is-open"));
+  if (activeIndex === -1) activeIndex = 0;
+  let transitioning = false;
+
+  function bodyOf(index) {
+    return items[index].querySelector(".accordion-body");
+  }
+
+  function activate(index) {
+    if (index < 0 || index >= items.length || index === activeIndex || transitioning) return;
+    transitioning = true;
+    activeIndex = index;
+    items.forEach((item, i) => {
+      const isActive = i === index;
+      item.classList.toggle("is-open", isActive);
+      item.querySelector(".accordion-header").setAttribute("aria-expanded", String(isActive));
+      item.querySelector(".accordion-collapse").setAttribute("aria-hidden", String(!isActive));
     });
-    updateStack();
+    // Always show a newly active section from the start of its content,
+    // never wherever it happened to be scrolled to last time it was open.
+    bodyOf(index).scrollTop = 0;
+    setTimeout(() => {
+      transitioning = false;
+    }, TRANSITION_MS);
   }
 
-  function scrollHeadingIntoView(heading) {
-    // scrollIntoView computes its target position once, up front -- calling
-    // it immediately targets where the item is *before* its own height
-    // transition finishes growing/collapsing everything around it. Wait
-    // for that to settle first so it scrolls to the real final position.
-    setTimeout(() => heading.scrollIntoView({ behavior: "smooth", block: "start" }), 650);
+  function isAtTop(body) {
+    return body.scrollTop <= 1;
   }
 
-  // Sections up to and including the active one stay in normal flow and
-  // stick to the top (their natural position is always trying to scroll
-  // past the threshold during ordinary downward scrolling, so sticky
-  // reliably holds them in place). Sections after the active one are
-  // hidden in place and instead represented in the fixed bottom-stack
-  // overlay -- see the .bottom-stack rule in styles.css for why sticky
-  // `bottom` doesn't work for these.
-  function updateStack() {
-    const rowH = headings[0].offsetHeight;
-    const activeIndex = items.findIndex((item) => item.classList.contains("is-open"));
+  function isAtBottom(body) {
+    return body.scrollTop + body.clientHeight >= body.scrollHeight - 1;
+  }
 
-    items.forEach((item, index) => {
-      const heading = headings[index];
-      if (index <= activeIndex) {
-        heading.style.visibility = "";
-        heading.style.top = `${headerHpx + index * rowH}px`;
-      } else {
-        heading.style.visibility = "hidden";
+  // A scroll gesture in either direction first scrolls the active
+  // section's own content, if it doesn't already fully fit; only once
+  // that content is scrolled all the way to the edge (or it fits within
+  // the viewport already, i.e. is trivially "at both edges") does the
+  // gesture collapse the current section and expand the next/previous one.
+  function handleDelta(deltaY) {
+    if (transitioning || deltaY === 0) return;
+    const body = bodyOf(activeIndex);
+    if (deltaY > 0) {
+      if (!isAtBottom(body)) {
+        body.scrollTop += deltaY;
+        return;
       }
-    });
-
-    bottomStack.innerHTML = "";
-    items.slice(activeIndex + 1).forEach((item) => {
-      const label = item.querySelector(".accordion-label").textContent;
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "bottom-stack-btn";
-      btn.innerHTML = '<img src="Images/Icons/expand-circle.svg" alt="" class="accordion-icon">';
-      btn.append(label);
-      btn.addEventListener("click", () => {
-        openItem(item);
-        suppressUntil = Date.now() + 1650;
-        scrollHeadingIntoView(item.querySelector(".accordion-heading"));
-      });
-      bottomStack.appendChild(btn);
-    });
+      activate(activeIndex + 1);
+    } else {
+      if (!isAtTop(body)) {
+        body.scrollTop += deltaY;
+        return;
+      }
+      activate(activeIndex - 1);
+    }
   }
 
-  // IntersectionObserver reacts to *any* layout change, including the ones
-  // our own accordion-open/close CSS transition causes as it reflows every
-  // header below it -- that self-triggering is what turns into a feedback
-  // loop or a wrong multi-step cascade. A plain `scroll` event only fires
-  // when scrollTop itself changes, which our transitions never do (they
-  // reflow content under a fixed scroll position), so listening for scroll
-  // instead sidesteps the problem instead of patching around it. Pick
-  // whichever header sits topmost within a band just below the fixed page
-  // header.
-  function evaluate() {
-    const bandTop = headerHpx - 60;
-    const bandBottom = root.clientHeight * 0.75;
-    const candidate = headers
-      .map((h) => ({ h, top: h.getBoundingClientRect().top }))
-      .filter((c) => c.top >= bandTop && c.top <= bandBottom)
-      .sort((a, b) => a.top - b.top)[0];
-    if (!candidate) return;
-    const target = candidate.h.closest(".accordion-item");
-    if (!target.classList.contains("is-open")) openItem(target);
-  }
+  page.addEventListener(
+    "wheel",
+    (e) => {
+      e.preventDefault();
+      handleDelta(e.deltaY);
+    },
+    { passive: false }
+  );
 
-  // Clicking a header already makes an explicit, unambiguous choice -- but
-  // the scrollIntoView it triggers fires its own run of scroll events
-  // while the section is simultaneously growing, and letting evaluate()
-  // react to that mid-flight geometry can override the click with a
-  // different section entirely. Suppress scroll-driven re-evaluation for
-  // a moment after a click so the deliberate choice sticks.
-  let suppressUntil = 0;
+  // Touch: track the finger's movement frame to frame and feed each delta
+  // through the same logic as wheel, so a drag scrolls content and, once
+  // at an edge, continuing the drag pages to the next/previous section.
+  let touchY = null;
+  page.addEventListener(
+    "touchstart",
+    (e) => {
+      touchY = e.touches[0].clientY;
+    },
+    { passive: true }
+  );
+  page.addEventListener(
+    "touchmove",
+    (e) => {
+      if (touchY === null) return;
+      const y = e.touches[0].clientY;
+      const deltaY = touchY - y;
+      touchY = y;
+      e.preventDefault();
+      handleDelta(deltaY);
+    },
+    { passive: false }
+  );
+  page.addEventListener(
+    "touchend",
+    () => {
+      touchY = null;
+    },
+    { passive: true }
+  );
 
   document.addEventListener("click", (e) => {
     const header = e.target.closest(".accordion-header");
     if (!header) return;
-    const item = header.closest(".accordion-item");
-    openItem(item);
-    suppressUntil = Date.now() + 1650;
-    scrollHeadingIntoView(item.querySelector(".accordion-heading"));
+    activate(items.indexOf(header.closest(".accordion-item")));
   });
-
-  let scrollTimer = null;
-  root.addEventListener("scroll", () => {
-    clearTimeout(scrollTimer);
-    scrollTimer = setTimeout(() => {
-      if (Date.now() < suppressUntil) return;
-      evaluate();
-    }, 120);
-  });
-
-  // String loading is async, so the initial call below can run before the
-  // real translated label text is in the DOM; and switching languages
-  // later needs the already-built bottom-stack buttons refreshed too.
-  document.addEventListener("i18n:applied", updateStack);
-
-  updateStack();
-  // In case the browser restores a non-zero scroll position on reload.
-  evaluate();
 })();

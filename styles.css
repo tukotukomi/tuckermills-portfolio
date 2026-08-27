@@ -138,22 +138,42 @@ body {
   opacity: 0.85;
 }
 
+/* This page is a self-contained "paged" view: the outer .slide doesn't
+   scroll at all (overflow-y overridden to hidden below). Only the active
+   section's own body scrolls, and accordion.js decides whether a
+   wheel/touch gesture should scroll that body or advance to the next/
+   previous section. Sizing is plain flexbox: the active .accordion-item
+   grows (flex-grow) to fill whatever space the collapsed ones (natural
+   header-only height) leave behind, with a "flex: 1; min-height: 0;"
+   chain down to .accordion-body so it can shrink and scroll internally
+   when content is taller than the space available. */
 .page-professional {
-  display: block;
-  text-align: left;
-  padding: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: hidden;
+  /* accordion.js handles touch drags manually (scroll active content vs.
+     page to next/previous section); without this, iOS Safari's own touch
+     scrolling fights that handling even with preventDefault() in the
+     touchmove listener. */
+  touch-action: none;
 }
 
-/* Padding lives on this inner wrapper rather than directly on the
-   scrolling element (.page-professional) -- sticky children's top/bottom
-   offsets are measured from the scroll container's own padding edge, so
-   padding there compounds with those offsets instead of just framing the
-   content. */
 .page-professional-inner {
-  padding: calc(var(--header-h, 110px) + 20px) 24px 40vh;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+  padding: calc(var(--header-h, 110px) + 20px) 24px 20px;
+}
+
+.page-professional .page-title {
+  flex: 0 0 auto;
 }
 
 .accordion {
+  flex: 1 1 auto;
+  min-height: 0;
   margin-top: 28px;
   display: flex;
   flex-direction: column;
@@ -161,25 +181,23 @@ body {
   border-bottom: 1px solid rgba(255, 255, 255, 0.2);
 }
 
-/* No box of its own: a sticky header's positioning range is constrained to
-   its own containing block, and a collapsed item's box is barely taller
-   than its header, leaving sticky no room to move. `display: contents`
-   makes each header/collapse pair lay out as direct children of the much
-   taller .accordion instead, so sticky has the whole list's height to
-   work with regardless of which section happens to be open. */
 .accordion-item {
-  display: contents;
+  flex: 0 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid rgba(255, 255, 255, 0.2);
+  transition: flex-grow 0.6s cubic-bezier(0.65, 0, 0.35, 1);
+}
+
+.accordion-item.is-open {
+  flex-grow: 1;
 }
 
 .accordion-heading {
+  flex: 0 0 auto;
   font-size: 1rem;
   font-weight: normal;
-  border-top: 1px solid rgba(255, 255, 255, 0.2);
-  scroll-margin-top: var(--header-h, 110px);
-  position: sticky;
-  background: #14181c;
-  z-index: 500;
-  transition: top 0.3s ease;
 }
 
 .accordion-header {
@@ -223,84 +241,43 @@ body {
 }
 
 .accordion-collapse {
-  display: grid;
-  grid-template-rows: 0fr;
-  transition: grid-template-rows 0.6s cubic-bezier(0.65, 0, 0.35, 1);
+  display: none;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .accordion-item.is-open .accordion-collapse {
-  grid-template-rows: 1fr;
-}
-
-/* Preview of upcoming (not-yet-reached) sections, fixed to the bottom of
-   the viewport -- outside the scrolling/transformed track entirely, since
-   sticky's `bottom` offset can only hold an element back from scrolling
-   past the edge, it can't pull one down from a naturally higher position,
-   which is exactly what's needed once little scrollable distance remains
-   near the end of the list. Only relevant on the Professional page. */
-.bottom-stack {
-  display: none;
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 500;
-  flex-direction: column;
-  max-width: 720px;
-  padding: 0 24px;
-}
-
-body[data-route="professional"] .bottom-stack:not(:empty) {
   display: flex;
-}
-
-.bottom-stack-btn {
-  appearance: none;
-  -webkit-appearance: none;
-  -moz-appearance: none;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  width: 100%;
-  min-height: 44px;
-  padding: 16px 4px;
-  background: #14181c;
-  border: none;
-  border-top: 1px solid rgba(255, 255, 255, 0.2);
-  color: #fff;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-.bottom-stack-btn:hover,
-.bottom-stack-btn:focus-visible {
-  background: rgba(255, 255, 255, 0.05);
-}
-
-.bottom-stack-btn .accordion-icon {
-  width: 22px;
-  height: 22px;
-  flex-shrink: 0;
 }
 
 .accordion-inner {
-  overflow: hidden;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .accordion-body {
-  display: flex;
-  align-items: center;
-  /* A fixed height (not just a minimum) so every section contributes the
-     same amount of scrollable height regardless of which one is open --
-     otherwise sections with more real content make the page taller than
-     ones with short placeholder text, and scrollTop gets clamped
-     differently depending on which section is active. That mismatch
-     creates a tug-of-war right at the transition boundary between two
-     sections. Overflow scrolls internally so longer content still works. */
-  height: calc(100dvh - var(--header-h, 110px) - 90px);
+  flex: 1 1 auto;
+  min-height: 0;
+  /* No align-items: center here -- centering a flex container that also
+     scrolls (overflow-y: auto) makes the browser split overflow evenly
+     above and below, so scrollTop: 0 doesn't land on the true start of
+     the content. Centering instead lives on .accordion-body-inner, a
+     plain (non-scrolling) child, which only has an effect when there's
+     genuinely extra space and falls back to normal top-down flow once
+     content is taller than the viewport. */
   overflow-y: auto;
-  padding: 12px 4px 40px 38px;
+  padding: 12px 4px 24px 38px;
+}
+
+.accordion-body-inner {
+  width: 100%;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
 .accordion-body-text {
