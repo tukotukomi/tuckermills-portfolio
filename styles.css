@@ -12,6 +12,7 @@ body {
 .hero {
   position: relative;
   height: 100vh;
+  height: 100dvh;
   background-image: url("Images/Backgrounds/hero-background.jpg");
   background-size: cover;
   background-position: center;
@@ -19,6 +20,15 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+@media (max-width: 768px) {
+  .hero {
+    /* Fixed attachment is unsupported on iOS Safari and causes scroll
+       jank on other mobile browsers; fall back to a normal scrolling
+       background below tablet width. */
+    background-attachment: scroll;
+  }
 }
 
 .hero-overlay {
