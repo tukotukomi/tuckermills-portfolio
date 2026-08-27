@@ -49,9 +49,81 @@
       </div>
     </section>
 
-    <section class="slide page" data-page="professional">
+    <section class="slide page page-professional" data-page="professional">
       <h2 class="page-title" data-i18n="nav.professional">Professional</h2>
-      <p data-i18n="page.comingSoon">Content coming soon.</p>
+
+      <div class="accordion">
+        <div class="accordion-item">
+          <h3 class="accordion-heading">
+            <button type="button" class="accordion-header" aria-expanded="false" aria-controls="acc-summary">
+              <img src="Images/Icons/expand-circle.svg" alt="" class="accordion-icon">
+              <span class="accordion-label" data-i18n="professional.summary.title">SUMMARY</span>
+            </button>
+          </h3>
+          <div id="acc-summary" class="accordion-collapse" aria-hidden="true">
+            <div class="accordion-inner">
+              <p class="accordion-body-text" data-i18n="professional.summary.body">Global localization expert, game producer, and project manager with extensive international experience leading multicultural teams through successful production cycles. Skilled in optimizing processes, implementing best practices, proactively identifying risk, and unblocking issues to create successful products and experiences while fostering a workplace that values accountability and honesty.
+Fluent in Chinese (Mandarin) and known for working with diverse multinational teams, serving as a trusted liaison with international partners and IP stakeholders while maintaining clarity, accountability, momentum, and cultural respect.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <h3 class="accordion-heading">
+            <button type="button" class="accordion-header" aria-expanded="false" aria-controls="acc-skills">
+              <img src="Images/Icons/expand-circle.svg" alt="" class="accordion-icon">
+              <span class="accordion-label" data-i18n="professional.skills.title">SKILLS</span>
+            </button>
+          </h3>
+          <div id="acc-skills" class="accordion-collapse" aria-hidden="true">
+            <div class="accordion-inner">
+              <p class="accordion-body-text" data-i18n="page.comingSoon">Content coming soon.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <h3 class="accordion-heading">
+            <button type="button" class="accordion-header" aria-expanded="false" aria-controls="acc-work-experience">
+              <img src="Images/Icons/expand-circle.svg" alt="" class="accordion-icon">
+              <span class="accordion-label" data-i18n="professional.workExperience.title">WORK EXPERIENCE</span>
+            </button>
+          </h3>
+          <div id="acc-work-experience" class="accordion-collapse" aria-hidden="true">
+            <div class="accordion-inner">
+              <p class="accordion-body-text" data-i18n="page.comingSoon">Content coming soon.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <h3 class="accordion-heading">
+            <button type="button" class="accordion-header" aria-expanded="false" aria-controls="acc-education">
+              <img src="Images/Icons/expand-circle.svg" alt="" class="accordion-icon">
+              <span class="accordion-label" data-i18n="professional.education.title">EDUCATION</span>
+            </button>
+          </h3>
+          <div id="acc-education" class="accordion-collapse" aria-hidden="true">
+            <div class="accordion-inner">
+              <p class="accordion-body-text" data-i18n="page.comingSoon">Content coming soon.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <h3 class="accordion-heading">
+            <button type="button" class="accordion-header" aria-expanded="false" aria-controls="acc-awards">
+              <img src="Images/Icons/expand-circle.svg" alt="" class="accordion-icon">
+              <span class="accordion-label" data-i18n="professional.awards.title">AWARDS</span>
+            </button>
+          </h3>
+          <div id="acc-awards" class="accordion-collapse" aria-hidden="true">
+            <div class="accordion-inner">
+              <p class="accordion-body-text" data-i18n="page.comingSoon">Content coming soon.</p>
+            </div>
+          </div>
+        </div>
+      </div>
     </section>
 
     <section class="slide page" data-page="photography">
@@ -86,9 +158,22 @@
         track.style.transform = "translateX(-" + index * 100 + "vw)";
       }
       document.body.classList.toggle("on-home", index === 0);
+
+      // Keep a CSS var in sync with the header's real height, which varies
+      // by viewport width (wrapping) and by language (text length) -- pages
+      // that need to clear the fixed header read this instead of a guess.
+      var header = document.getElementById("site-header");
+      if (header && window.ResizeObserver) {
+        var setHeaderVar = function () {
+          document.documentElement.style.setProperty("--header-h", header.getBoundingClientRect().height + "px");
+        };
+        new ResizeObserver(setHeaderVar).observe(header);
+        setHeaderVar();
+      }
     })();
   </script>
   <script src="i18n.js"></script>
   <script src="router.js"></script>
+  <script src="accordion.js"></script>
 </body>
 </html>
