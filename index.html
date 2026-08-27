@@ -11,8 +11,8 @@
     <nav id="site-nav" class="page-nav">
       <a href="/" class="page-nav-link route-link" data-route="home" data-i18n="hero.title">Tucker Mills</a>
       <a href="/professional" class="page-nav-link route-link" data-route="professional" data-i18n="nav.professional">Professional</a>
-      <a href="/photography" class="page-nav-link route-link" data-route="photography" data-i18n="nav.photography">Photography</a>
       <a href="/side-projects" class="page-nav-link route-link" data-route="side-projects" data-i18n="nav.sideProjects">Side Projects</a>
+      <a href="/photography" class="page-nav-link route-link" data-route="photography" data-i18n="nav.photography">Photography</a>
       <a href="/about-me" class="page-nav-link route-link" data-route="about-me" data-i18n="nav.aboutMe">About Me</a>
     </nav>
 
@@ -36,11 +36,11 @@
           <a href="/professional" class="start-btn route-link" data-route="professional">
             <span class="btn-label" data-i18n="nav.professional">Professional</span>
           </a>
-          <a href="/photography" class="start-btn route-link" data-route="photography">
-            <span class="btn-label" data-i18n="nav.photography">Photography</span>
-          </a>
           <a href="/side-projects" class="start-btn route-link" data-route="side-projects">
             <span class="btn-label" data-i18n="nav.sideProjects">Side Projects</span>
+          </a>
+          <a href="/photography" class="start-btn route-link" data-route="photography">
+            <span class="btn-label" data-i18n="nav.photography">Photography</span>
           </a>
           <a href="/about-me" class="start-btn route-link" data-route="about-me">
             <span class="btn-label" data-i18n="nav.aboutMe">About Me</span>
@@ -53,17 +53,19 @@
       <h2 class="page-title" data-i18n="nav.professional">Professional</h2>
 
       <div class="accordion">
-        <div class="accordion-item">
+        <div class="accordion-item is-open">
           <h3 class="accordion-heading">
-            <button type="button" class="accordion-header" aria-expanded="false" aria-controls="acc-summary">
+            <button type="button" class="accordion-header" aria-expanded="true" aria-controls="acc-summary">
               <img src="Images/Icons/expand-circle.svg" alt="" class="accordion-icon">
               <span class="accordion-label" data-i18n="professional.summary.title">SUMMARY</span>
             </button>
           </h3>
-          <div id="acc-summary" class="accordion-collapse" aria-hidden="true">
+          <div id="acc-summary" class="accordion-collapse" aria-hidden="false">
             <div class="accordion-inner">
-              <p class="accordion-body-text" data-i18n="professional.summary.body">Global localization expert, game producer, and project manager with extensive international experience leading multicultural teams through successful production cycles. Skilled in optimizing processes, implementing best practices, proactively identifying risk, and unblocking issues to create successful products and experiences while fostering a workplace that values accountability and honesty.
+              <div class="accordion-body">
+                <p class="accordion-body-text" data-i18n="professional.summary.body">Global localization expert, game producer, and project manager with extensive international experience leading multicultural teams through successful production cycles. Skilled in optimizing processes, implementing best practices, proactively identifying risk, and unblocking issues to create successful products and experiences while fostering a workplace that values accountability and honesty.
 Fluent in Chinese (Mandarin) and known for working with diverse multinational teams, serving as a trusted liaison with international partners and IP stakeholders while maintaining clarity, accountability, momentum, and cultural respect.</p>
+              </div>
             </div>
           </div>
         </div>
@@ -77,7 +79,9 @@ Fluent in Chinese (Mandarin) and known for working with diverse multinational te
           </h3>
           <div id="acc-skills" class="accordion-collapse" aria-hidden="true">
             <div class="accordion-inner">
-              <p class="accordion-body-text" data-i18n="page.comingSoon">Content coming soon.</p>
+              <div class="accordion-body">
+                <p class="accordion-body-text" data-i18n="page.comingSoon">Content coming soon.</p>
+              </div>
             </div>
           </div>
         </div>
@@ -91,7 +95,9 @@ Fluent in Chinese (Mandarin) and known for working with diverse multinational te
           </h3>
           <div id="acc-work-experience" class="accordion-collapse" aria-hidden="true">
             <div class="accordion-inner">
-              <p class="accordion-body-text" data-i18n="page.comingSoon">Content coming soon.</p>
+              <div class="accordion-body">
+                <p class="accordion-body-text" data-i18n="page.comingSoon">Content coming soon.</p>
+              </div>
             </div>
           </div>
         </div>
@@ -105,7 +111,9 @@ Fluent in Chinese (Mandarin) and known for working with diverse multinational te
           </h3>
           <div id="acc-education" class="accordion-collapse" aria-hidden="true">
             <div class="accordion-inner">
-              <p class="accordion-body-text" data-i18n="page.comingSoon">Content coming soon.</p>
+              <div class="accordion-body">
+                <p class="accordion-body-text" data-i18n="page.comingSoon">Content coming soon.</p>
+              </div>
             </div>
           </div>
         </div>
@@ -119,20 +127,22 @@ Fluent in Chinese (Mandarin) and known for working with diverse multinational te
           </h3>
           <div id="acc-awards" class="accordion-collapse" aria-hidden="true">
             <div class="accordion-inner">
-              <p class="accordion-body-text" data-i18n="page.comingSoon">Content coming soon.</p>
+              <div class="accordion-body">
+                <p class="accordion-body-text" data-i18n="page.comingSoon">Content coming soon.</p>
+              </div>
             </div>
           </div>
         </div>
       </div>
     </section>
 
-    <section class="slide page" data-page="photography">
-      <h2 class="page-title" data-i18n="nav.photography">Photography</h2>
+    <section class="slide page" data-page="side-projects">
+      <h2 class="page-title" data-i18n="nav.sideProjects">Side Projects</h2>
       <p data-i18n="page.comingSoon">Content coming soon.</p>
     </section>
 
-    <section class="slide page" data-page="side-projects">
-      <h2 class="page-title" data-i18n="nav.sideProjects">Side Projects</h2>
+    <section class="slide page" data-page="photography">
+      <h2 class="page-title" data-i18n="nav.photography">Photography</h2>
       <p data-i18n="page.comingSoon">Content coming soon.</p>
     </section>
 
@@ -149,7 +159,7 @@ Fluent in Chinese (Mandarin) and known for working with diverse multinational te
         sessionStorage.removeItem("spa-redirect-path");
         if (redirect !== location.pathname) history.replaceState(null, "", redirect);
       }
-      var routeIndex = { "/": 0, "/professional": 1, "/photography": 2, "/side-projects": 3, "/about-me": 4 };
+      var routeIndex = { "/": 0, "/professional": 1, "/side-projects": 2, "/photography": 3, "/about-me": 4 };
       var path = location.pathname.replace(/\/$/, "") || "/";
       var index = routeIndex[path] || 0;
       var track = document.getElementById("track");

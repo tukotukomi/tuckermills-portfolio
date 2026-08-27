@@ -1,13 +1,15 @@
 (function () {
-  const ROUTES = ["home", "professional", "photography", "side-projects", "about-me"];
+  const ROUTES = ["home", "professional", "side-projects", "photography", "about-me"];
   const PATHS = {
     home: "/",
     professional: "/professional",
-    photography: "/photography",
     "side-projects": "/side-projects",
+    photography: "/photography",
     "about-me": "/about-me",
   };
-  const TRANSITION = "transform 0.6s cubic-bezier(0.65, 0, 0.35, 1)";
+  const TRANSITION_MS = 600;
+  const EASING = "cubic-bezier(0.65, 0, 0.35, 1)";
+  const TRANSITION = `transform ${TRANSITION_MS}ms ${EASING}`;
 
   const track = document.getElementById("track");
   let currentIndex = indexFromPath(location.pathname);
@@ -87,6 +89,13 @@
       });
     });
 
+    // The clone transitions several properties (left/top/width/height/
+    // font-size) at once, and each fires its own separate `transitionend`
+    // event -- reacting to just the first one to arrive would swap back to
+    // the real title before the others (e.g. left/top) actually finished,
+    // producing a visible jump. A fixed timeout matching the declared
+    // duration is what both the clone and the track transition use, so
+    // wait for that instead.
     let finished = 0;
     function done() {
       finished++;
@@ -96,7 +105,7 @@
       titleEl.style.visibility = "";
       onDone();
     }
-    clone.addEventListener("transitionend", done, { once: true });
+    setTimeout(done, TRANSITION_MS);
     track.addEventListener("transitionend", done, { once: true });
   }
 
