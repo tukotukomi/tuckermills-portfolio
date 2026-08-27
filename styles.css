@@ -32,6 +32,10 @@ body {
   text-align: center;
 }
 
+.hero-content h1 {
+  white-space: pre-line;
+}
+
 .lang-switcher {
   position: absolute;
   top: 20px;
