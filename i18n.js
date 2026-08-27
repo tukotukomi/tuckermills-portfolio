@@ -30,6 +30,11 @@
       if (strings[key] !== undefined) el.textContent = strings[key];
     });
     if (strings["site.title"]) document.title = strings["site.title"];
+    // Lets other scripts (e.g. the accordion's bottom-stack preview, which
+    // reads label text into elements outside i18n's own scan) refresh
+    // anything they built from translated text, since string loading is
+    // async and finishes after those scripts have already run once.
+    document.dispatchEvent(new Event("i18n:applied"));
   }
 
   function renderMenu(currentLang) {

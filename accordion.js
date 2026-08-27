@@ -2,9 +2,13 @@
   const items = Array.from(document.querySelectorAll(".accordion-item"));
   if (!items.length) return;
   const headers = items.map((item) => item.querySelector(".accordion-header"));
+  const headings = items.map((item) => item.querySelector(".accordion-heading"));
 
   const root = items[0].closest(".slide");
-  if (!root) return;
+  const bottomStack = document.getElementById("bottom-stack");
+  if (!root || !bottomStack) return;
+
+  const headerHpx = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--header-h")) || 110;
 
   function openItem(item) {
     items.forEach((el) => {
@@ -13,9 +17,54 @@
       el.querySelector(".accordion-header").setAttribute("aria-expanded", String(isTarget));
       el.querySelector(".accordion-collapse").setAttribute("aria-hidden", String(!isTarget));
     });
+    updateStack();
   }
 
-  const headerHpx = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--header-h")) || 110;
+  function scrollHeadingIntoView(heading) {
+    // scrollIntoView computes its target position once, up front -- calling
+    // it immediately targets where the item is *before* its own height
+    // transition finishes growing/collapsing everything around it. Wait
+    // for that to settle first so it scrolls to the real final position.
+    setTimeout(() => heading.scrollIntoView({ behavior: "smooth", block: "start" }), 650);
+  }
+
+  // Sections up to and including the active one stay in normal flow and
+  // stick to the top (their natural position is always trying to scroll
+  // past the threshold during ordinary downward scrolling, so sticky
+  // reliably holds them in place). Sections after the active one are
+  // hidden in place and instead represented in the fixed bottom-stack
+  // overlay -- see the .bottom-stack rule in styles.css for why sticky
+  // `bottom` doesn't work for these.
+  function updateStack() {
+    const rowH = headings[0].offsetHeight;
+    const activeIndex = items.findIndex((item) => item.classList.contains("is-open"));
+
+    items.forEach((item, index) => {
+      const heading = headings[index];
+      if (index <= activeIndex) {
+        heading.style.visibility = "";
+        heading.style.top = `${headerHpx + index * rowH}px`;
+      } else {
+        heading.style.visibility = "hidden";
+      }
+    });
+
+    bottomStack.innerHTML = "";
+    items.slice(activeIndex + 1).forEach((item) => {
+      const label = item.querySelector(".accordion-label").textContent;
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "bottom-stack-btn";
+      btn.innerHTML = '<img src="Images/Icons/expand-circle.svg" alt="" class="accordion-icon">';
+      btn.append(label);
+      btn.addEventListener("click", () => {
+        openItem(item);
+        suppressUntil = Date.now() + 1650;
+        scrollHeadingIntoView(item.querySelector(".accordion-heading"));
+      });
+      bottomStack.appendChild(btn);
+    });
+  }
 
   // IntersectionObserver reacts to *any* layout change, including the ones
   // our own accordion-open/close CSS transition causes as it reflows every
@@ -27,7 +76,7 @@
   // whichever header sits topmost within a band just below the fixed page
   // header.
   function evaluate() {
-    const bandTop = headerHpx - 20;
+    const bandTop = headerHpx - 60;
     const bandBottom = root.clientHeight * 0.75;
     const candidate = headers
       .map((h) => ({ h, top: h.getBoundingClientRect().top }))
@@ -52,11 +101,7 @@
     const item = header.closest(".accordion-item");
     openItem(item);
     suppressUntil = Date.now() + 1650;
-    // scrollIntoView computes its target position once, up front -- calling
-    // it immediately targets where the item is *before* its own height
-    // transition finishes growing/collapsing everything around it. Wait
-    // for that to settle first so it scrolls to the real final position.
-    setTimeout(() => item.scrollIntoView({ behavior: "smooth", block: "start" }), 650);
+    scrollHeadingIntoView(item.querySelector(".accordion-heading"));
   });
 
   let scrollTimer = null;
@@ -68,6 +113,12 @@
     }, 120);
   });
 
+  // String loading is async, so the initial call below can run before the
+  // real translated label text is in the DOM; and switching languages
+  // later needs the already-built bottom-stack buttons refreshed too.
+  document.addEventListener("i18n:applied", updateStack);
+
+  updateStack();
   // In case the browser restores a non-zero scroll position on reload.
   evaluate();
 })();
