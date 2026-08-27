@@ -32,11 +32,10 @@
     if (strings["site.title"]) document.title = strings["site.title"];
   }
 
-  function buildSwitcher(currentLang) {
-    const toggle = document.getElementById("lang-toggle");
+  function renderMenu(currentLang) {
     const menu = document.getElementById("lang-menu");
     const currentLabel = document.getElementById("lang-current");
-    if (!toggle || !menu || !currentLabel) return;
+    if (!menu || !currentLabel) return;
 
     menu.innerHTML = "";
     Object.entries(LANGUAGES).forEach(([code, { label }]) => {
@@ -51,6 +50,12 @@
     });
 
     currentLabel.textContent = LANGUAGES[currentLang].label;
+  }
+
+  function initSwitcherToggle() {
+    const toggle = document.getElementById("lang-toggle");
+    const menu = document.getElementById("lang-menu");
+    if (!toggle || !menu) return;
 
     toggle.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -69,14 +74,15 @@
     localStorage.setItem(STORAGE_KEY, lang);
     const strings = await loadStrings(lang);
     applyStrings(strings);
-    buildSwitcher(lang);
+    renderMenu(lang);
   }
 
   const lang = detectLang();
   loadStrings(lang)
     .then((strings) => {
       applyStrings(strings);
-      buildSwitcher(lang);
+      renderMenu(lang);
+      initSwitcherToggle();
     })
     .catch(console.error);
 })();
