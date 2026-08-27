@@ -1,5 +1,11 @@
 {
   "site.title": "Tucker Mills",
   "hero.title": "Tucker Mills",
-  "hero.subtitle": "Portfolio coming soon."
+  "hero.subtitle": "Portfolio coming soon.",
+  "start.heading": "Where would you like to start?",
+  "nav.professional": "Professional",
+  "nav.photography": "Photography",
+  "nav.sideProjects": "Side Projects",
+  "nav.aboutMe": "About Me",
+  "page.comingSoon": "Content coming soon."
 }

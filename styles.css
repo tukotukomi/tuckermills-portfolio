@@ -4,15 +4,31 @@
   box-sizing: border-box;
 }
 
+html,
+body {
+  overflow-x: hidden;
+}
+
 body {
   font-family: system-ui, sans-serif;
   color: #fff;
 }
 
-.hero {
+.track {
+  display: flex;
+  width: 500vw;
+  transition: transform 0.6s cubic-bezier(0.65, 0, 0.35, 1);
+}
+
+.slide {
   position: relative;
+  flex: 0 0 100vw;
+  width: 100vw;
   height: 100vh;
   height: 100dvh;
+}
+
+.hero {
   background-image: url("Images/Backgrounds/hero-background.jpg");
   background-size: cover;
   background-position: center;
@@ -24,9 +40,6 @@ body {
 
 @media (max-width: 768px) {
   .hero {
-    /* Fixed attachment is unsupported on iOS Safari and causes scroll
-       jank on other mobile browsers; fall back to a normal scrolling
-       background below tablet width. */
     background-attachment: scroll;
   }
 }
@@ -40,17 +53,100 @@ body {
 .hero-content {
   position: relative;
   text-align: center;
+  padding: 20px;
 }
 
 .hero-content h1 {
   white-space: pre-line;
+  font-size: clamp(2rem, 6vw, 3.5rem);
+}
+
+.start-heading {
+  margin-top: 28px;
+  font-size: clamp(1.25rem, 4vw, 2rem);
+  font-weight: 600;
+}
+
+.start-buttons {
+  margin: 20px auto 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 14px;
+  width: 100%;
+  max-width: 320px;
+}
+
+@media (min-width: 700px) {
+  .start-buttons {
+    flex-direction: row;
+    max-width: none;
+    justify-content: center;
+    align-items: center;
+  }
+}
+
+.start-btn {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 12px 24px;
+  border: 2px solid #fff;
+  border-radius: 6px;
+  background: transparent;
+  color: #fff;
+  text-decoration: none;
+  font: inherit;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background-color 0.25s ease;
+}
+
+.start-btn:hover,
+.start-btn:focus-visible {
+  background-color: rgba(0, 0, 0, 0.5);
+}
+
+.page {
+  background: #14181c;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 12px;
+  padding: 20px;
+}
+
+.page-title {
+  font-size: clamp(1.75rem, 6vw, 3rem);
+}
+
+.page p {
+  font-size: 1rem;
+  opacity: 0.85;
+}
+
+.site-header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 20px;
 }
 
 .lang-switcher {
-  position: absolute;
-  top: 20px;
-  right: 20px;
-  z-index: 10;
+  position: relative;
+  margin-left: auto;
 }
 
 .lang-toggle {
@@ -103,4 +199,53 @@ body {
 
 .lang-menu li.selected {
   font-weight: 600;
+}
+
+.page-nav {
+  display: none;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+body:not(.on-home) .page-nav {
+  display: flex;
+}
+
+.page-nav-link {
+  padding: 9px 12px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 6px;
+  color: #fff;
+  text-decoration: none;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+.page-nav-link:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.page-nav-link[aria-current="page"] {
+  font-weight: 600;
+  border-color: #fff;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.morph-clone {
+  position: fixed;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  margin: 0;
+  pointer-events: none;
+  z-index: 2000;
+  white-space: nowrap;
+  transition:
+    left 0.6s cubic-bezier(0.65, 0, 0.35, 1),
+    top 0.6s cubic-bezier(0.65, 0, 0.35, 1),
+    width 0.6s cubic-bezier(0.65, 0, 0.35, 1),
+    height 0.6s cubic-bezier(0.65, 0, 0.35, 1),
+    font-size 0.6s cubic-bezier(0.65, 0, 0.35, 1);
 }

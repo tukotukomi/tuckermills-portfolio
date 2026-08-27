@@ -7,8 +7,14 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <section class="hero">
-    <div class="hero-overlay"></div>
+  <header id="site-header" class="site-header">
+    <nav id="site-nav" class="page-nav">
+      <a href="/" class="page-nav-link route-link" data-route="home" data-i18n="hero.title">Tucker Mills</a>
+      <a href="/professional" class="page-nav-link route-link" data-route="professional" data-i18n="nav.professional">Professional</a>
+      <a href="/photography" class="page-nav-link route-link" data-route="photography" data-i18n="nav.photography">Photography</a>
+      <a href="/side-projects" class="page-nav-link route-link" data-route="side-projects" data-i18n="nav.sideProjects">Side Projects</a>
+      <a href="/about-me" class="page-nav-link route-link" data-route="about-me" data-i18n="nav.aboutMe">About Me</a>
+    </nav>
 
     <div class="lang-switcher">
       <button id="lang-toggle" class="lang-toggle" type="button" aria-haspopup="listbox" aria-expanded="false">
@@ -17,12 +23,72 @@
       </button>
       <ul id="lang-menu" class="lang-menu" role="listbox" hidden></ul>
     </div>
+  </header>
 
-    <div class="hero-content">
-      <h1 data-i18n="hero.title">Tucker Mills</h1>
-      <p data-i18n="hero.subtitle">Portfolio coming soon.</p>
-    </div>
-  </section>
+  <div id="track" class="track">
+    <section class="slide hero" data-page="home">
+      <div class="hero-overlay"></div>
+      <div class="hero-content">
+        <h1 data-i18n="hero.title">Tucker Mills</h1>
+        <p data-i18n="hero.subtitle">Portfolio coming soon.</p>
+        <h2 class="start-heading" data-i18n="start.heading">Where would you like to start?</h2>
+        <div class="start-buttons">
+          <a href="/professional" class="start-btn route-link" data-route="professional">
+            <span class="btn-label" data-i18n="nav.professional">Professional</span>
+          </a>
+          <a href="/photography" class="start-btn route-link" data-route="photography">
+            <span class="btn-label" data-i18n="nav.photography">Photography</span>
+          </a>
+          <a href="/side-projects" class="start-btn route-link" data-route="side-projects">
+            <span class="btn-label" data-i18n="nav.sideProjects">Side Projects</span>
+          </a>
+          <a href="/about-me" class="start-btn route-link" data-route="about-me">
+            <span class="btn-label" data-i18n="nav.aboutMe">About Me</span>
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide page" data-page="professional">
+      <h2 class="page-title" data-i18n="nav.professional">Professional</h2>
+      <p data-i18n="page.comingSoon">Content coming soon.</p>
+    </section>
+
+    <section class="slide page" data-page="photography">
+      <h2 class="page-title" data-i18n="nav.photography">Photography</h2>
+      <p data-i18n="page.comingSoon">Content coming soon.</p>
+    </section>
+
+    <section class="slide page" data-page="side-projects">
+      <h2 class="page-title" data-i18n="nav.sideProjects">Side Projects</h2>
+      <p data-i18n="page.comingSoon">Content coming soon.</p>
+    </section>
+
+    <section class="slide page" data-page="about-me">
+      <h2 class="page-title" data-i18n="nav.aboutMe">About Me</h2>
+      <p data-i18n="page.comingSoon">Content coming soon.</p>
+    </section>
+  </div>
+
+  <script>
+    (function () {
+      var redirect = sessionStorage.getItem("spa-redirect-path");
+      if (redirect) {
+        sessionStorage.removeItem("spa-redirect-path");
+        if (redirect !== location.pathname) history.replaceState(null, "", redirect);
+      }
+      var routeIndex = { "/": 0, "/professional": 1, "/photography": 2, "/side-projects": 3, "/about-me": 4 };
+      var path = location.pathname.replace(/\/$/, "") || "/";
+      var index = routeIndex[path] || 0;
+      var track = document.getElementById("track");
+      if (index) {
+        track.style.transition = "none";
+        track.style.transform = "translateX(-" + index * 100 + "vw)";
+      }
+      document.body.classList.toggle("on-home", index === 0);
+    })();
+  </script>
   <script src="i18n.js"></script>
+  <script src="router.js"></script>
 </body>
 </html>
