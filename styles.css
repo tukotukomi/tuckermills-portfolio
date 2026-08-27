@@ -44,6 +44,9 @@ body {
 }
 
 .lang-toggle {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
   display: flex;
   align-items: center;
   gap: 6px;
