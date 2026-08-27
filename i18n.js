@@ -1,14 +1,24 @@
 (function () {
   const DEFAULT_LANG = "en";
+  const LANGUAGES = {
+    en: { label: "English", file: "en.json" },
+    "zh-cn": { label: "中文（简体）", file: "zh-cn.json" },
+  };
+  const STORAGE_KEY = "lang";
 
   function detectLang() {
-    return new URLSearchParams(window.location.search).get("lang") || DEFAULT_LANG;
+    const param = new URLSearchParams(window.location.search).get("lang");
+    if (param && LANGUAGES[param]) return param;
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored && LANGUAGES[stored]) return stored;
+    return DEFAULT_LANG;
   }
 
   async function loadStrings(lang) {
-    const res = await fetch(`strings/${lang}.json`);
+    const file = (LANGUAGES[lang] || LANGUAGES[DEFAULT_LANG]).file;
+    const res = await fetch(`strings/${file}`);
     if (!res.ok) {
-      if (lang === DEFAULT_LANG) throw new Error(`Missing strings/${DEFAULT_LANG}.json`);
+      if (lang === DEFAULT_LANG) throw new Error(`Missing strings/${file}`);
       return loadStrings(DEFAULT_LANG);
     }
     return res.json();
@@ -22,5 +32,51 @@
     if (strings["site.title"]) document.title = strings["site.title"];
   }
 
-  loadStrings(detectLang()).then(applyStrings).catch(console.error);
+  function buildSwitcher(currentLang) {
+    const toggle = document.getElementById("lang-toggle");
+    const menu = document.getElementById("lang-menu");
+    const currentLabel = document.getElementById("lang-current");
+    if (!toggle || !menu || !currentLabel) return;
+
+    menu.innerHTML = "";
+    Object.entries(LANGUAGES).forEach(([code, { label }]) => {
+      const li = document.createElement("li");
+      li.textContent = label;
+      li.setAttribute("role", "option");
+      li.setAttribute("data-lang", code);
+      li.setAttribute("aria-selected", String(code === currentLang));
+      if (code === currentLang) li.classList.add("selected");
+      li.addEventListener("click", () => selectLang(code));
+      menu.appendChild(li);
+    });
+
+    currentLabel.textContent = LANGUAGES[currentLang].label;
+
+    toggle.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const expanded = toggle.getAttribute("aria-expanded") === "true";
+      toggle.setAttribute("aria-expanded", String(!expanded));
+      menu.hidden = expanded;
+    });
+
+    document.addEventListener("click", () => {
+      toggle.setAttribute("aria-expanded", "false");
+      menu.hidden = true;
+    });
+  }
+
+  async function selectLang(lang) {
+    localStorage.setItem(STORAGE_KEY, lang);
+    const strings = await loadStrings(lang);
+    applyStrings(strings);
+    buildSwitcher(lang);
+  }
+
+  const lang = detectLang();
+  loadStrings(lang)
+    .then((strings) => {
+      applyStrings(strings);
+      buildSwitcher(lang);
+    })
+    .catch(console.error);
 })();

@@ -9,6 +9,15 @@
 <body>
   <section class="hero">
     <div class="hero-overlay"></div>
+
+    <div class="lang-switcher">
+      <button id="lang-toggle" class="lang-toggle" type="button" aria-haspopup="listbox" aria-expanded="false">
+        <img src="Images/Icons/language-select.svg" alt="" class="lang-icon">
+        <span id="lang-current">English</span>
+      </button>
+      <ul id="lang-menu" class="lang-menu" role="listbox" hidden></ul>
+    </div>
+
     <div class="hero-content">
       <h1 data-i18n="hero.title">Tucker Mills</h1>
       <p data-i18n="hero.subtitle">Portfolio coming soon.</p>
