@@ -33,6 +33,16 @@ body {
 .slide {
   position: absolute;
   inset: 0;
+  /* Without a z-index, position: absolute alone does NOT give this element
+     its own stacking context -- .page's z-index: -1 background layers
+     would then be pulled out to the document root's stacking context
+     instead of staying local, painting behind literally everything
+     (including the root's own background) rather than just behind this
+     page's own opaque background-color, which was hiding them entirely.
+     isolation: isolate forces the local context without needing to pick
+     a z-index number that has to stay clear of the header/morph-clone/
+     progress-bar's own values elsewhere. */
+  isolation: isolate;
   overflow-x: hidden;
   overflow-y: auto;
   /* The accordion constantly resizes content above/around the viewport as
