@@ -150,12 +150,14 @@ body {
 .page-professional {
   display: flex;
   flex-direction: column;
+  /* Override the generic .page rule's center/justify-center (this element
+     also carries the .page class) -- with those, .page-professional-inner
+     shrinks to its content's natural width instead of stretching full
+     width, which throws off the accordion's percentage-based width below. */
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 0;
   overflow-y: hidden;
-  /* accordion.js handles touch drags manually (scroll active content vs.
-     page to next/previous section); without this, iOS Safari's own touch
-     scrolling fights that handling even with preventDefault() in the
-     touchmove listener. */
-  touch-action: none;
 }
 
 .page-professional-inner {
@@ -177,21 +179,33 @@ body {
   margin-top: 28px;
   display: flex;
   flex-direction: column;
-  max-width: 720px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+  width: 80%;
 }
 
 .accordion-item {
-  flex: 0 1 auto;
+  /* flex-shrink: 0 -- a collapsed item must never shrink below its
+     header's natural height. With shrink allowed, the flex algorithm
+     would compress collapsed headers to make room for the active
+     section's growth demand, clipping their text and making the next
+     item's separator appear to cut through it. Only the active item
+     (below) opts back into shrinking, since it has an internal scroll
+     as a release valve that collapsed headers don't. */
+  flex: 0 0 auto;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  border-top: 1px solid rgba(255, 255, 255, 0.2);
   transition: flex-grow 0.6s cubic-bezier(0.65, 0, 0.35, 1);
 }
 
 .accordion-item.is-open {
   flex-grow: 1;
+  flex-shrink: 1;
+}
+
+/* Sections passed more than one step back are hidden entirely -- only the
+   most recently collapsed section stays visible above the active one. */
+.accordion-item.is-far-passed {
+  display: none;
 }
 
 .accordion-heading {

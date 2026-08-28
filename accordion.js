@@ -15,6 +15,15 @@
     return items[index].querySelector(".accordion-body");
   }
 
+  // Only the single most recently collapsed section stays visible above
+  // the active one; anything passed further back is hidden entirely so
+  // scrolling down doesn't accumulate a long, ever-growing list of headers.
+  function updateVisibility() {
+    items.forEach((item, i) => {
+      item.classList.toggle("is-far-passed", i < activeIndex - 1);
+    });
+  }
+
   function activate(index) {
     if (index < 0 || index >= items.length || index === activeIndex || transitioning) return;
     transitioning = true;
@@ -25,6 +34,7 @@
       item.querySelector(".accordion-header").setAttribute("aria-expanded", String(isActive));
       item.querySelector(".accordion-collapse").setAttribute("aria-hidden", String(!isActive));
     });
+    updateVisibility();
     // Always show a newly active section from the start of its content,
     // never wherever it happened to be scrolled to last time it was open.
     bodyOf(index).scrollTop = 0;
@@ -73,9 +83,12 @@
     { passive: false }
   );
 
-  // Touch: track the finger's movement frame to frame and feed each delta
-  // through the same logic as wheel, so a drag scrolls content and, once
-  // at an edge, continuing the drag pages to the next/previous section.
+  // Touch: let the browser's own native touch scrolling handle the common
+  // case (dragging within a section that isn't yet at its edge) so it
+  // keeps its normal momentum/inertia feel. Only step in -- preventDefault
+  // and drive the transition ourselves -- once the active section is
+  // already at the edge the drag is pulling past, since native scrolling
+  // has nothing to do there but rubber-band.
   let touchY = null;
   page.addEventListener(
     "touchstart",
@@ -87,12 +100,21 @@
   page.addEventListener(
     "touchmove",
     (e) => {
-      if (touchY === null) return;
+      if (touchY === null || transitioning) return;
       const y = e.touches[0].clientY;
       const deltaY = touchY - y;
-      touchY = y;
-      e.preventDefault();
-      handleDelta(deltaY);
+      const body = bodyOf(activeIndex);
+      if (deltaY > 0 && isAtBottom(body)) {
+        e.preventDefault();
+        touchY = y;
+        activate(activeIndex + 1);
+      } else if (deltaY < 0 && isAtTop(body)) {
+        e.preventDefault();
+        touchY = y;
+        activate(activeIndex - 1);
+      } else {
+        touchY = y;
+      }
     },
     { passive: false }
   );
@@ -109,4 +131,6 @@
     if (!header) return;
     activate(items.indexOf(header.closest(".accordion-item")));
   });
+
+  updateVisibility();
 })();
