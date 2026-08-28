@@ -449,6 +449,19 @@ body {
   justify-content: center;
 }
 
+/* While the item's own height is mid-animation (see animateItemHeight in
+   accordion.js), centering here would recompute every frame as the
+   available space grows -- the text drifting to re-center on top of the
+   box itself growing reads as two competing motions at once. Anchoring
+   to the top for the duration keeps it to the one motion (the box
+   revealing it from the top down); centering (for short content) is
+   only ever a settled-state, non-animated concern once is-animating
+   is gone and the height stops moving, so there's nothing left to
+   fight by then. */
+.accordion-item.is-animating .accordion-body-inner {
+  justify-content: flex-start;
+}
+
 .accordion-body-text {
   white-space: pre-line;
   line-height: 1.7;
