@@ -282,9 +282,31 @@ Fluent in Chinese (Mandarin) and known for working with diverse multinational te
       <p data-i18n="page.comingSoon">Content coming soon.</p>
     </section>
 
-    <section class="slide page" data-page="photography">
-      <h2 class="page-title" data-i18n="nav.photography">Photography</h2>
-      <p data-i18n="page.comingSoon">Content coming soon.</p>
+    <section class="slide page page-photography" data-page="photography">
+      <div class="page-photography-inner">
+        <h2 class="page-title" data-i18n="nav.photography">Photography</h2>
+
+        <!-- Each .photo-banner will eventually become a link to a subgallery
+             (see accordion.js-style click delegation elsewhere for the
+             pattern); it's a plain div for now since no subgalleries exist
+             yet. --photo-focal-x/--photo-focal-y on the img adjust which
+             part of the source image stays visible in the 400px crop --
+             override either on a per-image basis, default is centered. -->
+        <div class="photo-banner-list">
+          <div class="photo-banner">
+            <img class="photo-banner-img" src="Images/Photography/banner-1.jpg" alt="">
+          </div>
+          <div class="photo-banner">
+            <img class="photo-banner-img" src="Images/Photography/banner-2.jpg" alt="">
+          </div>
+          <div class="photo-banner">
+            <img class="photo-banner-img" src="Images/Photography/banner-3.jpg" alt="">
+          </div>
+          <div class="photo-banner">
+            <img class="photo-banner-img" src="Images/Photography/banner-4.jpg" alt="">
+          </div>
+        </div>
+      </div>
     </section>
 
     <section class="slide page" data-page="about-me">

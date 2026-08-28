@@ -198,6 +198,61 @@ body {
   opacity: 0.85;
 }
 
+/* Overrides the generic .page rule's center/justify-center/text-align-
+   center (this element also carries the .page class) -- banners need to
+   stretch full width and the page needs to scroll top-down once there
+   are more of them than fit in the viewport, same reasoning as
+   .page-professional below. */
+.page-photography {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  text-align: center;
+  gap: 0;
+  padding: 0;
+}
+
+.page-photography-inner {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding-top: calc(var(--header-h, 110px) + 20px);
+}
+
+.page-photography .page-title {
+  padding: 0 24px;
+  margin-bottom: 20px;
+}
+
+/* A generic, reusable banner block -- not tied to the Photography page
+   specifically, so it can move along with this content if Photography
+   ever collapses into Side Projects. Each banner crops its image to a
+   fixed height regardless of the image's own aspect ratio; the
+   --photo-focal-x/--photo-focal-y custom properties (set inline per img,
+   default centered) control which part of the image stays visible in
+   that crop, since object-fit: cover alone always centers it. */
+.photo-banner-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.photo-banner {
+  width: 100%;
+  height: 400px;
+  overflow: hidden;
+  margin-bottom: 20px;
+}
+
+.photo-banner-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: var(--photo-focal-x, 50%) var(--photo-focal-y, 50%);
+}
+
 /* This page is a self-contained "paged" view: the outer .slide doesn't
    scroll at all (overflow-y overridden to hidden below). Only the active
    section's own body scrolls, and accordion.js decides whether a
