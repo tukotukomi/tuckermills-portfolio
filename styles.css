@@ -285,6 +285,14 @@ body {
   display: none;
 }
 
+/* accordion.js's height-collapse animation (see animateItemHeight) needs
+   a closing item to stay rendered while its height tweens down to 0 --
+   display: none can't be seen shrinking away, so this overrides it for
+   the duration, then is removed once the animation completes. */
+.accordion-item.is-animating {
+  display: flex !important;
+}
+
 .accordion-passed:not([hidden]),
 .accordion-remaining:not([hidden]) {
   appearance: none;

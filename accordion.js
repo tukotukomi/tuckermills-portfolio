@@ -158,9 +158,52 @@
     updateRemaining();
   }
 
+  // flex-grow is declared as transitionable on .accordion-item, but it
+  // doesn't actually interpolate in practice (confirmed: forcing a
+  // multi-second transition still snaps instantly) -- a known limitation
+  // of animating flex-grow, not something a duration/easing tweak fixes.
+  // Instead, explicitly transition a pixel height: freeze the item at its
+  // starting height, force a reflow so the browser commits that as the
+  // transition's start point, then set the target height so it actually
+  // animates. is-animating keeps a closing item rendered (overriding
+  // is-above-active/is-below-active's display: none) for the duration,
+  // since a display: none item can't be seen shrinking away.
+  function animateItemHeight(item, from, to) {
+    if (from === to) return;
+    item.classList.add("is-animating");
+    item.style.transition = "none";
+    item.style.flexGrow = "0";
+    item.style.flexShrink = "0";
+    item.style.overflow = "hidden";
+    item.style.height = `${from}px`;
+    void item.offsetHeight;
+    item.style.transition = `height ${TRANSITION_MS - 50}ms cubic-bezier(0.65, 0, 0.35, 1)`;
+    item.style.height = `${to}px`;
+
+    function cleanup() {
+      item.style.height = "";
+      item.style.flexGrow = "";
+      item.style.flexShrink = "";
+      item.style.overflow = "";
+      item.style.transition = "";
+      item.classList.remove("is-animating");
+      item.removeEventListener("transitionend", onEnd);
+    }
+    function onEnd(e) {
+      if (e.propertyName === "height" && e.target === item) cleanup();
+    }
+    item.addEventListener("transitionend", onEnd);
+    setTimeout(cleanup, TRANSITION_MS);
+  }
+
   function activate(index) {
     if (index < 0 || index >= items.length || index === activeIndex || transitioning) return;
     transitioning = true;
+
+    const prevItem = items[activeIndex];
+    const prevFromHeight = prevItem.getBoundingClientRect().height;
+    const nextItem = items[index];
+
     activeIndex = index;
     items.forEach((item, i) => {
       const isActive = i === index;
@@ -169,12 +212,23 @@
       item.querySelector(".accordion-collapse").setAttribute("aria-hidden", String(!isActive));
     });
     updateVisibility();
+
+    // Measure the settled, natural target height before overriding it for
+    // the FLIP animation below, so the progress bar's math (which reads
+    // live layout) reflects the real final state rather than a
+    // mid-animation one.
+    const nextToHeight = nextItem.getBoundingClientRect().height;
+
     // Always show a newly active section from the start of its content,
     // never wherever it happened to be scrolled to last time it was open.
     bodyOf(index).scrollTop = 0;
     resetOverscroll();
     updateProgressBounds();
     updateProgress();
+
+    animateItemHeight(prevItem, prevFromHeight, 0);
+    animateItemHeight(nextItem, 0, nextToHeight);
+
     setTimeout(() => {
       transitioning = false;
     }, TRANSITION_MS);
