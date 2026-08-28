@@ -10,6 +10,7 @@
   const passedLabelEl = passedEl ? passedEl.querySelector(".accordion-remaining-label") : null;
   const remainingEl = accordion ? accordion.querySelector(".accordion-remaining") : null;
   const remainingLabelEl = remainingEl ? remainingEl.querySelector(".accordion-remaining-label") : null;
+  const progressFillEl = document.getElementById("scroll-progress-fill");
 
   const TRANSITION_MS = 650; // matches the accordion-item flex-grow transition (0.6s) plus a buffer
 
@@ -26,6 +27,12 @@
   const OVERSCROLL_RESET_MS = 250;
 
   let joiner = ", ";
+
+  // Cached per-section {header, full} pixel heights, as if every section
+  // were expanded and stacked in one long document -- used to compute the
+  // progress bar's fraction. Measured off-screen (see measureSectionHeights)
+  // since collapsed sections are display:none and can't be measured live.
+  let sectionHeights = [];
 
   let activeIndex = items.findIndex((item) => item.classList.contains("is-open"));
   if (activeIndex === -1) activeIndex = 0;
@@ -69,6 +76,55 @@
     remainingLabelEl.textContent = joinTitles(remaining);
   }
 
+  // Measures every section's full header+body height as if it were open,
+  // by cloning the accordion off-screen (position: fixed, way off the left
+  // edge) with every item forced open and unconstrained by the real
+  // layout's flex/overflow clipping, so scrollHeight-style clipping never
+  // shrinks the numbers. Re-run whenever the content's rendered size could
+  // have changed: on load, on resize, and on a language switch.
+  function measureSectionHeights() {
+    if (!accordion) return [];
+    const clone = accordion.cloneNode(true);
+    clone.classList.add("accordion-measure-clone");
+    clone.querySelectorAll(".accordion-passed, .accordion-remaining").forEach((el) => el.remove());
+    const clonedItems = Array.from(clone.querySelectorAll(".accordion-item"));
+    clonedItems.forEach((item) => {
+      item.classList.remove("is-above-active", "is-below-active");
+      item.classList.add("is-open");
+    });
+    document.body.appendChild(clone);
+    const heights = clonedItems.map((item) => ({
+      header: item.querySelector(".accordion-header").getBoundingClientRect().height,
+      full: item.getBoundingClientRect().height,
+    }));
+    document.body.removeChild(clone);
+    return heights;
+  }
+
+  // The progress fraction treats the whole accordion as one long document
+  // with every section expanded and stacked: sections already passed count
+  // in full, the active section counts its header plus however much of its
+  // body has been scrolled into view, and sections not yet reached count
+  // for nothing (though their full height is still part of the total).
+  function updateProgress() {
+    if (!progressFillEl || !sectionHeights.length) return;
+    const total = sectionHeights.reduce((sum, h) => sum + h.full, 0);
+    if (total <= 0) return;
+    let position = 0;
+    for (let i = 0; i < activeIndex; i++) position += sectionHeights[i].full;
+    const activeHeader = sectionHeights[activeIndex] ? sectionHeights[activeIndex].header : 0;
+    const body = bodyOf(activeIndex);
+    const seen = Math.min(body.scrollTop + body.clientHeight, body.scrollHeight);
+    position += activeHeader + seen;
+    const fraction = Math.min(1, Math.max(0, position / total));
+    progressFillEl.style.height = fraction * 100 + "%";
+  }
+
+  function remeasure() {
+    sectionHeights = measureSectionHeights();
+    updateProgress();
+  }
+
   // Sections on either side of the active one are hidden individually and
   // summarized instead: everything above collapses into one combined row
   // (updatePassed) and everything below into another (updateRemaining),
@@ -100,6 +156,7 @@
     // never wherever it happened to be scrolled to last time it was open.
     bodyOf(index).scrollTop = 0;
     resetOverscroll();
+    updateProgress();
     setTimeout(() => {
       transitioning = false;
     }, TRANSITION_MS);
@@ -128,6 +185,7 @@
     if (!atBoundary) {
       body.scrollTop += deltaY;
       resetOverscroll();
+      updateProgress();
       return;
     }
 
@@ -238,7 +296,18 @@
     if (e.detail && e.detail["common.listJoiner"]) joiner = e.detail["common.listJoiner"];
     updatePassed();
     updateRemaining();
+    // Translated text can wrap differently, changing section heights.
+    remeasure();
+  });
+
+  // Section heights change with viewport width (text reflow), so the
+  // progress total needs recomputing after a resize settles.
+  let resizeTimer = null;
+  window.addEventListener("resize", () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(remeasure, 150);
   });
 
   updateVisibility();
+  remeasure();
 })();

@@ -23,6 +23,7 @@
 
   function setActiveNav(route) {
     document.body.classList.toggle("on-home", route === "home");
+    document.body.classList.toggle("on-professional", route === "professional");
     document.querySelectorAll(".page-nav-link").forEach((link) => {
       if (link.getAttribute("data-route") === route) link.setAttribute("aria-current", "page");
       else link.removeAttribute("aria-current");
