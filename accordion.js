@@ -6,6 +6,8 @@
   if (!page) return;
 
   const accordion = items[0].closest(".accordion");
+  const passedEl = accordion ? accordion.querySelector(".accordion-passed") : null;
+  const passedLabelEl = passedEl ? passedEl.querySelector(".accordion-remaining-label") : null;
   const remainingEl = accordion ? accordion.querySelector(".accordion-remaining") : null;
   const remainingLabelEl = remainingEl ? remainingEl.querySelector(".accordion-remaining-label") : null;
 
@@ -41,6 +43,21 @@
     overscrollDir = 0;
   }
 
+  function joinTitles(list) {
+    return list.map((item) => item.querySelector(".accordion-label").textContent.trim()).join(joiner);
+  }
+
+  function updatePassed() {
+    if (!passedEl || !passedLabelEl) return;
+    const passed = items.slice(0, activeIndex);
+    if (!passed.length) {
+      passedEl.hidden = true;
+      return;
+    }
+    passedEl.hidden = false;
+    passedLabelEl.textContent = joinTitles(passed);
+  }
+
   function updateRemaining() {
     if (!remainingEl || !remainingLabelEl) return;
     const remaining = items.slice(activeIndex + 1);
@@ -49,24 +66,22 @@
       return;
     }
     remainingEl.hidden = false;
-    remainingLabelEl.textContent = remaining
-      .map((item) => item.querySelector(".accordion-label").textContent.trim())
-      .join(joiner);
+    remainingLabelEl.textContent = joinTitles(remaining);
   }
 
-  // Only the single most recently collapsed section stays visible above the
-  // active one; anything passed further back is hidden entirely so
-  // scrolling up doesn't accumulate a long, ever-growing list of headers.
-  // Everything below the active section collapses into one combined row
-  // (built by updateRemaining) listing their titles, rather than a stack of
-  // individual headers eating up screen space before the user has scrolled
-  // anywhere near them -- this matters most on mobile, where that stack of
-  // untouched headers can push the active section's content out of view.
+  // Sections on either side of the active one are hidden individually and
+  // summarized instead: everything above collapses into one combined row
+  // (updatePassed) and everything below into another (updateRemaining),
+  // rather than a stack of individual headers eating up screen space before
+  // or after the section the user is actually looking at -- this matters
+  // most on mobile, where that stack of untouched headers can push the
+  // active section's content out of view.
   function updateVisibility() {
     items.forEach((item, i) => {
-      item.classList.toggle("is-far-passed", i < activeIndex - 1);
+      item.classList.toggle("is-above-active", i < activeIndex);
       item.classList.toggle("is-below-active", i > activeIndex);
     });
+    updatePassed();
     updateRemaining();
   }
 
@@ -210,6 +225,10 @@
       activate(items.indexOf(header.closest(".accordion-item")));
       return;
     }
+    if (passedEl && e.target.closest(".accordion-passed") === passedEl) {
+      activate(activeIndex - 1);
+      return;
+    }
     if (remainingEl && e.target.closest(".accordion-remaining") === remainingEl) {
       activate(activeIndex + 1);
     }
@@ -217,6 +236,7 @@
 
   document.addEventListener("i18n:applied", (e) => {
     if (e.detail && e.detail["common.listJoiner"]) joiner = e.detail["common.listJoiner"];
+    updatePassed();
     updateRemaining();
   });
 

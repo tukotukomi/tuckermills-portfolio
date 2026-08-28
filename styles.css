@@ -215,26 +215,24 @@ body {
   flex-shrink: 1;
 }
 
-/* Sections passed more than one step back are hidden entirely -- only the
-   most recently collapsed section stays visible above the active one. */
-.accordion-item.is-far-passed {
-  display: none;
-}
-
-/* Sections below the active one are hidden individually -- their titles
-   are summarized together in the single .accordion-remaining row instead,
-   so a long list of untouched headers doesn't crowd out the active
-   section's content (most noticeable on mobile). */
+/* Sections on either side of the active one are hidden individually --
+   their titles are summarized together in the single .accordion-passed
+   (above) / .accordion-remaining (below) row instead, so a long list of
+   untouched headers doesn't crowd out the active section's content (most
+   noticeable on mobile). */
+.accordion-item.is-above-active,
 .accordion-item.is-below-active {
   display: none;
 }
 
+.accordion-passed:not([hidden]),
 .accordion-remaining:not([hidden]) {
   appearance: none;
   -webkit-appearance: none;
   -moz-appearance: none;
   display: flex;
   align-items: center;
+  gap: 12px;
   width: 100%;
   min-height: 44px;
   padding: 16px 4px;
@@ -247,9 +245,17 @@ body {
   flex: 0 0 auto;
 }
 
+.accordion-passed:hover,
+.accordion-passed:focus-visible,
 .accordion-remaining:hover,
 .accordion-remaining:focus-visible {
   background: rgba(255, 255, 255, 0.05);
+}
+
+.accordion-remaining-icon {
+  width: 16.5px;
+  height: 16.5px;
+  flex-shrink: 0;
 }
 
 .accordion-remaining-label {
