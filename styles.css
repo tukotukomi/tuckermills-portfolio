@@ -187,8 +187,12 @@ body {
   flex-direction: column;
   /* 80% of the true page/viewport width -- a percentage here would
      instead resolve against .page-professional-inner's already-padded
-     content box, ending up narrower than 80% of the actual page. */
-  width: 80vw;
+     content box, ending up narrower than 80% of the actual page. Capped
+     at 1000px so line lengths stay readable on very large monitors.
+     (min-width: 80%; max-width: 1000px would NOT work here -- per spec
+     min-width wins whenever the two conflict, which is exactly the case
+     above ~1250px viewports, silently defeating the cap.) */
+  width: min(80vw, 1000px);
 }
 
 .accordion-item {
@@ -337,6 +341,58 @@ body {
 .accordion-item.is-open .accordion-body-text {
   opacity: 1;
   transform: translateY(0);
+}
+
+.skills-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 24px 32px;
+  opacity: 0;
+  transform: translateY(24px);
+  transition: opacity 0.6s ease, transform 0.6s ease;
+  transition-delay: 0.1s;
+}
+
+.accordion-item.is-open .skills-grid {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+@media (max-width: 700px) {
+  .skills-grid {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+}
+
+.skills-category-title {
+  font-weight: 600;
+  font-size: 0.95rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.85;
+  margin-bottom: 8px;
+}
+
+.skills-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.skills-list li {
+  position: relative;
+  padding-left: 16px;
+  line-height: 1.6;
+  font-size: 1rem;
+}
+
+.skills-list li::before {
+  content: "•";
+  position: absolute;
+  left: 0;
+  opacity: 0.6;
 }
 
 .site-header {
