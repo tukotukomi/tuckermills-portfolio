@@ -221,6 +221,15 @@ body {
   padding-top: calc(var(--header-h, 110px) + 20px);
 }
 
+@media (max-width: 700px) {
+  /* The header sits at the bottom on mobile now (see .site-header), so
+     the clearance it needs flips from top to bottom here too. */
+  .page-photography-inner {
+    padding-top: 20px;
+    padding-bottom: calc(var(--header-h, 70px) + 20px);
+  }
+}
+
 .page-photography .page-title {
   padding: 0 24px;
   margin-bottom: 20px;
@@ -288,6 +297,15 @@ body {
   flex-direction: column;
   text-align: left;
   padding: calc(var(--header-h, 110px) + 20px) 24px 20px;
+}
+
+@media (max-width: 700px) {
+  /* The header sits at the bottom on mobile now (see .site-header), so
+     the clearance it needs flips from top to bottom here too. */
+  .page-professional-inner {
+    padding-top: 20px;
+    padding-bottom: calc(var(--header-h, 70px) + 20px);
+  }
 }
 
 .page-professional .page-title {
@@ -664,6 +682,22 @@ body {
   -webkit-backdrop-filter: blur(10px);
 }
 
+/* Mobile only: the header (by this width, just the hamburger and language
+   buttons -- the pill nav is already hidden below) moves to the bottom of
+   the screen instead of the top, easier to reach one-handed. Desktop is
+   untouched. Dropdowns anchored to these buttons have to open upward to
+   match (see .nav-hamburger-menu / .lang-menu below), and pages that
+   reserve space for the header via --header-h need that space on the
+   bottom edge instead of the top now -- see .page-professional-inner /
+   .page-photography-inner. */
+@media (max-width: 700px) {
+  .site-header {
+    top: auto;
+    bottom: 0;
+    align-items: flex-end;
+  }
+}
+
 .lang-switcher {
   position: relative;
   margin-left: auto;
@@ -705,6 +739,13 @@ body {
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 6px;
   overflow: hidden;
+}
+
+@media (max-width: 700px) {
+  .lang-menu {
+    top: auto;
+    bottom: calc(100% + 6px);
+  }
 }
 
 .lang-menu li {
@@ -783,6 +824,13 @@ body:not(.on-home) .page-nav {
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 6px;
   overflow: hidden;
+}
+
+@media (max-width: 700px) {
+  .nav-hamburger-menu {
+    top: auto;
+    bottom: calc(100% + 6px);
+  }
 }
 
 .nav-hamburger-menu .page-nav-link {
