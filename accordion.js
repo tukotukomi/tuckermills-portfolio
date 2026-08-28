@@ -255,14 +255,14 @@
   // gesture start counting toward collapsing the current section and
   // expanding the next/previous one -- see OVERSCROLL_THRESHOLD above.
   //
-  // Reaching the edge is not itself enough to arm that countdown: the
-  // event that first lands on the edge, and everything else from that
-  // same continuous gesture (wheel ticks or touch coasting with no real
-  // gap between them), is ignored outright. Only once the input actually
-  // pauses for a beat -- meaning the user has stopped, not just blown
-  // through the edge mid-swipe -- does further scrolling start counting
-  // toward the next section, giving them a real chance to read the
-  // bottom of the content before anything moves.
+  // Wheel input can't tell an active gesture apart from that same
+  // gesture's own momentum tail (a trackpad keeps firing wheel events for
+  // a while after the fingers have already left the pad), so reaching the
+  // edge isn't itself enough to arm the countdown here: the event that
+  // first lands on the edge, and everything after it with no real gap in
+  // between, is ignored outright. Only once the input actually pauses for
+  // a beat does further scrolling start counting -- see handleTouchDelta
+  // below for why touch doesn't need this same restriction.
   function handleDelta(deltaY) {
     if (transitioning || deltaY === 0) return;
     const body = bodyOf(activeIndex);
@@ -293,6 +293,49 @@
       boundaryArmed = true;
     }
 
+    overscroll += Math.abs(deltaY);
+
+    if (overscroll >= OVERSCROLL_THRESHOLD) {
+      resetOverscroll();
+      activate(activeIndex + dir);
+    }
+  }
+
+  // Touch gets its own, simpler path instead of sharing handleDelta's
+  // gap-based heuristic, because touch has a signal wheel doesn't: we
+  // know exactly when the finger is down. A real touchmove stream has
+  // essentially no gap between events (they fire every frame), so
+  // handleDelta's "require a pause" rule was treating an entire active,
+  // deliberate drag as one unbroken gesture and never letting it cross --
+  // on a real phone that meant swiping to the bottom of a section and
+  // continuing to swipe did nothing at all.
+  //
+  // Instead: while the finger is actually down (live, meaning true),
+  // overscroll accumulates immediately and unconditionally -- the user
+  // has direct, continuous control, so there's no momentum to mistake
+  // for intent. Once the finger lifts, the post-release "coast" (see
+  // touchend below) calls this with live: false, which can still scroll
+  // within the current section but can never itself complete a crossing
+  // -- so residual momentum can't finish what only an active drag should.
+  function handleTouchDelta(deltaY, live) {
+    if (transitioning || deltaY === 0) return;
+    const body = bodyOf(activeIndex);
+    const dir = deltaY > 0 ? 1 : -1;
+    const atBoundary = dir > 0 ? isAtBottom(body) : isAtTop(body);
+
+    if (!atBoundary) {
+      body.scrollTop += deltaY;
+      resetOverscroll();
+      updateProgress();
+      return;
+    }
+
+    if (!live) return; // momentum: sit at the edge, don't cross on its own
+
+    if (overscrollDir !== dir) {
+      overscrollDir = dir;
+      overscroll = 0;
+    }
     overscroll += Math.abs(deltaY);
 
     if (overscroll >= OVERSCROLL_THRESHOLD) {
@@ -337,6 +380,13 @@
       touchY = e.touches[0].clientY;
       lastTouchTime = performance.now();
       touchVelocity = 0;
+      // Deliberately NOT resetting overscroll here: a real "let me flick
+      // through this" gesture is often several short swipes in a row, and
+      // each already contributes only genuine, active-drag pixels (never
+      // momentum -- see handleTouchDelta). Requiring one single drag to
+      // cover the whole threshold on its own would undo the point of
+      // supporting repeated swipes. It still resets the moment content
+      // scrolls within bounds (not at the edge) or the drag reverses.
     },
     { passive: true }
   );
@@ -352,7 +402,7 @@
       touchY = y;
       lastTouchTime = now;
       e.preventDefault();
-      handleDelta(deltaY);
+      handleTouchDelta(deltaY, true);
     },
     { passive: false }
   );
@@ -366,7 +416,7 @@
           momentumFrame = null;
           return;
         }
-        handleDelta(v);
+        handleTouchDelta(v, false);
         v *= 0.94;
         momentumFrame = requestAnimationFrame(coast);
       }
