@@ -35,6 +35,18 @@
   "professional.skills.aiTools.title": "AI Tools",
   "professional.skills.aiTools.item1": "Claude, ModernMT, Gemini",
   "professional.workExperience.title": "EXPERIENCE",
+  "professional.experience.mrbeast.company": "MrBeast",
+  "professional.experience.mrbeast.location": "Greenville, NC (Remote)",
+  "professional.experience.mrbeast.title": "Localization Program Manager",
+  "professional.experience.mrbeast.dates": "04/2026 – 08/2026",
+  "professional.experience.mrbeast.summary": "Beast Industries is a multifaceted media and entertainment company founded by Jimmy Donaldson, popularly known as MrBeast. With over 500 million subscribers, Beast Industries encompasses a diverse portfolio of ventures that extend far beyond its origins on YouTube.",
+  "professional.experience.mrbeast.bullet1": "Ran standup for 7-person leadership team 3 times a week to drive results, track milestone progress, reprioritize work, and quickly address critical issues and bottlenecks",
+  "professional.experience.mrbeast.bullet2": "Managed weekly content intake cycles between Production and Localization for 7 channels, including the main YouTube channel, shortform content, and advertising for branding partners",
+  "professional.experience.mrbeast.bullet3": "Owned project communications with Production and vendors dubbing video content in 20+ languages within a 5-day turnaround and expected $100,000+ weekly budget",
+  "professional.experience.mrbeast.bullet4": "Resolved last-minute change requests including transcript edits, formatting issues, and licensing concerns to meet deadlines amidst shifting production schedules",
+  "professional.experience.mrbeast.bullet5": "Created new tools with Claude AI to streamline repetitive, time sensitive, and high-risk workflows",
+  "professional.experience.mrbeast.bullet6": "Researched and implemented new transcription platform and onboarding materials to increase team efficiency and ability to meet exceedingly tight deadlines",
+  "professional.experience.mrbeast.bullet7": "Planned and executed multiple rounds of localized audio, video, and subtitle LQA for commercial advertising projects",
   "professional.education.title": "EDUCATION",
   "professional.awards.title": "AWARDS"
 }

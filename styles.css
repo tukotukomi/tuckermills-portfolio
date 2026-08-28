@@ -418,25 +418,89 @@ body {
   margin-bottom: 8px;
 }
 
-.skills-list {
+.skills-list,
+.experience-bullets {
   list-style: none;
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
 
-.skills-list li {
+.skills-list li,
+.experience-bullets li {
   position: relative;
   padding-left: 16px;
   line-height: 1.6;
   font-size: 1rem;
 }
 
-.skills-list li::before {
+.skills-list li::before,
+.experience-bullets li::before {
   content: "•";
   position: absolute;
   left: 0;
   opacity: 0.6;
+}
+
+.experience-list {
+  display: flex;
+  flex-direction: column;
+  opacity: 0;
+  transform: translateY(24px);
+  transition: opacity 0.6s ease, transform 0.6s ease;
+  transition-delay: 0.1s;
+}
+
+.accordion-item.is-open .experience-list {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.experience-entry + .experience-entry {
+  margin-top: 32px;
+  padding-top: 32px;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.experience-company {
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.experience-location {
+  font-weight: 400;
+  opacity: 0.75;
+  font-size: 0.95rem;
+}
+
+.experience-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 16px;
+  margin-top: 4px;
+  font-size: 0.95rem;
+}
+
+.experience-title {
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.experience-dates {
+  opacity: 0.7;
+  white-space: nowrap;
+}
+
+.experience-summary {
+  margin-top: 12px;
+  line-height: 1.7;
+  opacity: 0.9;
+}
+
+.experience-bullets {
+  margin-top: 16px;
+  gap: 8px;
 }
 
 .site-header {

@@ -35,6 +35,18 @@
   "professional.skills.aiTools.title": "AI 工具",
   "professional.skills.aiTools.item1": "Claude、ModernMT、Gemini",
   "professional.workExperience.title": "工作经历",
+  "professional.experience.mrbeast.company": "MrBeast",
+  "professional.experience.mrbeast.location": "Greenville, NC (Remote)",
+  "professional.experience.mrbeast.title": "本地化项目经理",
+  "professional.experience.mrbeast.dates": "04/2026 – 08/2026",
+  "professional.experience.mrbeast.summary": "Beast Industries 是由吉米·多纳森（Jimmy Donaldson，即广受欢迎的 MrBeast）创立的多元化媒体娱乐公司。公司订阅用户超过5亿，业务版图早已远超其 YouTube 起源，涵盖多元化的产业布局。",
+  "professional.experience.mrbeast.bullet1": "每周三次主持7人领导团队站会，推动项目进展、跟踪里程碑、重新调整工作优先级，并快速解决关键问题与瓶颈",
+  "professional.experience.mrbeast.bullet2": "管理制作团队与本地化团队之间7个频道的每周内容对接流程，涵盖主YouTube频道、短视频内容及品牌合作广告",
+  "professional.experience.mrbeast.bullet3": "负责与制作团队及配音供应商的项目沟通，协调20多种语言的视频配音工作，在5天周转周期内完成，预计每周预算超10万美元",
+  "professional.experience.mrbeast.bullet4": "处理临时变更请求，包括文本修改、格式问题及版权事宜，在制作排期不断变化的情况下确保按时交付",
+  "professional.experience.mrbeast.bullet5": "使用 Claude AI 开发新工具，简化重复性、时效性强及高风险的工作流程",
+  "professional.experience.mrbeast.bullet6": "调研并引入新的转录平台及入职培训材料，提升团队效率，以应对极为紧张的交付周期",
+  "professional.experience.mrbeast.bullet7": "规划并执行多轮商业广告项目的本地化音频、视频及字幕LQA（本地化质量保证）",
   "professional.education.title": "教育背景",
   "professional.awards.title": "获奖情况"
 }
