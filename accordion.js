@@ -22,7 +22,7 @@
   // sustained push past the edge -- and resetting that if too much time
   // passes between ticks -- means only a deliberate continued scroll can
   // trigger it, while momentum harmlessly dies at the edge.
-  const OVERSCROLL_THRESHOLD = 80;
+  const OVERSCROLL_THRESHOLD = 100;
   const OVERSCROLL_RESET_MS = 250;
 
   let joiner = ", ";
