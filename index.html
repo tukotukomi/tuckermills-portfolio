@@ -304,10 +304,8 @@ Fluent in Chinese (Mandarin) and known for working with diverse multinational te
       var path = location.pathname.replace(/\/$/, "") || "/";
       var index = routeIndex[path] || 0;
       var track = document.getElementById("track");
-      if (index) {
-        track.style.transition = "none";
-        track.style.transform = "translateX(-" + index * 100 + "vw)";
-      }
+      var initialSlide = track.children[index];
+      if (initialSlide) initialSlide.classList.add("is-active");
       document.body.classList.toggle("on-home", index === 0);
 
       // Keep a CSS var in sync with the header's real height, which varies

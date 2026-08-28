@@ -7,11 +7,10 @@
     photography: "/photography",
     "about-me": "/about-me",
   };
-  const TRANSITION_MS = 600;
-  const EASING = "cubic-bezier(0.65, 0, 0.35, 1)";
-  const TRANSITION = `transform ${TRANSITION_MS}ms ${EASING}`;
+  const TRANSITION_MS = 600; // matches .slide's opacity transition in styles.css
 
   const track = document.getElementById("track");
+  const slides = Array.from(track.children);
   let currentIndex = indexFromPath(location.pathname);
   let animating = false;
 
@@ -30,31 +29,23 @@
     });
   }
 
-  function slideTo(index) {
-    track.style.transition = TRANSITION;
-    track.style.transform = `translateX(-${index * 100}vw)`;
+  function activateSlide(index) {
+    slides.forEach((slide, i) => slide.classList.toggle("is-active", i === index));
   }
 
-  // Briefly jump the (untransitioned) track to `index` to measure the real
-  // on-screen position of that slide's title, then jump back before the
-  // browser paints, so nothing visibly flashes.
-  function measureTitleRectAt(index) {
-    const prevTransition = track.style.transition;
-    track.style.transition = "none";
-    track.style.transform = `translateX(-${index * 100}vw)`;
-    void track.offsetHeight;
-    const titleEl = track.children[index].querySelector(".page-title");
-    const rect = titleEl.getBoundingClientRect();
-    track.style.transform = `translateX(-${currentIndex * 100}vw)`;
-    void track.offsetHeight;
-    track.style.transition = prevTransition;
-    return { rect, titleEl };
-  }
-
+  // The header morph: a floating clone of the clicked button's label tweens
+  // from the button's on-screen rect to the destination page's title rect,
+  // while the real source label and destination title are hidden so there's
+  // no double image underneath. Every slide is an absolutely positioned,
+  // full-viewport box stacked in the same spot (see .slide in styles.css),
+  // so the destination title's rect is already correct to measure even
+  // while its slide is still inactive -- no need to briefly jump anything
+  // into view first the way the old horizontal-strip layout required.
   function runMorph(sourceLabel, index, onDone) {
     const sourceRect = sourceLabel.getBoundingClientRect();
     const sourceStyle = getComputedStyle(sourceLabel);
-    const { rect: targetRect, titleEl } = measureTitleRectAt(index);
+    const titleEl = slides[index].querySelector(".page-title");
+    const targetRect = titleEl.getBoundingClientRect();
     const targetStyle = getComputedStyle(titleEl);
 
     const clone = document.createElement("div");
@@ -74,7 +65,7 @@
     sourceLabel.style.visibility = "hidden";
     titleEl.style.visibility = "hidden";
 
-    slideTo(index);
+    activateSlide(index);
 
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
@@ -90,24 +81,12 @@
       });
     });
 
-    // The clone transitions several properties (left/top/width/height/
-    // font-size) at once, and each fires its own separate `transitionend`
-    // event -- reacting to just the first one to arrive would swap back to
-    // the real title before the others (e.g. left/top) actually finished,
-    // producing a visible jump. A fixed timeout matching the declared
-    // duration is what both the clone and the track transition use, so
-    // wait for that instead.
-    let finished = 0;
-    function done() {
-      finished++;
-      if (finished < 2) return;
+    setTimeout(() => {
       clone.remove();
       sourceLabel.style.visibility = "";
       titleEl.style.visibility = "";
       onDone();
-    }
-    setTimeout(done, TRANSITION_MS);
-    track.addEventListener("transitionend", done, { once: true });
+    }, TRANSITION_MS);
   }
 
   function goToRoute(route, { push = true, morphFrom = null } = {}) {
@@ -124,8 +103,8 @@
     if (morphFrom) {
       runMorph(morphFrom, index, finish);
     } else {
-      slideTo(index);
-      track.addEventListener("transitionend", finish, { once: true });
+      activateSlide(index);
+      setTimeout(finish, TRANSITION_MS);
     }
 
     if (push) history.pushState({ route }, "", PATHS[route]);
@@ -166,5 +145,6 @@
     });
   }
 
+  activateSlide(currentIndex);
   setActiveNav(ROUTES[currentIndex]);
 })();

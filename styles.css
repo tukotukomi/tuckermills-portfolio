@@ -15,17 +15,24 @@ body {
 }
 
 .track {
-  display: flex;
-  width: 500vw;
-  transition: transform 0.6s cubic-bezier(0.65, 0, 0.35, 1);
-}
-
-.slide {
   position: relative;
-  flex: 0 0 100vw;
   width: 100vw;
   height: 100vh;
   height: 100dvh;
+}
+
+/* Every page sits stacked in the exact same spot (rather than side by
+   side, sliding into view) and is shown or hidden purely with opacity --
+   a plain cross-fade instead of the old horizontal push. visibility is
+   staggered off the opacity transition (see .is-active below) so an
+   inactive slide still keeps rendering -- and stays clickable-through-
+   proof via pointer-events -- for the full fade-out before it's actually
+   hidden, and so its layout (e.g. a destination page's title, for the
+   header morph in router.js) can still be measured accurately while
+   invisible. */
+.slide {
+  position: absolute;
+  inset: 0;
   overflow-x: hidden;
   overflow-y: auto;
   /* The accordion constantly resizes content above/around the viewport as
@@ -33,6 +40,17 @@ body {
      tries to compensate by adjusting scrollTop itself, which fights our
      own scroll-driven logic and causes visible jumping. */
   overflow-anchor: none;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.6s cubic-bezier(0.65, 0, 0.35, 1), visibility 0s linear 0.6s;
+}
+
+.slide.is-active {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transition: opacity 0.6s cubic-bezier(0.65, 0, 0.35, 1), visibility 0s linear 0s;
 }
 
 .hero {
