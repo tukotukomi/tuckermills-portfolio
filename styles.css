@@ -221,6 +221,44 @@ body {
   display: none;
 }
 
+/* Sections below the active one are hidden individually -- their titles
+   are summarized together in the single .accordion-remaining row instead,
+   so a long list of untouched headers doesn't crowd out the active
+   section's content (most noticeable on mobile). */
+.accordion-item.is-below-active {
+  display: none;
+}
+
+.accordion-remaining:not([hidden]) {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 44px;
+  padding: 16px 4px;
+  background: transparent;
+  border: none;
+  color: #fff;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+
+.accordion-remaining:hover,
+.accordion-remaining:focus-visible {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.accordion-remaining-label {
+  font-weight: 600;
+  font-size: calc(0.95rem - 4px);
+  letter-spacing: 0.06em;
+  opacity: 0.6;
+}
+
 .accordion-heading {
   flex: 0 0 auto;
   font-size: 1rem;

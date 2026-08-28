@@ -30,6 +30,7 @@
       if (strings[key] !== undefined) el.textContent = strings[key];
     });
     if (strings["site.title"]) document.title = strings["site.title"];
+    document.dispatchEvent(new CustomEvent("i18n:applied", { detail: strings }));
   }
 
   function renderMenu(currentLang) {
