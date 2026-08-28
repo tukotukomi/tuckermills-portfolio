@@ -8,35 +8,33 @@
 </head>
 <body>
   <header id="site-header" class="site-header">
+    <div class="nav-hamburger">
+      <button id="nav-hamburger-toggle" class="nav-hamburger-toggle" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Menu">
+        <img src="Images/Icons/menu.svg" alt="" class="hamburger-icon">
+      </button>
+      <ul id="nav-hamburger-menu" class="nav-hamburger-menu" hidden>
+        <li><a href="/" class="page-nav-link route-link" data-route="home" data-i18n="nav.home">Home</a></li>
+        <li><a href="/professional" class="page-nav-link route-link" data-route="professional" data-i18n="nav.professional">Professional</a></li>
+        <li><a href="/side-projects" class="page-nav-link route-link" data-route="side-projects" data-i18n="nav.sideProjects">Side Projects</a></li>
+        <li><a href="/photography" class="page-nav-link route-link" data-route="photography" data-i18n="nav.photography">Photography</a></li>
+        <li><a href="/about-me" class="page-nav-link route-link" data-route="about-me" data-i18n="nav.aboutMe">About Me</a></li>
+      </ul>
+    </div>
+
     <nav id="site-nav" class="page-nav">
-      <a href="/" class="page-nav-link route-link" data-route="home" data-i18n="hero.title">Tucker Mills</a>
+      <a href="/" class="page-nav-link route-link" data-route="home" data-i18n="nav.home">Home</a>
       <a href="/professional" class="page-nav-link route-link" data-route="professional" data-i18n="nav.professional">Professional</a>
       <a href="/side-projects" class="page-nav-link route-link" data-route="side-projects" data-i18n="nav.sideProjects">Side Projects</a>
       <a href="/photography" class="page-nav-link route-link" data-route="photography" data-i18n="nav.photography">Photography</a>
       <a href="/about-me" class="page-nav-link route-link" data-route="about-me" data-i18n="nav.aboutMe">About Me</a>
     </nav>
 
-    <div class="header-right">
-      <div class="nav-hamburger">
-        <button id="nav-hamburger-toggle" class="nav-hamburger-toggle" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Menu">
-          <img src="Images/Icons/menu.svg" alt="" class="hamburger-icon">
-        </button>
-        <ul id="nav-hamburger-menu" class="nav-hamburger-menu" hidden>
-          <li><a href="/" class="page-nav-link route-link" data-route="home" data-i18n="hero.title">Tucker Mills</a></li>
-          <li><a href="/professional" class="page-nav-link route-link" data-route="professional" data-i18n="nav.professional">Professional</a></li>
-          <li><a href="/side-projects" class="page-nav-link route-link" data-route="side-projects" data-i18n="nav.sideProjects">Side Projects</a></li>
-          <li><a href="/photography" class="page-nav-link route-link" data-route="photography" data-i18n="nav.photography">Photography</a></li>
-          <li><a href="/about-me" class="page-nav-link route-link" data-route="about-me" data-i18n="nav.aboutMe">About Me</a></li>
-        </ul>
-      </div>
-
-      <div class="lang-switcher">
-        <button id="lang-toggle" class="lang-toggle" type="button" aria-haspopup="listbox" aria-expanded="false">
-          <img src="Images/Icons/language-select.svg" alt="" class="lang-icon">
-          <span id="lang-current">English</span>
-        </button>
-        <ul id="lang-menu" class="lang-menu" role="listbox" hidden></ul>
-      </div>
+    <div class="lang-switcher">
+      <button id="lang-toggle" class="lang-toggle" type="button" aria-haspopup="listbox" aria-expanded="false">
+        <img src="Images/Icons/language-select.svg" alt="" class="lang-icon">
+        <span id="lang-current">English</span>
+      </button>
+      <ul id="lang-menu" class="lang-menu" role="listbox" hidden></ul>
     </div>
   </header>
 

@@ -250,17 +250,29 @@ body {
   width: 22px;
   height: 22px;
   flex-shrink: 0;
-  transition: transform 0.3s ease;
+  transition: transform 0.3s ease, width 0.3s ease, height 0.3s ease;
 }
 
 .accordion-item.is-open .accordion-icon {
   transform: rotate(90deg);
 }
 
+/* Collapsed items read as secondary/compact next to the active section:
+   icon at 75% size, label 4px smaller. */
+.accordion-item:not(.is-open) .accordion-icon {
+  width: 16.5px;
+  height: 16.5px;
+}
+
 .accordion-label {
   font-weight: 600;
   font-size: 0.95rem;
   letter-spacing: 0.06em;
+  transition: font-size 0.3s ease;
+}
+
+.accordion-item:not(.is-open) .accordion-label {
+  font-size: calc(0.95rem - 4px);
 }
 
 .accordion-collapse {
@@ -343,15 +355,9 @@ body {
   -webkit-backdrop-filter: blur(10px);
 }
 
-.header-right {
-  margin-left: auto;
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-}
-
 .lang-switcher {
   position: relative;
+  margin-left: auto;
 }
 
 .lang-toggle {
@@ -461,7 +467,7 @@ body:not(.on-home) .page-nav {
 .nav-hamburger-menu {
   position: absolute;
   top: calc(100% + 6px);
-  right: 0;
+  left: 0;
   min-width: 180px;
   list-style: none;
   background: rgba(20, 20, 20, 0.95);
