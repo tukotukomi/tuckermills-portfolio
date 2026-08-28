@@ -119,7 +119,8 @@ body {
 }
 
 .page {
-  background: #14181c;
+  /* Fallback paint while the background image loads (or if it fails). */
+  background-color: #14181c;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -127,6 +128,33 @@ body {
   text-align: center;
   gap: 12px;
   padding: 20px;
+}
+
+/* Same hero background image on every page, but blurred and darkened
+   (90% vs. the hero's 80%) so it reads as texture behind the content
+   rather than a focal image. A separate ::before layer (rather than
+   blurring .page itself) keeps the blur off the actual text; inset is
+   pulled in past the edges so the blur radius never reveals a hard edge,
+   and .slide's own overflow clips the overhang. z-index: -1 keeps both
+   layers behind .page's normal-flow content without needing to touch
+   every child selector. */
+.page::before {
+  content: "";
+  position: absolute;
+  inset: -24px;
+  background-image: url("Images/Backgrounds/hero-background.jpg");
+  background-size: cover;
+  background-position: center;
+  filter: blur(14px);
+  z-index: -1;
+}
+
+.page::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.9);
+  z-index: -1;
 }
 
 .page-title {
