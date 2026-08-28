@@ -83,38 +83,49 @@
     { passive: false }
   );
 
-  // Touch: let the browser's own native touch scrolling handle the common
-  // case (dragging within a section that isn't yet at its edge) so it
-  // keeps its normal momentum/inertia feel. Only step in -- preventDefault
-  // and drive the transition ourselves -- once the active section is
-  // already at the edge the drag is pulling past, since native scrolling
-  // has nothing to do there but rubber-band.
+  // Touch: driven manually (like wheel) rather than deferring to native
+  // scroll, because native scroll only ever engages when the finger is
+  // directly over the actual scrollable .accordion-body element -- drag
+  // anywhere else on the page (the title, a collapsed header, blank
+  // space) and native scrolling has nothing to grab, so nothing would
+  // happen. Manual handling works the same regardless of where on the
+  // page the touch starts. To keep it from feeling stiff without native
+  // momentum, a short decaying "coast" is applied after the finger lifts.
   let touchY = null;
+  let touchVelocity = 0;
+  let lastTouchTime = 0;
+  let momentumFrame = null;
+
+  function stopMomentum() {
+    if (momentumFrame !== null) {
+      cancelAnimationFrame(momentumFrame);
+      momentumFrame = null;
+    }
+  }
+
   page.addEventListener(
     "touchstart",
     (e) => {
+      stopMomentum();
       touchY = e.touches[0].clientY;
+      lastTouchTime = performance.now();
+      touchVelocity = 0;
     },
     { passive: true }
   );
   page.addEventListener(
     "touchmove",
     (e) => {
-      if (touchY === null || transitioning) return;
+      if (touchY === null) return;
       const y = e.touches[0].clientY;
+      const now = performance.now();
       const deltaY = touchY - y;
-      const body = bodyOf(activeIndex);
-      if (deltaY > 0 && isAtBottom(body)) {
-        e.preventDefault();
-        touchY = y;
-        activate(activeIndex + 1);
-      } else if (deltaY < 0 && isAtTop(body)) {
-        e.preventDefault();
-        touchY = y;
-        activate(activeIndex - 1);
-      } else {
-        touchY = y;
-      }
+      const dt = Math.max(now - lastTouchTime, 1);
+      touchVelocity = deltaY / dt; // px per ms, used for the post-release coast
+      touchY = y;
+      lastTouchTime = now;
+      e.preventDefault();
+      handleDelta(deltaY);
     },
     { passive: false }
   );
@@ -122,6 +133,17 @@
     "touchend",
     () => {
       touchY = null;
+      let v = touchVelocity * 16; // px per ~frame
+      function coast() {
+        if (Math.abs(v) < 0.5 || transitioning) {
+          momentumFrame = null;
+          return;
+        }
+        handleDelta(v);
+        v *= 0.94;
+        momentumFrame = requestAnimationFrame(coast);
+      }
+      if (Math.abs(v) > 0.5) momentumFrame = requestAnimationFrame(coast);
     },
     { passive: true }
   );

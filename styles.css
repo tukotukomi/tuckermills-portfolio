@@ -158,6 +158,12 @@ body {
   justify-content: flex-start;
   gap: 0;
   overflow-y: hidden;
+  /* accordion.js handles touch drags manually everywhere on the page
+     (native scroll only ever engages over the actual scrollable element,
+     which would break scrolling from elsewhere on the page); without
+     this, iOS Safari's own touch scrolling still fights that handling
+     even with preventDefault() in the touchmove listener. */
+  touch-action: none;
 }
 
 .page-professional-inner {
@@ -179,7 +185,10 @@ body {
   margin-top: 28px;
   display: flex;
   flex-direction: column;
-  width: 80%;
+  /* 80% of the true page/viewport width -- a percentage here would
+     instead resolve against .page-professional-inner's already-padded
+     content box, ending up narrower than 80% of the actual page. */
+  width: 80vw;
 }
 
 .accordion-item {
@@ -286,6 +295,15 @@ body {
   padding: 12px 4px 24px 38px;
 }
 
+@media (max-width: 700px) {
+  .accordion-body {
+    /* The 38px hanging indent (aligning text under the header label)
+       eats too much of the already-narrow mobile width; drop it so the
+       text uses the full accordion width instead. */
+    padding-left: 4px;
+  }
+}
+
 .accordion-body-inner {
   width: 100%;
   min-height: 100%;
@@ -325,9 +343,15 @@ body {
   -webkit-backdrop-filter: blur(10px);
 }
 
+.header-right {
+  margin-left: auto;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
 .lang-switcher {
   position: relative;
-  margin-left: auto;
 }
 
 .lang-toggle {
@@ -390,6 +414,77 @@ body {
 
 body:not(.on-home) .page-nav {
   display: flex;
+}
+
+/* Below the breakpoint where the 5 pills would wrap into a second row,
+   swap them for a single hamburger button + dropdown instead, so the
+   header stays a single tidy row alongside the language switcher. */
+@media (max-width: 700px) {
+  body:not(.on-home) .page-nav {
+    display: none;
+  }
+
+  body:not(.on-home) .nav-hamburger {
+    display: block;
+  }
+}
+
+.nav-hamburger {
+  position: relative;
+  display: none;
+}
+
+.nav-hamburger-toggle {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.nav-hamburger-toggle:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.hamburger-icon {
+  width: 20px;
+  height: 20px;
+}
+
+.nav-hamburger-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 180px;
+  list-style: none;
+  background: rgba(20, 20, 20, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.nav-hamburger-menu .page-nav-link {
+  display: block;
+  width: 100%;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  padding: 12px 14px;
+}
+
+.nav-hamburger-menu .page-nav-link:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.nav-hamburger-menu .page-nav-link[aria-current="page"] {
+  background: rgba(255, 255, 255, 0.1);
 }
 
 .page-nav-link {

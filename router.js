@@ -130,6 +130,9 @@
     if (push) history.pushState({ route }, "", PATHS[route]);
   }
 
+  const navToggle = document.getElementById("nav-hamburger-toggle");
+  const navMenu = document.getElementById("nav-hamburger-menu");
+
   document.addEventListener("click", (e) => {
     const link = e.target.closest(".route-link");
     if (!link) return;
@@ -137,11 +140,30 @@
     const route = link.getAttribute("data-route");
     const morphFrom = link.classList.contains("start-btn") ? link.querySelector(".btn-label") : null;
     goToRoute(route, { push: true, morphFrom });
+    if (navMenu && !navMenu.hidden) {
+      navToggle.setAttribute("aria-expanded", "false");
+      navMenu.hidden = true;
+    }
   });
 
   window.addEventListener("popstate", () => {
     goToRoute(ROUTES[indexFromPath(location.pathname)], { push: false });
   });
+
+  // Mobile hamburger dropdown: same open/close-on-outside-click pattern as
+  // the language switcher.
+  if (navToggle && navMenu) {
+    navToggle.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const expanded = navToggle.getAttribute("aria-expanded") === "true";
+      navToggle.setAttribute("aria-expanded", String(!expanded));
+      navMenu.hidden = expanded;
+    });
+    document.addEventListener("click", () => {
+      navToggle.setAttribute("aria-expanded", "false");
+      navMenu.hidden = true;
+    });
+  }
 
   setActiveNav(ROUTES[currentIndex]);
 })();
