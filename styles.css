@@ -7,6 +7,10 @@
 html,
 body {
   overflow-x: hidden;
+  /* .slide's cross-fade briefly has the outgoing and incoming pages both
+     semi-transparent at once -- without this, the browser's default
+     white canvas showed through underneath during that overlap. */
+  background: #0a0c0e;
 }
 
 body {
