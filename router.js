@@ -41,6 +41,23 @@
   // so the destination title's rect is already correct to measure even
   // while its slide is still inactive -- no need to briefly jump anything
   // into view first the way the old horizontal-strip layout required.
+  // .page-title is a block element, so its rect always spans the full
+  // width of its container regardless of text-align -- that's fine for a
+  // centered title (the text already sits centered within that width,
+  // matching .morph-clone's own centered content), but a left-aligned
+  // title (Professional's, via .page-professional-inner) would have its
+  // clone visibly centered in that same wide box while tweening, then
+  // jump to the left the instant the real title is revealed. Matching
+  // the clone's own alignment to the destination's avoids that: the
+  // clone starts sized to the source text (so alignment is invisible at
+  // first regardless), then stays pinned to the correct edge as it grows
+  // into the destination's full width.
+  function alignToJustify(align) {
+    if (align === "left" || align === "start") return "flex-start";
+    if (align === "right" || align === "end") return "flex-end";
+    return "center";
+  }
+
   function runMorph(sourceLabel, index, onDone) {
     const sourceRect = sourceLabel.getBoundingClientRect();
     const sourceStyle = getComputedStyle(sourceLabel);
@@ -51,6 +68,8 @@
     const clone = document.createElement("div");
     clone.className = "morph-clone";
     clone.textContent = sourceLabel.textContent;
+    clone.style.textAlign = targetStyle.textAlign;
+    clone.style.justifyContent = alignToJustify(targetStyle.textAlign);
     Object.assign(clone.style, {
       left: `${sourceRect.left}px`,
       top: `${sourceRect.top}px`,
