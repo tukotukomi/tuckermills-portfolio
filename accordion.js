@@ -16,14 +16,11 @@
   const TRANSITION_MS = 650; // matches the accordion-item flex-grow transition (0.6s) plus a buffer
 
   // Minimum extra scroll distance required, once the active section's
-  // content edge is reached, before that counts as "let go, move to the
-  // next section." Without this, a single leftover tick of touch inertia
-  // (or a trackpad's own momentum-scroll, which keeps firing wheel events
-  // for a while after the fingers have already left the pad) is enough to
-  // immediately flip sections the instant it crosses the edge. Requiring a
-  // sustained push past the edge -- and resetting that if too much time
-  // passes between ticks -- means only a deliberate continued scroll can
-  // trigger it, while momentum harmlessly dies at the edge.
+  // content edge is reached AND the user has paused there (see
+  // boundaryArmed in handleDelta), before that counts as "let go, move to
+  // the next section." OVERSCROLL_RESET_MS is that pause length: how long
+  // a gap between scroll events has to be before it counts as the user
+  // actually stopping, rather than still being mid-gesture.
   const OVERSCROLL_THRESHOLD = 200;
   const OVERSCROLL_RESET_MS = 250;
 
@@ -41,6 +38,14 @@
   let overscroll = 0;
   let overscrollDir = 0;
   let lastOverscrollTime = 0;
+  // True once the user has actually paused (or lifted off) at the edge --
+  // only then does further scroll input start counting toward crossing
+  // into the next/previous section. Without this, the same continuous
+  // swipe that carries the content to its edge keeps firing events with
+  // no gap between them, so the overscroll accumulator raced past the
+  // threshold within that same swipe -- the edge was never actually a
+  // pause, just a blur on the way through.
+  let boundaryArmed = false;
 
   function bodyOf(index) {
     return items[index].querySelector(".accordion-body");
@@ -49,6 +54,7 @@
   function resetOverscroll() {
     overscroll = 0;
     overscrollDir = 0;
+    boundaryArmed = false;
   }
 
   function joinTitles(list) {
@@ -248,11 +254,23 @@
   // the viewport already, i.e. is trivially "at both edges") does the
   // gesture start counting toward collapsing the current section and
   // expanding the next/previous one -- see OVERSCROLL_THRESHOLD above.
+  //
+  // Reaching the edge is not itself enough to arm that countdown: the
+  // event that first lands on the edge, and everything else from that
+  // same continuous gesture (wheel ticks or touch coasting with no real
+  // gap between them), is ignored outright. Only once the input actually
+  // pauses for a beat -- meaning the user has stopped, not just blown
+  // through the edge mid-swipe -- does further scrolling start counting
+  // toward the next section, giving them a real chance to read the
+  // bottom of the content before anything moves.
   function handleDelta(deltaY) {
     if (transitioning || deltaY === 0) return;
     const body = bodyOf(activeIndex);
     const dir = deltaY > 0 ? 1 : -1;
     const atBoundary = dir > 0 ? isAtBottom(body) : isAtTop(body);
+    const now = performance.now();
+    const gapSinceLastEvent = now - lastOverscrollTime;
+    lastOverscrollTime = now;
 
     if (!atBoundary) {
       body.scrollTop += deltaY;
@@ -261,13 +279,21 @@
       return;
     }
 
-    const now = performance.now();
-    if (overscrollDir !== dir || now - lastOverscrollTime > OVERSCROLL_RESET_MS) {
-      overscroll = 0;
+    if (overscrollDir !== dir) {
+      // Just landed on this edge -- this event is the one that carried
+      // us here, so it can't also count toward leaving again.
       overscrollDir = dir;
+      overscroll = 0;
+      boundaryArmed = false;
+      return;
     }
+
+    if (!boundaryArmed) {
+      if (gapSinceLastEvent < OVERSCROLL_RESET_MS) return; // still the same unbroken gesture
+      boundaryArmed = true;
+    }
+
     overscroll += Math.abs(deltaY);
-    lastOverscrollTime = now;
 
     if (overscroll >= OVERSCROLL_THRESHOLD) {
       resetOverscroll();
