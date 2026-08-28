@@ -21,7 +21,7 @@
   // the next section." OVERSCROLL_RESET_MS is that pause length: how long
   // a gap between scroll events has to be before it counts as the user
   // actually stopping, rather than still being mid-gesture.
-  const OVERSCROLL_THRESHOLD = 200;
+  const OVERSCROLL_THRESHOLD = 120;
   const OVERSCROLL_RESET_MS = 250;
 
   let joiner = ", ";
