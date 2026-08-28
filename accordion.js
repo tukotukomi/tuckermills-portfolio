@@ -10,6 +10,7 @@
   const passedLabelEl = passedEl ? passedEl.querySelector(".accordion-remaining-label") : null;
   const remainingEl = accordion ? accordion.querySelector(".accordion-remaining") : null;
   const remainingLabelEl = remainingEl ? remainingEl.querySelector(".accordion-remaining-label") : null;
+  const progressEl = document.getElementById("scroll-progress");
   const progressFillEl = document.getElementById("scroll-progress-fill");
 
   const TRANSITION_MS = 650; // matches the accordion-item flex-grow transition (0.6s) plus a buffer
@@ -122,7 +123,23 @@
 
   function remeasure() {
     sectionHeights = measureSectionHeights();
+    updateProgressBounds();
     updateProgress();
+  }
+
+  // Positions the progress bar to span exactly from the accordion's own
+  // top edge down to the bottom of whatever its last visible row is --
+  // normally .accordion-remaining, or the accordion's own bottom once
+  // that row hides itself (no sections left below the active one).
+  function updateProgressBounds() {
+    if (!progressEl || !accordion) return;
+    const accRect = accordion.getBoundingClientRect();
+    let bottom = accRect.bottom;
+    if (remainingEl && !remainingEl.hidden) {
+      bottom = Math.max(bottom, remainingEl.getBoundingClientRect().bottom);
+    }
+    progressEl.style.top = accRect.top + "px";
+    progressEl.style.height = Math.max(0, bottom - accRect.top) + "px";
   }
 
   // Sections on either side of the active one are hidden individually and
@@ -156,6 +173,7 @@
     // never wherever it happened to be scrolled to last time it was open.
     bodyOf(index).scrollTop = 0;
     resetOverscroll();
+    updateProgressBounds();
     updateProgress();
     setTimeout(() => {
       transitioning = false;

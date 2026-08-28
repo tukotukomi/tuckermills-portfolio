@@ -620,12 +620,13 @@ body:not(.on-home) .page-nav {
    only shown there since it's the only page with this kind of scrollable,
    collapsible content. */
 .scroll-progress {
+  /* top/height are set inline by accordion.js to exactly match the
+     accordion's own top edge and the bottom edge of whatever its last
+     visible row is (usually .accordion-remaining), rather than an
+     arbitrary fixed size unrelated to the accordion's real position. */
   position: fixed;
-  top: 50%;
   right: 20px;
-  transform: translateY(-50%);
   width: 4px;
-  height: min(50vh, 420px);
   z-index: 900;
   display: none;
   pointer-events: none;
@@ -658,7 +659,6 @@ body.on-professional .scroll-progress {
 @media (max-width: 700px) {
   .scroll-progress {
     right: 10px;
-    height: min(40vh, 320px);
   }
 }
 
