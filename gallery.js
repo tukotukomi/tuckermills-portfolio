@@ -6,8 +6,20 @@
   // then add its filename to the images array here.
   const GALLERIES = {
     "gallery-wildflowers-grid": {
-      folder: "Images/Photography/Collections/wildflowers/",
-      images: ["wildflowers-01.jpg"],
+      folder: "Images/Photography/Collections/macro/",
+      images: [
+        "macro-01.jpg",
+        "macro-02.jpg",
+        "macro-03.jpg",
+        "macro-04.jpg",
+        "macro-05.jpg",
+        "macro-06.jpg",
+        "macro-07.jpg",
+        "macro-08.jpg",
+        "macro-09.jpg",
+        "macro-10.jpg",
+        "IMG_20180721_162815.jpg",
+      ],
     },
   };
 
