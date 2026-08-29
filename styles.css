@@ -248,10 +248,22 @@ body {
 }
 
 .photo-banner {
+  display: block;
   width: 100%;
   height: 400px;
   overflow: hidden;
   margin-bottom: 20px;
+  cursor: default;
+}
+
+/* Only the ones that are actual links (currently just the last banner --
+   see index.html) get a subtle hover cue that they're clickable. */
+a.photo-banner {
+  cursor: pointer;
+}
+
+a.photo-banner:hover .photo-banner-img {
+  transform: scale(1.03);
 }
 
 .photo-banner-img {
@@ -260,6 +272,92 @@ body {
   height: 100%;
   object-fit: cover;
   object-position: var(--photo-focal-x, 50%) var(--photo-focal-y, 50%);
+  transition: transform 0.4s ease;
+}
+
+/* A gallery collection page, reached by clicking one of the Photography
+   page's banners. Deliberately NOT given the .page class's blurred
+   background-image treatment (unlike every other page) -- a busy photo
+   backdrop competes with the actual gallery images for attention, so this
+   gets a plain, calm dark background instead. */
+.page-gallery {
+  position: relative;
+  background-color: #0a0c0e;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  text-align: center;
+  gap: 0;
+  padding: 0;
+}
+
+.page-gallery-inner {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: calc(var(--header-h, 110px) + 20px) 24px 20px;
+}
+
+.page-gallery .page-title {
+  flex: 0 0 auto;
+  margin-bottom: 20px;
+}
+
+@media (max-width: 700px) {
+  /* Same top/bottom clearance flip as .page-professional-inner /
+     .page-photography-inner -- the header sits at the bottom on mobile. */
+  .page-gallery-inner {
+    padding-top: 20px;
+    padding-bottom: calc(var(--header-h, 70px) + 20px);
+  }
+}
+
+/* Hand-rolled masonry (no library): gallery.js sorts each image into
+   whichever of these fixed-width columns is currently shortest, using
+   each image's own natural aspect ratio -- so a short landscape shot and
+   a tall portrait one both just stack at their own natural height,
+   nothing cropped or forced into a uniform cell. Starts invisible and
+   fades in once laid out, so there's no flash of the pre-layout DOM. */
+.gallery-grid {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+
+.gallery-grid.is-loaded {
+  opacity: 1;
+}
+
+.gallery-column {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/* A real <button> (not yet wired to anything) rather than a plain div --
+   this is meant to open a full-screen focused view on click eventually,
+   see gallery.js. */
+.gallery-item {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  line-height: 0;
+  cursor: pointer;
+}
+
+.gallery-item img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 4px;
 }
 
 /* This page is a self-contained "paged" view: the outer .slide doesn't

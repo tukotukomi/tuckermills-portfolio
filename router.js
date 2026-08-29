@@ -1,11 +1,17 @@
 (function () {
-  const ROUTES = ["home", "professional", "side-projects", "photography", "about-me"];
+  const ROUTES = ["home", "professional", "side-projects", "photography", "about-me", "gallery-wildflowers"];
   const PATHS = {
     home: "/",
     professional: "/professional",
     "side-projects": "/side-projects",
     photography: "/photography",
     "about-me": "/about-me",
+    "gallery-wildflowers": "/photography/wildflowers",
+  };
+  // Sub-pages (gallery collections) highlight their parent's nav pill
+  // rather than none at all -- add future collections' routes here too.
+  const NAV_HIGHLIGHT = {
+    "gallery-wildflowers": "photography",
   };
   const TRANSITION_MS = 600; // matches .slide's opacity transition in styles.css
 
@@ -23,8 +29,9 @@
   function setActiveNav(route) {
     document.body.classList.toggle("on-home", route === "home");
     document.body.classList.toggle("on-professional", route === "professional");
+    const highlightRoute = NAV_HIGHLIGHT[route] || route;
     document.querySelectorAll(".page-nav-link").forEach((link) => {
-      if (link.getAttribute("data-route") === route) link.setAttribute("aria-current", "page");
+      if (link.getAttribute("data-route") === highlightRoute) link.setAttribute("aria-current", "page");
       else link.removeAttribute("aria-current");
     });
   }

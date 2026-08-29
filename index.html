@@ -2,6 +2,15 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
+  <!-- Every route so far ("/professional" etc.) is a single path segment,
+       so relative URLs (img src, fetch("strings/...json"), ...) happened
+       to resolve against the site root by accident -- the browser only
+       drops the LAST path segment when resolving a relative reference.
+       A two-segment route like "/photography/wildflowers" breaks that:
+       relative URLs would resolve against "/photography/" instead. This
+       pins every relative URL in the document to the real site root
+       regardless of how deep the current client-side route looks. -->
+  <base href="/">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Tucker Mills</title>
   <link rel="stylesheet" href="styles.css">
@@ -302,9 +311,9 @@ Fluent in Chinese (Mandarin) and known for working with diverse multinational te
           <div class="photo-banner">
             <img class="photo-banner-img" src="Images/Photography/banner-3.jpg" alt="">
           </div>
-          <div class="photo-banner">
+          <a class="photo-banner route-link" data-route="gallery-wildflowers" href="/photography/wildflowers">
             <img class="photo-banner-img" src="Images/Photography/banner-4.jpg" alt="">
-          </div>
+          </a>
         </div>
       </div>
     </section>
@@ -312,6 +321,19 @@ Fluent in Chinese (Mandarin) and known for working with diverse multinational te
     <section class="slide page" data-page="about-me">
       <h2 class="page-title" data-i18n="nav.aboutMe">About Me</h2>
       <p data-i18n="page.comingSoon">Content coming soon.</p>
+    </section>
+
+    <section class="slide page page-gallery" data-page="gallery-wildflowers">
+      <div class="page-gallery-inner">
+        <h2 class="page-title" data-i18n="gallery.wildflowers.title">Wildflowers</h2>
+        <!-- Populated by gallery.js: images are listed (not auto-discovered
+             -- this is a static site with no build step) in the GALLERIES
+             config there. Add a new file to Images/Photography/Collections/
+             wildflowers/ and list its filename there to add it here. Each
+             .gallery-item is already a real <button> with a data-index,
+             ready for a future click-to-open full-screen view. -->
+        <div class="gallery-grid" id="gallery-wildflowers-grid"></div>
+      </div>
     </section>
   </div>
 
@@ -322,7 +344,7 @@ Fluent in Chinese (Mandarin) and known for working with diverse multinational te
         sessionStorage.removeItem("spa-redirect-path");
         if (redirect !== location.pathname) history.replaceState(null, "", redirect);
       }
-      var routeIndex = { "/": 0, "/professional": 1, "/side-projects": 2, "/photography": 3, "/about-me": 4 };
+      var routeIndex = { "/": 0, "/professional": 1, "/side-projects": 2, "/photography": 3, "/about-me": 4, "/photography/wildflowers": 5 };
       var path = location.pathname.replace(/\/$/, "") || "/";
       var index = routeIndex[path] || 0;
       var track = document.getElementById("track");
@@ -346,5 +368,6 @@ Fluent in Chinese (Mandarin) and known for working with diverse multinational te
   <script src="i18n.js"></script>
   <script src="router.js"></script>
   <script src="accordion.js"></script>
+  <script src="gallery.js"></script>
 </body>
 </html>
