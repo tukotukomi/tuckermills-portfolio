@@ -43,6 +43,103 @@
     });
   }
 
+  // A single shared full-screen viewer, reused across every gallery on the
+  // page (there's only one right now, but this doesn't assume that) --
+  // built once, on first use, and just re-pointed at whichever collection's
+  // image list + index was clicked.
+  let lightboxEl = null;
+  let lightboxImgEl = null;
+  let lightboxItems = [];
+  let lightboxIndex = 0;
+
+  function buildLightbox() {
+    const el = document.createElement("div");
+    el.className = "lightbox";
+    el.innerHTML =
+      '<button type="button" class="lightbox-close" aria-label="Close">&times;</button>' +
+      '<button type="button" class="lightbox-nav lightbox-prev" aria-label="Previous photo">&lsaquo;</button>' +
+      '<button type="button" class="lightbox-nav lightbox-next" aria-label="Next photo">&rsaquo;</button>' +
+      '<img class="lightbox-img" alt="">';
+    document.body.appendChild(el);
+
+    el.querySelector(".lightbox-close").addEventListener("click", closeLightbox);
+    el.querySelector(".lightbox-prev").addEventListener("click", () => stepLightbox(-1));
+    el.querySelector(".lightbox-next").addEventListener("click", () => stepLightbox(1));
+    // .lightbox-img is sized to fit its content (max-width/height, not a
+    // full-bleed wrapper), so any click that isn't on the image or the
+    // buttons lands directly on this backdrop element -- clicking anywhere
+    // outside the photo closes it.
+    el.addEventListener("click", (e) => {
+      if (e.target === el) closeLightbox();
+    });
+
+    return el;
+  }
+
+  function isLightboxOpen() {
+    return !!lightboxEl && lightboxEl.classList.contains("is-open");
+  }
+
+  function updateLightboxImage() {
+    const item = lightboxItems[lightboxIndex];
+    lightboxImgEl.src = item.src;
+    const multiple = lightboxItems.length > 1;
+    lightboxEl.querySelector(".lightbox-prev").hidden = !multiple;
+    lightboxEl.querySelector(".lightbox-next").hidden = !multiple;
+  }
+
+  function openLightbox(items, index) {
+    if (!lightboxEl) {
+      lightboxEl = buildLightbox();
+      lightboxImgEl = lightboxEl.querySelector(".lightbox-img");
+    }
+    lightboxItems = items;
+    lightboxIndex = index;
+    updateLightboxImage();
+    lightboxEl.classList.add("is-open");
+    document.body.classList.add("lightbox-open");
+  }
+
+  function closeLightbox() {
+    if (!isLightboxOpen()) return;
+    lightboxEl.classList.remove("is-open");
+    document.body.classList.remove("lightbox-open");
+  }
+
+  function stepLightbox(dir) {
+    if (lightboxItems.length < 2) return;
+    lightboxIndex = (lightboxIndex + dir + lightboxItems.length) % lightboxItems.length;
+    updateLightboxImage();
+  }
+
+  document.addEventListener("keydown", (e) => {
+    if (!isLightboxOpen()) return;
+    if (e.key === "Escape") closeLightbox();
+    else if (e.key === "ArrowLeft") stepLightbox(-1);
+    else if (e.key === "ArrowRight") stepLightbox(1);
+  });
+
+  // Swipe left/right to step through photos on touch devices.
+  let touchStartX = null;
+  document.addEventListener(
+    "touchstart",
+    (e) => {
+      if (!isLightboxOpen()) return;
+      touchStartX = e.touches[0].clientX;
+    },
+    { passive: true }
+  );
+  document.addEventListener(
+    "touchend",
+    (e) => {
+      if (!isLightboxOpen() || touchStartX === null) return;
+      const dx = e.changedTouches[0].clientX - touchStartX;
+      touchStartX = null;
+      if (Math.abs(dx) > 40) stepLightbox(dx > 0 ? -1 : 1);
+    },
+    { passive: true }
+  );
+
   async function renderGallery(grid, config) {
     const loaded = (await Promise.all(config.images.map((name) => preload(config.folder + name)))).filter(Boolean);
     if (!loaded.length) return;
@@ -66,6 +163,7 @@
         btn.type = "button";
         btn.className = "gallery-item";
         btn.dataset.index = String(index);
+        btn.addEventListener("click", () => openLightbox(loaded, index));
         const img = document.createElement("img");
         img.src = item.src;
         img.alt = "";
