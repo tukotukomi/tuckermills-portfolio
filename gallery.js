@@ -24,6 +24,7 @@
     "gallery-china-bw-grid": {
       folder: "Images/Photography/Collections/china-bw/",
       images: [
+        "nav-image-1.jpg",
         "1.jpg",
         "2.jpg",
         "5.jpg",
@@ -35,7 +36,6 @@
         "12.jpg",
         "21.jpg",
         "23.jpg",
-        "nav-image-1.jpg",
       ],
     },
     "gallery-china-travels-bw-grid": {
