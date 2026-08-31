@@ -1024,6 +1024,11 @@ body.lightbox-open {
     top: auto;
     bottom: 0;
     align-items: flex-end;
+    /* Space-saving: no frosted bar behind the hamburger/language buttons
+       on mobile -- just the buttons themselves floating over the page. */
+    background: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
   }
 }
 
@@ -1264,7 +1269,13 @@ body.on-professional .scroll-progress {
 
 @media (max-width: 700px) {
   .music-player {
-    bottom: calc(var(--header-h, 70px) + 16px);
+    /* Space-saving: tucked in close to the header instead of clearing the
+       whole bar. .site-header's own padding-top is 20px, which is also
+       exactly the gap wanted above the hamburger icon -- the two cancel,
+       so no addition on top of --header-h lands the widget's bottom edge
+       exactly 20px above the icon's top edge, regardless of the header's
+       actual measured height. */
+    bottom: var(--header-h, 80px);
   }
 }
 
