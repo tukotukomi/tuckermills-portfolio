@@ -55,9 +55,13 @@
   let iframe = null;
 
   function embedSrc(track, autoplay) {
+    // size=small is Bandcamp's own compact layout (a thin bar, no big
+    // cover art) rather than a CSS-shrunk version of the large one --
+    // real controls at real size, just a smaller footprint, since our own
+    // play/pause and prev/next already cover the large embed's job.
     return (
       "https://bandcamp.com/EmbeddedPlayer/track=" + track.trackId +
-      "/size=large/bgcol=141414/linkcol=ffffff/tracklist=false/transparent=true/" +
+      "/size=small/bgcol=141414/linkcol=ffffff/tracklist=false/transparent=true/" +
       (autoplay ? "autoplay=1/" : "")
     );
   }
@@ -94,7 +98,7 @@
       iframe = document.createElement("iframe");
       iframe.className = "music-player-iframe";
       iframe.width = "100%";
-      iframe.height = "470";
+      iframe.height = "42";
       iframe.title = "Bandcamp player";
       // Cross-origin autoplay is only honored by the browser if the
       // top-level page already has a user gesture -- true here, since
