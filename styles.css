@@ -179,9 +179,17 @@ body {
   gap: 0;
 }
 
+/* Deliberately NOT flex: 1 1 auto; min-height: 0; (unlike
+   .page-professional-inner). That combo forces this box to fill the
+   slide's full available height regardless of content, so when content
+   is taller than that height minus padding, it renders past the padded
+   content-box into the reserved padding-bottom -- and since the box
+   itself never exceeds the slide's own height, .slide's overflow-y:auto
+   never detects anything to scroll for, so the content just sits behind
+   the fixed mobile header with no way to reach it. Left at its default
+   flex sizing, this box sizes to its own content instead, so tall
+   content (and its padding) correctly grows .slide's scrollable height. */
 .page-side-projects-inner {
-  flex: 1 1 auto;
-  min-height: 0;
   display: flex;
   flex-direction: column;
   padding: calc(var(--header-h, 110px) + 20px) 24px 20px;
@@ -337,8 +345,6 @@ body {
 }
 
 .page-photography-inner {
-  flex: 1 1 auto;
-  min-height: 0;
   display: flex;
   flex-direction: column;
   padding-top: calc(var(--header-h, 110px) + 20px);
@@ -415,8 +421,6 @@ a.photo-banner:hover .photo-banner-img {
 }
 
 .page-gallery-inner {
-  flex: 1 1 auto;
-  min-height: 0;
   display: flex;
   flex-direction: column;
   padding: calc(var(--header-h, 110px) + 20px) 24px 20px;
