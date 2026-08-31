@@ -276,14 +276,26 @@ body {
 /* Same hero background image on every page, but blurred and darkened
    (90% vs. the hero's 80%) so it reads as texture behind the content
    rather than a focal image. A separate ::before layer (rather than
-   blurring .page itself) keeps the blur off the actual text; inset is
-   pulled in past the edges so the blur radius never reveals a hard edge,
-   and .slide's own overflow clips the overhang. z-index: -1 keeps both
-   layers behind .page's normal-flow content without needing to touch
-   every child selector. */
+   blurring .page itself) keeps the blur off the actual text. z-index: -1
+   keeps both layers behind .page's normal-flow content without needing
+   to touch every child selector.
+
+   position: fixed (not absolute) is deliberate: .page is also .slide,
+   which scrolls its own content when there's more than fits in the
+   viewport (e.g. Side Projects once its description got long). An
+   absolutely positioned pseudo-element there is sized to .slide's own
+   box at its CLIENT height, not its full scrollHeight -- once the user
+   scrolled past that point, there was nothing behind the content at all,
+   letting the raw (unblurred, undarkened) image show through. Fixed
+   positioning ties both layers to the viewport instead, so they always
+   cover it regardless of how tall the page's content is or how far it's
+   scrolled -- a static backdrop, consistent with the hero page's own
+   background-attachment: fixed. inset on ::before is pulled in past the
+   edges so the blur radius never reveals a hard edge against the
+   viewport. */
 .page::before {
   content: "";
-  position: absolute;
+  position: fixed;
   inset: -24px;
   background-image: url("Images/Backgrounds/hero-background.jpg");
   background-size: cover;
@@ -294,7 +306,7 @@ body {
 
 .page::after {
   content: "";
-  position: absolute;
+  position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.9);
   z-index: -1;
