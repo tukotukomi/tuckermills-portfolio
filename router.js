@@ -1,5 +1,14 @@
 (function () {
-  const ROUTES = ["home", "professional", "side-projects", "photography", "about-me", "gallery-wildflowers"];
+  const ROUTES = [
+    "home",
+    "professional",
+    "side-projects",
+    "photography",
+    "about-me",
+    "gallery-wildflowers",
+    "gallery-china-bw",
+    "gallery-china-travels-bw",
+  ];
   const PATHS = {
     home: "/",
     professional: "/professional",
@@ -7,11 +16,15 @@
     photography: "/photography",
     "about-me": "/about-me",
     "gallery-wildflowers": "/photography/wildflowers",
+    "gallery-china-bw": "/photography/china-bw",
+    "gallery-china-travels-bw": "/photography/china-travels-bw",
   };
   // Sub-pages (gallery collections) highlight their parent's nav pill
   // rather than none at all -- add future collections' routes here too.
   const NAV_HIGHLIGHT = {
     "gallery-wildflowers": "photography",
+    "gallery-china-bw": "photography",
+    "gallery-china-travels-bw": "photography",
   };
   const TRANSITION_MS = 600; // matches .slide's opacity transition in styles.css
 

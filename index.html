@@ -295,22 +295,19 @@ Fluent in Chinese (Mandarin) and known for working with diverse multinational te
       <div class="page-photography-inner">
         <h2 class="page-title" data-i18n="nav.photography">Photography</h2>
 
-        <!-- Each .photo-banner will eventually become a link to a subgallery
-             (see accordion.js-style click delegation elsewhere for the
-             pattern); it's a plain div for now since no subgalleries exist
-             yet. --photo-focal-x/--photo-focal-y on the img adjust which
-             part of the source image stays visible in the 400px crop --
-             override either on a per-image basis, default is centered. -->
+        <!-- --photo-focal-x/--photo-focal-y on the img adjust which part of
+             the source image stays visible in the 400px crop -- override
+             either on a per-image basis, default is centered. -->
         <div class="photo-banner-list">
-          <div class="photo-banner">
+          <a class="photo-banner route-link" data-route="gallery-china-bw" href="/photography/china-bw">
             <img class="photo-banner-img" src="Images/Photography/banner-1.jpg" alt="">
-          </div>
+          </a>
           <div class="photo-banner">
             <img class="photo-banner-img" src="Images/Photography/banner-2.jpg" alt="">
           </div>
-          <div class="photo-banner">
+          <a class="photo-banner route-link" data-route="gallery-china-travels-bw" href="/photography/china-travels-bw">
             <img class="photo-banner-img" src="Images/Photography/banner-3.jpg" alt="">
-          </div>
+          </a>
           <a class="photo-banner route-link" data-route="gallery-wildflowers" href="/photography/wildflowers">
             <img class="photo-banner-img" src="Images/Photography/banner-4.jpg" alt="">
           </a>
@@ -335,6 +332,20 @@ Fluent in Chinese (Mandarin) and known for working with diverse multinational te
         <div class="gallery-grid" id="gallery-wildflowers-grid"></div>
       </div>
     </section>
+
+    <section class="slide page page-gallery" data-page="gallery-china-bw">
+      <div class="page-gallery-inner">
+        <h2 class="page-title" data-i18n="gallery.chinaBw.title">China</h2>
+        <div class="gallery-grid" id="gallery-china-bw-grid"></div>
+      </div>
+    </section>
+
+    <section class="slide page page-gallery" data-page="gallery-china-travels-bw">
+      <div class="page-gallery-inner">
+        <h2 class="page-title" data-i18n="gallery.chinaTravelsBw.title">China Travels</h2>
+        <div class="gallery-grid" id="gallery-china-travels-bw-grid"></div>
+      </div>
+    </section>
   </div>
 
   <script>
@@ -344,7 +355,7 @@ Fluent in Chinese (Mandarin) and known for working with diverse multinational te
         sessionStorage.removeItem("spa-redirect-path");
         if (redirect !== location.pathname) history.replaceState(null, "", redirect);
       }
-      var routeIndex = { "/": 0, "/professional": 1, "/side-projects": 2, "/photography": 3, "/about-me": 4, "/photography/wildflowers": 5 };
+      var routeIndex = { "/": 0, "/professional": 1, "/side-projects": 2, "/photography": 3, "/about-me": 4, "/photography/wildflowers": 5, "/photography/china-bw": 6, "/photography/china-travels-bw": 7 };
       var path = location.pathname.replace(/\/$/, "") || "/";
       var index = routeIndex[path] || 0;
       var track = document.getElementById("track");

@@ -1,0 +1,5 @@
+# Raw scan/camera masters -- large, not web-displayable (browsers can't
+# render TIFF), and not referenced by the site. Convert to .jpg for the
+# gallery (see gallery.js) and keep the originals local only.
+*.tif
+*.tiff

@@ -21,6 +21,36 @@
         "IMG_20180721_162815.jpg",
       ],
     },
+    "gallery-china-bw-grid": {
+      folder: "Images/Photography/Collections/china-bw/",
+      images: [
+        "1.jpg",
+        "2.jpg",
+        "5.jpg",
+        "6.jpg",
+        "8.jpg",
+        "8 (2).jpg",
+        "8 (3).jpg",
+        "9.jpg",
+        "12.jpg",
+        "21.jpg",
+        "23.jpg",
+        "nav-image-1.jpg",
+      ],
+    },
+    "gallery-china-travels-bw-grid": {
+      folder: "Images/Photography/Collections/china-travels-bw/",
+      images: [
+        "banner-3.jpg",
+        "000022.jpg",
+        "000024.jpg",
+        "000025.jpg",
+        "000032.jpg",
+        "000042.jpg",
+        "000043.jpg",
+        "000046.jpg",
+      ],
+    },
   };
 
   const BREAKPOINTS = [

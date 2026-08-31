@@ -281,7 +281,6 @@ a.photo-banner:hover .photo-banner-img {
    backdrop competes with the actual gallery images for attention, so this
    gets a plain, calm dark background instead. */
 .page-gallery {
-  position: relative;
   background-color: #0a0c0e;
   display: flex;
   flex-direction: column;
