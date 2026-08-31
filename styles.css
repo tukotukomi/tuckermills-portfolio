@@ -1058,6 +1058,23 @@ body.lightbox-open {
   background: rgba(255, 255, 255, 0.2);
 }
 
+/* Mobile only: .site-header's own background/blur is removed at this
+   width (see its mobile block above), so this button sits directly over
+   whatever page content is behind it instead of a frosted backdrop --
+   alpha upped by 0.2 (a 20% cut to transparency) across resting, hover,
+   and border to stay readable, preserving the same resting < hover
+   relationship. */
+@media (max-width: 700px) {
+  .lang-toggle {
+    background: rgba(255, 255, 255, 0.3);
+    border-color: rgba(255, 255, 255, 0.5);
+  }
+
+  .lang-toggle:hover {
+    background: rgba(255, 255, 255, 0.4);
+  }
+}
+
 .lang-icon {
   width: 18px;
   height: 18px;
@@ -1141,6 +1158,18 @@ body:not(.on-home) .page-nav {
 
 .nav-hamburger-toggle:hover {
   background: rgba(255, 255, 255, 0.2);
+}
+
+/* Same reasoning as .lang-toggle's mobile override above. */
+@media (max-width: 700px) {
+  .nav-hamburger-toggle {
+    background: rgba(255, 255, 255, 0.3);
+    border-color: rgba(255, 255, 255, 0.5);
+  }
+
+  .nav-hamburger-toggle:hover {
+    background: rgba(255, 255, 255, 0.4);
+  }
 }
 
 .hamburger-icon {
