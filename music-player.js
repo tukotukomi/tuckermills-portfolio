@@ -35,10 +35,15 @@
   const embedHost = document.getElementById("music-player-embed");
   const prevBtn = document.getElementById("music-player-prev");
   const nextBtn = document.getElementById("music-player-next");
-  if (!toggle || !panel || !embedHost || !prevBtn || !nextBtn) return;
+  const playPauseBtn = document.getElementById("music-player-playpause");
+  const playPauseIcon = document.getElementById("music-player-playpause-icon");
+  if (!toggle || !panel || !embedHost || !prevBtn || !nextBtn || !playPauseBtn || !playPauseIcon) return;
+
+  const PLAY_ICON = "M8 5 L19 12 L8 19 Z";
+  const PAUSE_ICON = "M6 5 H10 V19 H6 Z M14 5 H18 V19 H14 Z";
 
   let currentIndex = 0;
-  let initialized = false;
+  let isPlaying = false;
   let advanceTimer = null;
   let iframe = null;
 
@@ -50,11 +55,24 @@
     );
   }
 
+  function setPlaying(playing) {
+    isPlaying = playing;
+    playPauseBtn.setAttribute("aria-label", playing ? "Pause" : "Play");
+    playPauseIcon.setAttribute("d", playing ? PAUSE_ICON : PLAY_ICON);
+  }
+
+  // Bandcamp has no exposed pause/resume call -- the only lever we have is
+  // the iframe's own src. "Pause" here means tearing the iframe down
+  // entirely (stopping its audio) while remembering which playlist index
+  // was playing; "resume" reloads that same track from 0:00 rather than
+  // its real mid-track position, since that position was never observable
+  // from outside the embed in the first place.
   function playTrack(index, autoplay) {
     currentIndex = ((index % PLAYLIST.length) + PLAYLIST.length) % PLAYLIST.length;
     const track = PLAYLIST[currentIndex];
 
     if (!iframe) {
+      embedHost.textContent = "";
       iframe = document.createElement("iframe");
       iframe.className = "music-player-iframe";
       iframe.width = "100%";
@@ -68,6 +86,7 @@
       embedHost.appendChild(iframe);
     }
     iframe.src = embedSrc(track, autoplay);
+    setPlaying(autoplay);
 
     clearTimeout(advanceTimer);
     if (autoplay) {
@@ -77,23 +96,26 @@
     }
   }
 
+  function stopPlayback() {
+    clearTimeout(advanceTimer);
+    if (iframe) {
+      iframe.remove();
+      iframe = null;
+    }
+    setPlaying(false);
+  }
+
+  playPauseBtn.addEventListener("click", function (e) {
+    e.stopPropagation();
+    if (isPlaying) stopPlayback();
+    else playTrack(currentIndex, true);
+  });
+
   toggle.addEventListener("click", function (e) {
     e.stopPropagation();
     const expanded = toggle.getAttribute("aria-expanded") === "true";
     toggle.setAttribute("aria-expanded", String(!expanded));
     panel.hidden = expanded;
-
-    // First-ever expand: lazily create the iframe and start the playlist.
-    // The click that opened the panel is itself the user gesture browsers
-    // require before audio can autoplay (including inside the embed's
-    // cross-origin iframe, via allow="autoplay" above). Collapsing the
-    // panel afterwards only hides this UI -- playback and the auto-advance
-    // timer keep running in the background, so the music persists as the
-    // visitor navigates the rest of the site.
-    if (!expanded && !initialized) {
-      initialized = true;
-      playTrack(0, true);
-    }
   });
 
   panel.addEventListener("click", function (e) {

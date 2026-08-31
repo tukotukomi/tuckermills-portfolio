@@ -1267,7 +1267,40 @@ body.on-professional .scroll-progress {
   }
 }
 
-.music-player-toggle {
+/* One glassy pill housing two independent buttons -- play/pause and the
+   panel expand/collapse toggle -- rather than overloading a single click
+   target with two different meanings. overflow: hidden lets the pill's
+   own border-radius clip both buttons' square corners for free. */
+.music-player-bar {
+  display: flex;
+  align-items: stretch;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 999px;
+  overflow: hidden;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.music-player-playpause {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  border: none;
+  border-right: 1px solid rgba(255, 255, 255, 0.2);
+  background: transparent;
+  cursor: pointer;
+}
+
+.music-player-playpause:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.music-player-expand {
   appearance: none;
   -webkit-appearance: none;
   -moz-appearance: none;
@@ -1275,25 +1308,29 @@ body.on-professional .scroll-progress {
   align-items: center;
   gap: 6px;
   padding: 8px 14px;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  border-radius: 999px;
+  border: none;
+  background: transparent;
   color: #fff;
   font: inherit;
   font-size: 0.9rem;
   cursor: pointer;
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
 }
 
-.music-player-toggle:hover,
-.music-player-toggle[aria-expanded="true"] {
+.music-player-expand:hover,
+.music-player-expand[aria-expanded="true"] {
   background: rgba(255, 255, 255, 0.2);
 }
 
 .music-player-icon {
   width: 16px;
   height: 16px;
+}
+
+.music-player-placeholder {
+  margin: 40px 0;
+  text-align: center;
+  font-size: 0.85rem;
+  opacity: 0.7;
 }
 
 .music-player-panel {
@@ -1311,9 +1348,13 @@ body.on-professional .scroll-progress {
 }
 
 .music-player-embed {
+  min-height: 470px;
   border-radius: 8px;
   overflow: hidden;
   line-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .music-player-iframe {

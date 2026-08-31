@@ -375,12 +375,21 @@ Fluent in Chinese (Mandarin) and known for working with diverse multinational te
        reloading. See music-player.js for the playlist and playback
        logic. -->
   <div id="music-player" class="music-player">
-    <button id="music-player-toggle" class="music-player-toggle" type="button" aria-expanded="false" aria-controls="music-player-panel">
-      <img src="Images/Icons/music-note.svg" alt="" class="music-player-icon">
-      <span data-i18n="musicPlayer.toggleLabel">Music</span>
-    </button>
+    <div class="music-player-bar">
+      <button id="music-player-playpause" class="music-player-playpause" type="button" aria-label="Play">
+        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+          <path id="music-player-playpause-icon" fill="#e3e3e3" d="M8 5 L19 12 L8 19 Z"></path>
+        </svg>
+      </button>
+      <button id="music-player-toggle" class="music-player-expand" type="button" aria-expanded="false" aria-controls="music-player-panel">
+        <img src="Images/Icons/music-note.svg" alt="" class="music-player-icon">
+        <span data-i18n="musicPlayer.toggleLabel">Music</span>
+      </button>
+    </div>
     <div id="music-player-panel" class="music-player-panel" hidden>
-      <div id="music-player-embed" class="music-player-embed"></div>
+      <div id="music-player-embed" class="music-player-embed">
+        <p class="music-player-placeholder" data-i18n="musicPlayer.placeholder">Press play to start.</p>
+      </div>
       <div class="music-player-controls">
         <button id="music-player-prev" class="music-player-nav" type="button" aria-label="Previous track">&lsaquo;</button>
         <button id="music-player-next" class="music-player-nav" type="button" aria-label="Next track">&rsaquo;</button>
