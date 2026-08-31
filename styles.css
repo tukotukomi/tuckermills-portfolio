@@ -162,17 +162,89 @@ body {
   padding: 20px;
 }
 
+/* Same left-aligned, top-anchored treatment as .page-professional (see
+   below) instead of the generic .page's centered layout -- overrides
+   that rule's center/justify-center/text-align-center, same reasoning:
+   this page has real top-down content now, not just a centered blurb.
+   Deliberately NOT zeroing out .page's own padding: 20px here (unlike
+   .page-photography/.page-gallery) -- .page-professional doesn't either,
+   it just inherits that 20px outer inset, and matching it exactly is the
+   point. */
+.page-side-projects {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  text-align: left;
+  gap: 0;
+}
+
+.page-side-projects-inner {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: calc(var(--header-h, 110px) + 20px) 24px 20px;
+}
+
+.page-side-projects .page-title {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 700px) {
+  /* The header sits at the bottom on mobile (see .site-header), so the
+     clearance it needs flips from top to bottom here too. */
+  .page-side-projects-inner {
+    padding-top: 20px;
+    padding-bottom: calc(var(--header-h, 70px) + 20px);
+  }
+}
+
+.side-project {
+  margin-top: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
 .section-header {
   font-size: 1.25rem;
   font-weight: 600;
   letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.side-project-content {
+  display: flex;
+  align-items: flex-start;
+  gap: 24px;
 }
 
 .side-project-gif {
   display: block;
   width: 100%;
-  max-width: min(90vw, 480px);
+  max-width: 480px;
   height: auto;
+  flex-shrink: 1;
+}
+
+.side-project-description {
+  flex: 1 1 260px;
+  min-width: 0;
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.6;
+  opacity: 0.85;
+}
+
+@media (max-width: 700px) {
+  .side-project-content {
+    flex-direction: column;
+  }
+
+  .side-project-description {
+    flex-basis: auto;
+  }
 }
 
 /* Same hero background image on every page, but blurred and darkened
