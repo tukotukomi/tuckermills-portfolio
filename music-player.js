@@ -90,7 +90,7 @@
       iframe.className = "music-player-iframe";
       iframe.width = "100%";
       iframe.title = "Bandcamp player";
-      iframe.setAttribute("allow", "autoplay");
+      iframe.setAttribute("allow", "autoplay; encrypted-media");
       iframe.setAttribute("seamless", "");
       embedHost.appendChild(iframe);
     }
