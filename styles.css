@@ -1335,7 +1335,21 @@ body.on-professional .scroll-progress {
   display: flex;
   justify-content: center;
   gap: 8px;
+}
+
+/* Default location: under the embed. On mobile, music-player.js instead
+   moves this row into #site-header between the hamburger and language
+   buttons (see the placeControls comment there), where it becomes a
+   normal flex child of that row -- margin: 0 auto centers it in
+   whatever space is left between its neighbors, the same trick
+   .lang-switcher already relies on (margin-left: auto) to sit at the
+   row's far end regardless of content width. */
+#music-player > .music-player-controls {
   margin-top: 8px;
+}
+
+#site-header > .music-player-controls {
+  margin: 0 auto;
 }
 
 .music-player-list-wrap {

@@ -28,14 +28,39 @@
     },
   ];
 
+  const musicPlayer = document.getElementById("music-player");
   const embedHost = document.getElementById("music-player-embed");
+  const controlsRow = document.getElementById("music-player-controls");
   const prevBtn = document.getElementById("music-player-prev");
   const nextBtn = document.getElementById("music-player-next");
   const listBtn = document.getElementById("music-player-list-toggle");
   const listPopup = document.getElementById("music-player-list");
   const expandBtn = document.getElementById("music-player-expand-toggle");
   const expandIcon = document.getElementById("music-player-expand-icon");
-  if (!embedHost || !prevBtn || !nextBtn || !listBtn || !listPopup || !expandBtn || !expandIcon) return;
+  const header = document.getElementById("site-header");
+  const langSwitcher = document.querySelector(".lang-switcher");
+  if (
+    !musicPlayer || !embedHost || !controlsRow || !prevBtn || !nextBtn ||
+    !listBtn || !listPopup || !expandBtn || !expandIcon || !header || !langSwitcher
+  ) return;
+
+  // Below the mobile breakpoint, the controls row physically moves into
+  // #site-header itself (between the hamburger and language buttons)
+  // rather than just being visually repositioned to look like it's there
+  // -- as a real flex child of the same row it gets correct alignment and
+  // spacing for free (including around the language button, whose label
+  // width varies by locale) instead of reimplementing that math. Moving
+  // it back on desktop relies on #music-player only ever having the embed
+  // and this row as children, so appending is enough to restore order.
+  function placeControls(isMobile) {
+    if (isMobile) header.insertBefore(controlsRow, langSwitcher);
+    else musicPlayer.appendChild(controlsRow);
+  }
+  const mobileQuery = window.matchMedia("(max-width: 700px)");
+  placeControls(mobileQuery.matches);
+  mobileQuery.addEventListener("change", function (e) {
+    placeControls(e.matches);
+  });
 
   const EXPAND_ICON = "M4 9V4h5 M20 9V4h-5 M4 15v5h5 M20 15v5h-5";
   const COLLAPSE_ICON = "M9 4v5H4 M15 4v5h5 M9 20v-5H4 M15 20v-5h5";
