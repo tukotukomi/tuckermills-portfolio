@@ -207,10 +207,16 @@ body {
   gap: 12px;
 }
 
+/* Matches an expanded accordion item's label (.accordion-label, e.g.
+   "SUMMARY" on the Professional page) exactly: same weight, size, and
+   letter-spacing. Uppercase gets there via text-transform here rather
+   than the accordion's own approach (storing the string already in caps
+   in strings/*.json), since "Sharkwork Submarine" is a proper noun that
+   should stay correctly cased in the data. */
 .section-header {
-  font-size: 1.25rem;
   font-weight: 600;
-  letter-spacing: 0.04em;
+  font-size: 0.95rem;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
