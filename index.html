@@ -372,11 +372,41 @@ Fluent in Chinese (Mandarin) and known for working with diverse multinational te
        #track, not a child, so client-side route changes (which only
        swap which .slide is active) never touch it: the Bandcamp iframe
        and whatever it's playing survive every page navigation instead of
-       reloading. Just Bandcamp's own compact embed for now, in this fixed
-       spot -- custom playback controls (play/pause, prev/next) come next.
-       See music-player.js for the playlist. -->
+       reloading. See music-player.js for the playlist and control logic. -->
   <div id="music-player" class="music-player">
     <div id="music-player-embed" class="music-player-embed"></div>
+    <div class="music-player-controls">
+      <button id="music-player-prev" class="music-player-control" type="button" aria-label="Rewind to start / previous song">
+        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+          <rect fill="#e3e3e3" x="4" y="5" width="2" height="14"></rect>
+          <path fill="#e3e3e3" d="M18 5 L8 12 L18 19 Z"></path>
+        </svg>
+      </button>
+      <button id="music-player-next" class="music-player-control" type="button" aria-label="Skip to next song">
+        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+          <path fill="#e3e3e3" d="M6 5 L16 12 L6 19 Z"></path>
+          <rect fill="#e3e3e3" x="18" y="5" width="2" height="14"></rect>
+        </svg>
+      </button>
+      <div class="music-player-list-wrap">
+        <button id="music-player-list-toggle" class="music-player-control" type="button" aria-label="Show song list" aria-expanded="false" aria-controls="music-player-list">
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+            <circle fill="#e3e3e3" cx="5" cy="7" r="1.5"></circle>
+            <rect fill="#e3e3e3" x="9" y="6" width="11" height="2"></rect>
+            <circle fill="#e3e3e3" cx="5" cy="12" r="1.5"></circle>
+            <rect fill="#e3e3e3" x="9" y="11" width="11" height="2"></rect>
+            <circle fill="#e3e3e3" cx="5" cy="17" r="1.5"></circle>
+            <rect fill="#e3e3e3" x="9" y="16" width="11" height="2"></rect>
+          </svg>
+        </button>
+        <ul id="music-player-list" class="music-player-list" hidden></ul>
+      </div>
+      <button id="music-player-expand-toggle" class="music-player-control" type="button" aria-label="Show full player">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#e3e3e3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path id="music-player-expand-icon" d="M4 9V4h5 M20 9V4h-5 M4 15v5h5 M20 15v5h-5"></path>
+        </svg>
+      </button>
+    </div>
   </div>
 
   <script>

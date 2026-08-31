@@ -1,7 +1,5 @@
 (function () {
-  // Hand-curated, cross-artist playlist. Only PLAYLIST[0] is shown for now
-  // (see the widget in index.html) -- prev/next and other custom controls
-  // come later, reading from this same list.
+  // Hand-curated, cross-artist playlist.
   //
   // To add a track: open its Bandcamp page, "view source", and find:
   //   - <meta name="bc-page-properties" content='{"item_id":NNNNNN,...}'>
@@ -31,22 +29,103 @@
   ];
 
   const embedHost = document.getElementById("music-player-embed");
-  if (!embedHost) return;
+  const prevBtn = document.getElementById("music-player-prev");
+  const nextBtn = document.getElementById("music-player-next");
+  const listBtn = document.getElementById("music-player-list-toggle");
+  const listPopup = document.getElementById("music-player-list");
+  const expandBtn = document.getElementById("music-player-expand-toggle");
+  const expandIcon = document.getElementById("music-player-expand-icon");
+  if (!embedHost || !prevBtn || !nextBtn || !listBtn || !listPopup || !expandBtn || !expandIcon) return;
 
-  const track = PLAYLIST[0];
-  const iframe = document.createElement("iframe");
-  iframe.className = "music-player-iframe";
-  iframe.width = "100%";
-  iframe.height = "42";
-  iframe.title = "Bandcamp player";
-  iframe.setAttribute("allow", "autoplay");
-  iframe.setAttribute("seamless", "");
-  // size=small is Bandcamp's own compact layout (a thin bar, no big cover
-  // art). No autoplay param -- nothing here has earned the user gesture
-  // browsers require for that yet, so this loads paused and Bandcamp's own
-  // play button is how playback starts, for now.
-  iframe.src =
-    "https://bandcamp.com/EmbeddedPlayer/track=" + track.trackId +
-    "/size=small/bgcol=141414/linkcol=ffffff/tracklist=false/transparent=true/";
-  embedHost.appendChild(iframe);
+  const EXPAND_ICON = "M4 9V4h5 M20 9V4h-5 M4 15v5h5 M20 15v5h-5";
+  const COLLAPSE_ICON = "M9 4v5H4 M15 4v5h5 M9 20v-5H4 M15 20v-5h5";
+
+  let currentIndex = 0;
+  let isExpanded = false;
+  let iframe = null;
+
+  function embedSrc(track, autoplay) {
+    return (
+      "https://bandcamp.com/EmbeddedPlayer/track=" + track.trackId +
+      "/size=" + (isExpanded ? "large" : "small") +
+      "/bgcol=141414/linkcol=ffffff/tracklist=false/transparent=true/" +
+      (autoplay ? "autoplay=1/" : "")
+    );
+  }
+
+  // Bandcamp has no exposed API to switch tracks/sizes in place, so every
+  // change here means reloading the iframe from scratch -- always starts
+  // the new track (or the same track at the new size) from 0:00.
+  function loadTrack(index, autoplay) {
+    currentIndex = index;
+    const track = PLAYLIST[currentIndex];
+
+    if (!iframe) {
+      iframe = document.createElement("iframe");
+      iframe.className = "music-player-iframe";
+      iframe.width = "100%";
+      iframe.title = "Bandcamp player";
+      iframe.setAttribute("allow", "autoplay");
+      iframe.setAttribute("seamless", "");
+      embedHost.appendChild(iframe);
+    }
+    iframe.height = isExpanded ? "470" : "42";
+    iframe.src = embedSrc(track, autoplay);
+    embedHost.classList.toggle("is-expanded", isExpanded);
+
+    renderList();
+  }
+
+  function renderList() {
+    listPopup.textContent = "";
+    PLAYLIST.forEach(function (track, index) {
+      const li = document.createElement("li");
+      li.textContent = track.title + " — " + track.artist;
+      if (index === currentIndex) li.classList.add("selected");
+      li.addEventListener("click", function () {
+        loadTrack(index, true);
+        listPopup.hidden = true;
+      });
+      listPopup.appendChild(li);
+    });
+  }
+
+  // "Rewind to start / previous song": clamps at the first track instead
+  // of wrapping around to the last one -- landing back on the first track
+  // is itself "rewind to start", since every reload restarts at 0:00 (see
+  // loadTrack above), so no separate rewind-only path is needed.
+  prevBtn.addEventListener("click", function () {
+    loadTrack(Math.max(currentIndex - 1, 0), true);
+  });
+
+  // "Skip to next song": wraps back to the first track after the last,
+  // keeping the playlist going.
+  nextBtn.addEventListener("click", function () {
+    loadTrack((currentIndex + 1) % PLAYLIST.length, true);
+  });
+
+  listBtn.addEventListener("click", function (e) {
+    e.stopPropagation();
+    listPopup.hidden = !listPopup.hidden;
+  });
+
+  listPopup.addEventListener("click", function (e) {
+    e.stopPropagation();
+  });
+
+  document.addEventListener("click", function () {
+    listPopup.hidden = true;
+  });
+
+  expandBtn.addEventListener("click", function () {
+    isExpanded = !isExpanded;
+    expandIcon.setAttribute("d", isExpanded ? COLLAPSE_ICON : EXPAND_ICON);
+    expandBtn.setAttribute("aria-label", isExpanded ? "Show compact player" : "Show full player");
+    loadTrack(currentIndex, true);
+  });
+
+  // Initial load: no autoplay -- nothing has earned the user gesture
+  // browsers require for that yet, so this loads paused and Bandcamp's
+  // own play button is how playback starts.
+  loadTrack(0, false);
 })();

@@ -1327,6 +1327,74 @@ body.on-professional .scroll-progress {
   display: block;
 }
 
+.music-player-embed.is-expanded {
+  min-height: 470px;
+}
+
+.music-player-controls {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.music-player-list-wrap {
+  position: relative;
+}
+
+.music-player-control {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #303030;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.music-player-control:hover {
+  background: #404040;
+}
+
+/* Track picker popup -- opens upward since the widget sits low on the
+   screen (bottom-anchored on both mobile and desktop), same pattern as
+   .lang-menu / .nav-hamburger-menu opening upward on mobile. Solid to
+   match the controls row rather than the site's usual translucent
+   dropdowns, for the same readability reasons the mobile header buttons
+   went solid. */
+.music-player-list {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: max(200px, 100%);
+  max-width: calc(100vw - 32px);
+  list-style: none;
+  background: #303030;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.music-player-list li {
+  padding: 10px 14px;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.music-player-list li:hover {
+  background: #404040;
+}
+
+.music-player-list li.selected {
+  font-weight: 600;
+}
+
 .accordion-measure-clone {
   position: fixed;
   top: 0;
