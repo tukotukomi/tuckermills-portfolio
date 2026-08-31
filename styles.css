@@ -1248,6 +1248,108 @@ body.on-professional .scroll-progress {
   }
 }
 
+/* Persistent, site-wide music widget. Lives outside #track (see
+   index.html) so route changes never touch it. Bottom-center on desktop
+   since the header is at the top there; on mobile the header itself sits
+   at the bottom (see .site-header), so this needs the same --header-h
+   clearance the rest of the site uses to avoid colliding with it. */
+.music-player {
+  position: fixed;
+  left: 50%;
+  bottom: 20px;
+  transform: translateX(-50%);
+  z-index: 999;
+}
+
+@media (max-width: 700px) {
+  .music-player {
+    bottom: calc(var(--header-h, 70px) + 16px);
+  }
+}
+
+.music-player-toggle {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 999px;
+  color: #fff;
+  font: inherit;
+  font-size: 0.9rem;
+  cursor: pointer;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.music-player-toggle:hover,
+.music-player-toggle[aria-expanded="true"] {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.music-player-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.music-player-panel {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(350px, calc(100vw - 32px));
+  background: rgba(20, 20, 20, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 12px;
+  padding: 10px;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.music-player-embed {
+  border-radius: 8px;
+  overflow: hidden;
+  line-height: 0;
+}
+
+.music-player-iframe {
+  border: 0;
+  display: block;
+}
+
+.music-player-controls {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.music-player-nav {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 999px;
+  color: #fff;
+  font-size: 1.3rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.music-player-nav:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
 .accordion-measure-clone {
   position: fixed;
   top: 0;

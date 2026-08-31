@@ -368,6 +368,26 @@ Fluent in Chinese (Mandarin) and known for working with diverse multinational te
     </section>
   </div>
 
+  <!-- Persistent, site-wide music widget -- deliberately a sibling of
+       #track, not a child, so client-side route changes (which only
+       swap which .slide is active) never touch it: the Bandcamp iframe
+       and whatever it's playing survive every page navigation instead of
+       reloading. See music-player.js for the playlist and playback
+       logic. -->
+  <div id="music-player" class="music-player">
+    <button id="music-player-toggle" class="music-player-toggle" type="button" aria-expanded="false" aria-controls="music-player-panel">
+      <img src="Images/Icons/music-note.svg" alt="" class="music-player-icon">
+      <span data-i18n="musicPlayer.toggleLabel">Music</span>
+    </button>
+    <div id="music-player-panel" class="music-player-panel" hidden>
+      <div id="music-player-embed" class="music-player-embed"></div>
+      <div class="music-player-controls">
+        <button id="music-player-prev" class="music-player-nav" type="button" aria-label="Previous track">&lsaquo;</button>
+        <button id="music-player-next" class="music-player-nav" type="button" aria-label="Next track">&rsaquo;</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     (function () {
       var redirect = sessionStorage.getItem("spa-redirect-path");
@@ -400,5 +420,6 @@ Fluent in Chinese (Mandarin) and known for working with diverse multinational te
   <script src="router.js"></script>
   <script src="accordion.js"></script>
   <script src="gallery.js"></script>
+  <script src="music-player.js"></script>
 </body>
 </html>
