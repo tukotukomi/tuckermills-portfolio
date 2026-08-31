@@ -162,6 +162,19 @@ body {
   padding: 20px;
 }
 
+.section-header {
+  font-size: 1.25rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.side-project-gif {
+  display: block;
+  width: 100%;
+  max-width: min(90vw, 480px);
+  height: auto;
+}
+
 /* Same hero background image on every page, but blurred and darkened
    (90% vs. the hero's 80%) so it reads as texture behind the content
    rather than a focal image. A separate ::before layer (rather than
