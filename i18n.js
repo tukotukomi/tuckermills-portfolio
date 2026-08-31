@@ -27,7 +27,15 @@
   function applyStrings(strings) {
     document.querySelectorAll("[data-i18n]").forEach((el) => {
       const key = el.getAttribute("data-i18n");
-      if (strings[key] !== undefined) el.textContent = strings[key];
+      if (strings[key] === undefined) return;
+      // Opt-in only: plain textContent is the safe default everywhere
+      // else. data-i18n-html is for the rare string that genuinely needs
+      // embedded markup (e.g. an inline link in a paragraph) -- every
+      // string using it is static site copy the site owner authors
+      // directly in strings/*.json, never user input, so innerHTML here
+      // isn't an XSS concern the way it would be for untrusted content.
+      if (el.hasAttribute("data-i18n-html")) el.innerHTML = strings[key];
+      else el.textContent = strings[key];
     });
     if (strings["site.title"]) document.title = strings["site.title"];
     document.dispatchEvent(new CustomEvent("i18n:applied", { detail: strings }));

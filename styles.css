@@ -237,10 +237,30 @@ body {
 .side-project-description {
   flex: 1 1 260px;
   min-width: 0;
-  margin: 0;
   font-size: 1rem;
   line-height: 1.6;
   opacity: 0.85;
+}
+
+.side-project-description p {
+  margin: 0 0 12px;
+}
+
+.side-project-description p:last-child {
+  margin-bottom: 0;
+}
+
+.side-project-description a {
+  color: #fff;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  opacity: 0.85;
+  transition: opacity 0.2s ease;
+}
+
+.side-project-description a:hover,
+.side-project-description a:focus-visible {
+  opacity: 1;
 }
 
 @media (max-width: 700px) {

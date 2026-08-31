@@ -14,7 +14,7 @@
   "gallery.chinaBw.title": "中国",
   "gallery.chinaTravelsBw.title": "中国之旅",
   "sideProjects.sharkwork.title": "Sharkwork Submarine",
-  "sideProjects.sharkwork.descriptionPlaceholder": "简介即将推出……",
+  "sideProjects.sharkwork.description": "<p>Sharkwork Submarine 的灵感来自 Sharkwork 的最新专辑 <a href=\"https://sharkwork.bandcamp.com/album/aquazen\" target=\"_blank\" rel=\"noopener noreferrer\">AQUAZEN</a>。</p><p>我正在用 Unity 开发这款游戏，与我的其他工具和这个网站不同，我在开发过程中尽量减少使用 AI，目的是更深入地了解这个平台，并练习动手编程能力。</p><p>所有素材均购买自 Unity Store 或类似平台。</p><p>游戏中启发每个关卡的音乐由 Sharkwork 使用即兴现场循环（live loops）手工制作而成。想要支持他们，欢迎购买 <a href=\"https://sharkwork.bandcamp.com/album/aquazen\" target=\"_blank\" rel=\"noopener noreferrer\">AQUAZEN</a> 及其在 <a href=\"https://sharkwork.bandcamp.com/\" target=\"_blank\" rel=\"noopener noreferrer\">Bandcamp</a> 上的其他音乐，或在 <a href=\"https://open.spotify.com/artist/58Qvc4xDrmDAD7V8rKqWRW\" target=\"_blank\" rel=\"noopener noreferrer\">Spotify</a> 上收听！</p>",
   "professional.summary.title": "个人简介",
   "professional.summary.body": "全球本地化专家、游戏制作人及项目经理，拥有丰富的国际化经验，曾带领多元文化团队顺利完成多个制作周期。擅长优化流程、落实最佳实践、主动识别风险并排除障碍，以打造成功的产品与体验，同时营造重视问责与诚信的工作氛围。\n\n精通中文（普通话），擅长与多元化的跨国团队合作，作为国际合作伙伴与IP相关方之间值得信赖的联络人，在保持清晰沟通、问责制、项目推进力与文化尊重的同时推动合作。",
   "professional.skills.title": "技能",
