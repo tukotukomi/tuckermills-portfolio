@@ -1061,17 +1061,16 @@ body.lightbox-open {
 /* Mobile only: .site-header's own background/blur is removed at this
    width (see its mobile block above), so this button sits directly over
    whatever page content is behind it instead of a frosted backdrop --
-   alpha upped by 0.2 (a 20% cut to transparency) across resting, hover,
-   and border to stay readable, preserving the same resting < hover
-   relationship. */
+   solid instead of translucent so it stays readable regardless of what's
+   behind it. */
 @media (max-width: 700px) {
   .lang-toggle {
-    background: rgba(255, 255, 255, 0.3);
+    background: #303030;
     border-color: rgba(255, 255, 255, 0.5);
   }
 
   .lang-toggle:hover {
-    background: rgba(255, 255, 255, 0.4);
+    background: #404040;
   }
 }
 
@@ -1163,12 +1162,12 @@ body:not(.on-home) .page-nav {
 /* Same reasoning as .lang-toggle's mobile override above. */
 @media (max-width: 700px) {
   .nav-hamburger-toggle {
-    background: rgba(255, 255, 255, 0.3);
+    background: #303030;
     border-color: rgba(255, 255, 255, 0.5);
   }
 
   .nav-hamburger-toggle:hover {
-    background: rgba(255, 255, 255, 0.4);
+    background: #404040;
   }
 }
 
@@ -1299,12 +1298,12 @@ body.on-professional .scroll-progress {
 @media (max-width: 700px) {
   .music-player {
     /* Space-saving: tucked in close to the header instead of clearing the
-       whole bar. .site-header's own padding-top is 20px, which is also
-       exactly the gap wanted above the hamburger icon -- the two cancel,
-       so no addition on top of --header-h lands the widget's bottom edge
-       exactly 20px above the icon's top edge, regardless of the header's
-       actual measured height. */
-    bottom: var(--header-h, 80px);
+       whole bar. .site-header's own padding-top is 20px, which cancels
+       against --header-h to land the widget's bottom edge exactly at the
+       hamburger icon's top edge (see the fuller derivation in the earlier
+       commit) -- the -10px pulls it 10px past that, into the icon's own
+       row, for a 10px gap above the icon instead of 20px. */
+    bottom: calc(var(--header-h, 80px) - 10px);
   }
 }
 
