@@ -1326,6 +1326,30 @@ body.on-professional .scroll-progress {
   height: 16px;
 }
 
+/* Bounces the note icon at the currently-playing track's tempo -- there's
+   no way to read the actual audio (see music-player.js), so this is a
+   timed approximation keyed off each track's hand-noted BPM rather than
+   real beat detection. --beat-duration is set inline per-track in JS. */
+@keyframes music-note-bounce {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.15);
+  }
+}
+
+.music-player-icon.is-beating {
+  animation: music-note-bounce var(--beat-duration, 0.5s) ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .music-player-icon.is-beating {
+    animation: none;
+  }
+}
+
 .music-player-placeholder {
   margin: 40px 0;
   text-align: center;

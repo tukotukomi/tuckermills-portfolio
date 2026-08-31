@@ -13,12 +13,17 @@
   //   - the <script type="application/ld+json"> block's "duration" value,
   //     formatted like "P00H03M34S" (3 min 34 sec = 214) -- convert to
   //     whole seconds.
+  //   - bpm has no public source for most indie tracks -- tap it out (a
+  //     tap-tempo app/site, or a DAW if you have one) and note it here.
+  //     Drives the note icon's bounce animation; not audio-derived (see
+  //     setPlaying below), so it's only as accurate as this number is.
   const PLAYLIST = [
     {
       artist: "Cruel Buddhist",
       title: "The Innumerable Benefits of High Speed Rail",
       trackId: 299601388,
       duration: 214,
+      bpm: 120,
       url: "https://cruelbuddhist.bandcamp.com/track/the-innumerable-benefits-of-high-speed-rail",
     },
     {
@@ -26,6 +31,7 @@
       title: "Hard to Say",
       trackId: 190151794,
       duration: 224,
+      bpm: 120,
       url: "https://imdifficult.bandcamp.com/track/hard-to-say-2",
     },
   ];
@@ -37,7 +43,8 @@
   const nextBtn = document.getElementById("music-player-next");
   const playPauseBtn = document.getElementById("music-player-playpause");
   const playPauseIcon = document.getElementById("music-player-playpause-icon");
-  if (!toggle || !panel || !embedHost || !prevBtn || !nextBtn || !playPauseBtn || !playPauseIcon) return;
+  const noteIcon = document.getElementById("music-player-note-icon");
+  if (!toggle || !panel || !embedHost || !prevBtn || !nextBtn || !playPauseBtn || !playPauseIcon || !noteIcon) return;
 
   const PLAY_ICON = "M8 5 L19 12 L8 19 Z";
   const PAUSE_ICON = "M6 5 H10 V19 H6 Z M14 5 H18 V19 H14 Z";
@@ -59,6 +66,17 @@
     isPlaying = playing;
     playPauseBtn.setAttribute("aria-label", playing ? "Pause" : "Play");
     playPauseIcon.setAttribute("d", playing ? PAUSE_ICON : PLAY_ICON);
+
+    // No access to the actual audio (see the file-level comment), so this
+    // bounces in time with the current track's hand-noted BPM rather than
+    // real beat detection -- a timed approximation, not analysis.
+    if (playing) {
+      const beatSeconds = 60 / PLAYLIST[currentIndex].bpm;
+      noteIcon.style.setProperty("--beat-duration", beatSeconds + "s");
+      noteIcon.classList.add("is-beating");
+    } else {
+      noteIcon.classList.remove("is-beating");
+    }
   }
 
   // Bandcamp has no exposed pause/resume call -- the only lever we have is
