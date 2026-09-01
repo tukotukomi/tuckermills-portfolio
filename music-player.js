@@ -90,6 +90,9 @@
   }
   const mobileQuery = window.matchMedia("(max-width: 700px)");
   placeControls(mobileQuery.matches);
+  // First placement + gap are done -- safe to reveal (see the
+  // visibility: hidden default on .music-player-controls in styles.css).
+  controlsRow.classList.add("is-ready");
   mobileQuery.addEventListener("change", function (e) {
     placeControls(e.matches);
   });

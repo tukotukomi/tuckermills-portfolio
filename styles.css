@@ -1367,6 +1367,18 @@ body.on-professional .scroll-progress {
   display: flex;
   justify-content: center;
   gap: 8px;
+  /* Hidden until music-player.js has placed this row (mobile vs. desktop)
+     and computed its real gap -- music-player.js loads at the end of
+     <body> and runs after the browser's first paint, so without this the
+     row would briefly render in its default desktop position/spacing
+     and visibly snap into place once the script catches up. Layout
+     space is still reserved (visibility, not display), so the hamburger
+     and language button never shift when it appears. */
+  visibility: hidden;
+}
+
+.music-player-controls.is-ready {
+  visibility: visible;
 }
 
 /* Default location: under the embed. On mobile, music-player.js instead
