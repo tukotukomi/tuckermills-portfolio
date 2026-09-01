@@ -1023,7 +1023,13 @@ body.lightbox-open {
   .site-header {
     top: auto;
     bottom: 0;
-    align-items: flex-end;
+    /* center, not flex-end: the hamburger (40px), language button (36px),
+       and playback controls (32px) are all different heights, and
+       bottom-aligning items of differing heights makes their centers
+       diverge even though their bottoms match -- centering guarantees
+       one shared horizontal center line regardless of any of their
+       heights, present or future. */
+    align-items: center;
     /* Space-saving: no frosted bar behind the hamburger/language buttons
        on mobile -- just the buttons themselves floating over the page. */
     background: none;
