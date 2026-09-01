@@ -1392,8 +1392,18 @@ body.on-professional .scroll-progress {
   margin-top: 8px;
 }
 
+/* margin-left: auto only (not margin: 0 auto) -- .lang-switcher already
+   carries its own margin-left: auto (needed to push it to the row's end
+   regardless of what precedes it elsewhere, e.g. the desktop pill nav).
+   With both this and a margin-right: auto here, there'd be three
+   auto-margin edges in the row (this element's left AND right, plus
+   .lang-switcher's left) instead of two, and flexbox splits free space
+   per edge, not per visual gap -- the right-hand gap silently got roughly
+   double the left's, since two of those three edges landed on that side.
+   Two matching edges (this margin-left, .lang-switcher's margin-left)
+   split the space evenly instead. */
 #site-header > .music-player-controls {
-  margin: 0 auto;
+  margin-left: auto;
 }
 
 .music-player-list-wrap {
