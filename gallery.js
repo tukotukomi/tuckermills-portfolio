@@ -89,12 +89,16 @@
       '<button type="button" class="lightbox-close" aria-label="Close">&times;</button>' +
       '<button type="button" class="lightbox-nav lightbox-prev" aria-label="Previous photo">&lsaquo;</button>' +
       '<button type="button" class="lightbox-nav lightbox-next" aria-label="Next photo">&rsaquo;</button>' +
-      '<img class="lightbox-img" alt="">';
+      '<img class="lightbox-img" alt="">' +
+      '<button type="button" class="lightbox-visualize" aria-label="Visualize to music">' +
+      '<svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#e3e3e3"><path d="M852-212 732-332l56-56 120 120-56 56ZM708-692l-56-56 120-120 56 56-120 120Zm-456 0L132-812l56-56 120 120-56 56ZM108-212l-56-56 120-120 56 56-120 120Zm246-75 126-76 126 77-33-144 111-96-146-13-58-136-58 135-146 13 111 97-33 143ZM233-120l65-281L80-590l288-25 112-265 112 265 288 25-218 189 65 281-247-149-247 149Zm247-361Z"/></svg>' +
+      "</button>";
     document.body.appendChild(el);
 
     el.querySelector(".lightbox-close").addEventListener("click", closeLightbox);
     el.querySelector(".lightbox-prev").addEventListener("click", () => stepLightbox(-1));
     el.querySelector(".lightbox-next").addEventListener("click", () => stepLightbox(1));
+    el.querySelector(".lightbox-visualize").addEventListener("click", openVisualizer);
     // .lightbox-img is sized to fit its content (max-width/height, not a
     // full-bleed wrapper), so any click that isn't on the image or the
     // buttons lands directly on this backdrop element -- clicking anywhere
@@ -105,6 +109,82 @@
 
     return el;
   }
+
+  // "Visualize to music": a fullscreen, cover-fit view of the current
+  // photo, warped on a beat pulse timed to the current track's BPM (see
+  // window.tuckerMillsMusicPlayer in music-player.js). There's no way to
+  // read the actual audio playing in Bandcamp's cross-origin iframe --
+  // no exposed API, and Web Audio can't analyze a media element outside
+  // its own document -- so this is a timed approximation against the
+  // track's hand-noted tempo, not real audio analysis. The warp itself
+  // is a native SVG filter (feTurbulence + feDisplacementMap), animated
+  // by rewriting its scale each frame -- no canvas, no libraries.
+  let visualizerEl = null;
+  let visualizerImgEl = null;
+  let visualizerDisplacementEl = null;
+  let visualizerRAF = null;
+
+  function buildVisualizer() {
+    const el = document.createElement("div");
+    el.className = "image-visualizer";
+    el.innerHTML =
+      '<svg width="0" height="0" style="position:absolute">' +
+      '<filter id="visualizer-warp" x="-20%" y="-20%" width="140%" height="140%">' +
+      '<feTurbulence type="fractalNoise" baseFrequency="0.012 0.018" numOctaves="2" seed="7" result="turb"></feTurbulence>' +
+      '<feDisplacementMap in="SourceGraphic" in2="turb" scale="0" xChannelSelector="R" yChannelSelector="G"></feDisplacementMap>' +
+      "</filter>" +
+      "</svg>" +
+      '<img class="image-visualizer-img" alt="">' +
+      '<button type="button" class="image-visualizer-close" aria-label="Close visualizer">&times;</button>';
+    document.body.appendChild(el);
+    el.querySelector(".image-visualizer-close").addEventListener("click", closeVisualizer);
+    return el;
+  }
+
+  function isVisualizerOpen() {
+    return !!visualizerEl && visualizerEl.classList.contains("is-open");
+  }
+
+  function openVisualizer() {
+    if (!visualizerEl) {
+      visualizerEl = buildVisualizer();
+      visualizerImgEl = visualizerEl.querySelector(".image-visualizer-img");
+      visualizerDisplacementEl = visualizerEl.querySelector("feDisplacementMap");
+    }
+    visualizerImgEl.src = lightboxItems[lightboxIndex].src;
+    visualizerEl.classList.add("is-open");
+    if (visualizerEl.requestFullscreen) visualizerEl.requestFullscreen().catch(() => {});
+
+    const startTime = performance.now();
+    function frame(now) {
+      if (!isVisualizerOpen()) return;
+      const bpm = (window.tuckerMillsMusicPlayer && window.tuckerMillsMusicPlayer.getCurrentBPM()) || 120;
+      const beatMs = (60 / bpm) * 1000;
+      const phase = ((now - startTime) % beatMs) / beatMs;
+      // Squared sine: a sharper rise-and-fall per beat than a plain sine,
+      // reading more like a pulse than a slow wobble.
+      const pulse = Math.sin(phase * Math.PI) ** 2;
+      visualizerDisplacementEl.setAttribute("scale", (pulse * 45).toFixed(1));
+      visualizerImgEl.style.transform = `scale(${(1 + pulse * 0.06).toFixed(3)})`;
+      visualizerImgEl.style.filter =
+        `url(#visualizer-warp) hue-rotate(${(phase * 25).toFixed(1)}deg) brightness(${(1 + pulse * 0.15).toFixed(3)})`;
+      visualizerRAF = requestAnimationFrame(frame);
+    }
+    visualizerRAF = requestAnimationFrame(frame);
+  }
+
+  function closeVisualizer() {
+    if (!isVisualizerOpen()) return;
+    visualizerEl.classList.remove("is-open");
+    cancelAnimationFrame(visualizerRAF);
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  }
+
+  // Covers the case where the visitor exits fullscreen through the
+  // browser's own UI/shortcut rather than the close button here.
+  document.addEventListener("fullscreenchange", () => {
+    if (!document.fullscreenElement && isVisualizerOpen()) closeVisualizer();
+  });
 
   function isLightboxOpen() {
     return !!lightboxEl && lightboxEl.classList.contains("is-open");
@@ -132,6 +212,7 @@
 
   function closeLightbox() {
     if (!isLightboxOpen()) return;
+    closeVisualizer();
     lightboxEl.classList.remove("is-open");
     document.body.classList.remove("lightbox-open");
   }
@@ -144,8 +225,14 @@
 
   document.addEventListener("keydown", (e) => {
     if (!isLightboxOpen()) return;
-    if (e.key === "Escape") closeLightbox();
-    else if (e.key === "ArrowLeft") stepLightbox(-1);
+    // Escape backs out one layer at a time -- out of the visualizer first
+    // if it's open, then out of the lightbox itself on a second press.
+    if (e.key === "Escape") {
+      if (isVisualizerOpen()) closeVisualizer();
+      else closeLightbox();
+    } else if (isVisualizerOpen()) {
+      // no-op: arrow keys don't navigate while the visualizer is open
+    } else if (e.key === "ArrowLeft") stepLightbox(-1);
     else if (e.key === "ArrowRight") stepLightbox(1);
   });
 

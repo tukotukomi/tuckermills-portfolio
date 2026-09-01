@@ -618,6 +618,87 @@ body.lightbox-open {
   }
 }
 
+/* Center and bottom-justified in the lightbox, matching .lightbox-close's
+   circular style. */
+.lightbox-visualize {
+  position: absolute;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.lightbox-visualize:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* Fullscreen, cover-fit "visualize to music" view -- sits above .lightbox
+   (z-index) so it's reachable from within it. See the file-level comment
+   in gallery.js above openVisualizer() for what the warp is (and isn't)
+   actually driven by. */
+.image-visualizer {
+  position: fixed;
+  inset: 0;
+  z-index: 3100;
+  background: #000;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.3s ease, visibility 0s linear 0.3s;
+}
+
+.image-visualizer.is-open {
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 0.3s ease, visibility 0s linear 0s;
+}
+
+.image-visualizer-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  /* Fills the viewport edge-to-edge, cropping as needed rather than
+     stretching (the "not stretching the image" requirement). */
+  object-fit: cover;
+}
+
+.image-visualizer-close {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  font-size: 1.6rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.image-visualizer-close:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
 /* This page is a self-contained "paged" view: the outer .slide doesn't
    scroll at all (overflow-y overridden to hidden below). Only the active
    section's own body scrolls, and accordion.js decides whether a

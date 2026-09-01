@@ -195,4 +195,16 @@
   // browsers require for that yet, so this loads paused and Bandcamp's
   // own play button is how playback starts.
   loadTrack(0, false);
+
+  // Minimal read-only handle for other features (the gallery's BPM-timed
+  // image warp) that need to know the current track's tempo. There's no
+  // way to observe actual playback state through Bandcamp's iframe (see
+  // the file-level comments above), so this is just the hand-noted BPM
+  // for whichever track is currently loaded -- not a signal that it's
+  // actually playing.
+  window.tuckerMillsMusicPlayer = {
+    getCurrentBPM: function () {
+      return PLAYLIST[currentIndex].bpm;
+    },
+  };
 })();
