@@ -83,6 +83,33 @@ body {
   }
 }
 
+/* Mobile only: shifts all the hero content up by giving the leftover
+   space above/below it a 1:3 ratio instead of flex's default centered
+   1:1 -- .hero-content's own natural height is unaffected, only how the
+   remaining space around it is split. 1:3 halves the original (equal)
+   top gap while keeping the total leftover space the same, since
+   1:1 -> top=X, bottom=X (total 2X); 1:3 -> top=X/2, bottom=3(X/2)=1.5X
+   (still totals 2X). Proportional rather than a fixed pixel value, so it
+   holds correctly across any device height instead of just one tested
+   size. .hero-overlay is position: absolute so it doesn't participate
+   in this and doesn't need excluding. */
+@media (max-width: 700px) {
+  .hero {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .hero::before {
+    content: "";
+    flex: 1 0 0;
+  }
+
+  .hero::after {
+    content: "";
+    flex: 3 0 0;
+  }
+}
+
 .hero-overlay {
   position: absolute;
   inset: 0;
@@ -1346,6 +1373,13 @@ body.on-professional .scroll-progress {
    it -- same background/border/blur, but border-bottom and the bottom
    corners are left square/open since that edge faces straight into the
    embed's own top border 2px below. */
+/* The background/border/blur fade out toward the left and right rather
+   than stopping at a hard rectangular edge -- softer than a flat box,
+   since the text itself is much narrower than the full-width bar. A
+   mask (not opacity) fades background, border, and blur together as one
+   unit while keeping the text itself fully legible; a fixed 40px fade
+   width (not a percentage) keeps the fade the same regardless of how
+   wide the tagline text ends up being. */
 .music-player-tagline {
   margin: 0 0 2px;
   padding: 0 12px;
@@ -1358,6 +1392,8 @@ body.on-professional .scroll-progress {
   border-radius: 8px 8px 0 0;
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
+  mask-image: linear-gradient(to right, transparent, #000 40px, #000 calc(100% - 40px), transparent);
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 40px, #000 calc(100% - 40px), transparent);
 }
 
 .music-player-embed {
