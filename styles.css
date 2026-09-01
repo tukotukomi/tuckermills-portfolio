@@ -1348,7 +1348,7 @@ body.on-professional .scroll-progress {
    embed's own top border 2px below. */
 .music-player-tagline {
   margin: 0 0 2px;
-  padding: 6px 12px;
+  padding: 0 12px;
   text-align: center;
   color: #fff;
   font-size: 0.8rem;
