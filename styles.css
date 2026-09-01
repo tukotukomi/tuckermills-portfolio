@@ -1029,25 +1029,22 @@ body.lightbox-open {
     background: none;
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
-    /* Tightened from 10px so the hamburger, playback controls, and
-       language button reliably stay on one line even with a longer
-       language label (e.g. "中文（简体）") on a narrow phone (~360px) --
-       wrapping would otherwise push the controls onto their own row and
-       look cluttered. */
-    gap: 2px;
   }
 
   /* Playback controls sit inside this row on mobile (see placeControls in
-     music-player.js) -- shrink their own internal gap and button size
-     too, freeing enough width alongside the header's own tightened gap
-     above to avoid wrapping. */
+     music-player.js), centered between the hamburger and language button
+     via margin: 0 auto below. Buttons stay a fixed 32px -- only the gap
+     between them flexes, from 8px down to a 2px floor, computed in
+     music-player.js's updateControlsGap() to exactly fill whatever room
+     is left once the hamburger and (locale-width-dependent) language
+     button are accounted for, rather than a fixed breakpoint guess. */
   #site-header .music-player-controls {
-    gap: 2px;
+    gap: var(--controls-gap, 8px);
   }
 
   #site-header .music-player-control {
-    width: 30px;
-    height: 30px;
+    width: 32px;
+    height: 32px;
   }
 }
 

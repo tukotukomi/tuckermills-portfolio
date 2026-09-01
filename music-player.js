@@ -44,23 +44,62 @@
     !listBtn || !listPopup || !expandBtn || !expandIcon || !header || !langSwitcher
   ) return;
 
+  // Buttons stay a fixed 32px (CONTROL_SIZE) -- only the gap between them
+  // flexes, from 8px down to a 2px floor, shrinking just enough to keep
+  // the hamburger, controls, and language button on one line. Driven by
+  // measurement rather than a fixed breakpoint since the deciding factor
+  // is the language button's rendered width, which changes with the
+  // locale (e.g. "English" vs. "中文（简体）") independently of viewport
+  // width.
+  const CONTROL_SIZE = 32;
+  const CONTROL_COUNT = 4;
+  const GAP_MAX = 8;
+  const GAP_MIN = 2;
+
+  function updateControlsGap() {
+    if (controlsRow.parentElement !== header) return;
+    const headerStyle = getComputedStyle(header);
+    const headerPaddingX = parseFloat(headerStyle.paddingLeft) + parseFloat(headerStyle.paddingRight);
+    const headerGap = parseFloat(headerStyle.gap) || 0;
+    const hamburgerWidth = header.querySelector(".nav-hamburger").getBoundingClientRect().width;
+    const langWidth = langSwitcher.getBoundingClientRect().width;
+
+    const available = header.getBoundingClientRect().width - headerPaddingX - headerGap * 2 - hamburgerWidth - langWidth;
+    const gap = (available - CONTROL_SIZE * CONTROL_COUNT) / (CONTROL_COUNT - 1);
+    controlsRow.style.setProperty("--controls-gap", Math.max(GAP_MIN, Math.min(GAP_MAX, gap)) + "px");
+  }
+
   // Below the mobile breakpoint, the controls row physically moves into
   // #site-header itself (between the hamburger and language buttons)
   // rather than just being visually repositioned to look like it's there
-  // -- as a real flex child of the same row it gets correct alignment and
-  // spacing for free (including around the language button, whose label
-  // width varies by locale) instead of reimplementing that math. Moving
-  // it back on desktop relies on #music-player only ever having the embed
-  // and this row as children, so appending is enough to restore order.
+  // -- as a real flex child of the same row it gets correct alignment for
+  // free instead of reimplementing that math. Moving it back on desktop
+  // relies on #music-player only ever having the embed and this row as
+  // children, so appending is enough to restore order.
   function placeControls(isMobile) {
-    if (isMobile) header.insertBefore(controlsRow, langSwitcher);
-    else musicPlayer.appendChild(controlsRow);
+    if (isMobile) {
+      header.insertBefore(controlsRow, langSwitcher);
+    } else {
+      musicPlayer.appendChild(controlsRow);
+      // Desktop always has room -- clear any leftover mobile value so it
+      // doesn't linger (inline styles move with the node, not the
+      // breakpoint) and fall through to the default 8px gap in CSS.
+      controlsRow.style.removeProperty("--controls-gap");
+    }
+    updateControlsGap();
   }
   const mobileQuery = window.matchMedia("(max-width: 700px)");
   placeControls(mobileQuery.matches);
   mobileQuery.addEventListener("change", function (e) {
     placeControls(e.matches);
   });
+
+  // The header's own width tracks the viewport (left:0;right:0), so
+  // observing it catches window resizes; the language button's width
+  // only changes when its label does (locale switch), independent of the
+  // header's own size, so it needs its own observation too.
+  new ResizeObserver(updateControlsGap).observe(header);
+  new ResizeObserver(updateControlsGap).observe(langSwitcher);
 
   const EXPAND_ICON = "M4 9V4h5 M20 9V4h-5 M4 15v5h5 M20 15v5h-5";
   const COLLAPSE_ICON = "M9 4v5H4 M15 4v5h5 M9 20v-5H4 M15 20v-5h5";
