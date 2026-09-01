@@ -1029,6 +1029,25 @@ body.lightbox-open {
     background: none;
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
+    /* Tightened from 10px so the hamburger, playback controls, and
+       language button reliably stay on one line even with a longer
+       language label (e.g. "中文（简体）") on a narrow phone (~360px) --
+       wrapping would otherwise push the controls onto their own row and
+       look cluttered. */
+    gap: 2px;
+  }
+
+  /* Playback controls sit inside this row on mobile (see placeControls in
+     music-player.js) -- shrink their own internal gap and button size
+     too, freeing enough width alongside the header's own tightened gap
+     above to avoid wrapping. */
+  #site-header .music-player-controls {
+    gap: 2px;
+  }
+
+  #site-header .music-player-control {
+    width: 30px;
+    height: 30px;
   }
 }
 
@@ -1129,15 +1148,24 @@ body:not(.on-home) .page-nav {
   body:not(.on-home) .page-nav {
     display: none;
   }
-
-  body:not(.on-home) .nav-hamburger {
-    display: block;
-  }
 }
 
 .nav-hamburger {
   position: relative;
   display: none;
+}
+
+/* Shown on the home page too here (unlike the desktop pill nav above,
+   which stays home-page-free since the hero already has its own start
+   buttons) -- otherwise the header's mobile row gains/loses the
+   hamburger's 40px+gap the moment you navigate away from home, shifting
+   the playback controls sitting next to it. Placed after the base rule
+   above so it actually wins the cascade at equal specificity (source
+   order, not media-query position, decides ties). */
+@media (max-width: 700px) {
+  .nav-hamburger {
+    display: block;
+  }
 }
 
 .nav-hamburger-toggle {
