@@ -1342,11 +1342,22 @@ body.on-professional .scroll-progress {
    widget's spot rather than behind a custom toggle -- see music-player.js.
    The glassy card styling lives here rather than on the iframe itself
    (transparent=true in the embed URL lets it show through). */
+/* Styled to read as a "cap" sitting on top of .music-player-embed below
+   it -- same background/border/blur, but border-bottom and the bottom
+   corners are left square/open since that edge faces straight into the
+   embed's own top border 2px below. */
 .music-player-tagline {
   margin: 0 0 2px;
+  padding: 6px 12px;
   text-align: center;
   color: #fff;
   font-size: 0.8rem;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-bottom: none;
+  border-radius: 8px 8px 0 0;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
 }
 
 .music-player-embed {
