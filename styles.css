@@ -794,6 +794,8 @@ body.lightbox-open {
   left: 0;
   right: 0;
   bottom: 0;
+  max-height: 75vh;
+  overflow-y: auto;
   background: rgba(20, 20, 20, 0.65);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
@@ -808,6 +810,33 @@ body.lightbox-open {
   transform: translateY(0);
 }
 
+.fractal-controls-row {
+  margin-bottom: 18px;
+}
+
+.fractal-controls-row label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.85);
+  margin-bottom: 8px;
+}
+
+.fractal-controls-value {
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+}
+
+.fractal-controls-row input[type="range"] {
+  width: 100%;
+  accent-color: #fff;
+}
+
+.fractal-controls-toggle-row {
+  margin-bottom: 18px;
+}
+
 .fractal-controls-toggle-row label {
   display: flex;
   align-items: center;
@@ -816,6 +845,7 @@ body.lightbox-open {
   font-size: 0.85rem;
   color: rgba(255, 255, 255, 0.85);
   cursor: pointer;
+  margin-bottom: 0;
 }
 
 .fractal-controls-toggle-row input[type="checkbox"] {

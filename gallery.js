@@ -286,14 +286,25 @@
   // sample of the photo.
   const MANDELBROT_CYCLE_MS = 6000;
 
-  // Minimal, per-visitor settings -- just the one toggle for now. Kept
-  // deliberately small after the last settings panel grew sliders for
-  // every tunable variable and made it easy to combine them into
-  // something that didn't look good; any future sliders read their own
-  // keys off this same object without OG Fractal needing to know they
-  // exist.
+  // Per-visitor settings. ogMode is read by both dive styles; every
+  // other key here only affects Smooth mode (see frame() below) -- OG
+  // Fractal stays deaf to all of them by design, so it keeps
+  // reproducing the exact original behavior no matter how these are
+  // tuned.
   const FRACTAL_DEFAULTS = {
     ogMode: false,
+    // Neither of these existed in the fractal at all before this
+    // panel -- computePulse was only ever wired into the noise-warp
+    // visualizer, and growth's iteration-budget machinery was removed
+    // in an earlier revert and never came back. Off/0 is the accurate
+    // "current behavior" default for both, not a guess.
+    musicReactivityPct: 0,
+    growthEnabled: false,
+    // 7x is the proven-safe ceiling this whole mode is built around
+    // (see the "Smooth mode" comment above injectFromImage below) --
+    // same default as what's hardcoded today, just now adjustable.
+    zoomDepth: 7,
+    cycleDurationSec: 20,
   };
   const FRACTAL_SETTINGS_KEY = "tuckerMillsFractalSettings";
 
@@ -325,22 +336,23 @@
     "uniform vec2 uCenter;\n" +
     "uniform vec3 uBaseColor;\n" +
     "uniform sampler2D uImage;\n" +
+    "uniform float uMaxIter;\n" +
     "void main() {\n" +
     "  vec2 uv = gl_FragCoord.xy / uResolution;\n" +
     "  vec2 p = uv - 0.5;\n" +
     "  p.x *= uResolution.x / uResolution.y;\n" +
     "  vec2 z = p / uZoom + uCenter;\n" +
     "  float iter = 0.0;\n" +
-    "  const float maxIter = 120.0;\n" +
-    "  for (int i = 0; i < 120; i++) {\n" +
+    "  for (int i = 0; i < 150; i++) {\n" +
+    "    if (float(i) >= uMaxIter) break;\n" +
     "    if (dot(z, z) > 4.0) break;\n" +
     "    z = vec2(z.x * z.x - z.y * z.y, 2.0 * z.x * z.y) + uC;\n" +
     "    iter += 1.0;\n" +
     "  }\n" +
-    "  if (iter >= maxIter) {\n" +
+    "  if (iter >= uMaxIter) {\n" +
     "    gl_FragColor = texture2D(uImage, fract(z * 0.5 + 0.5));\n" +
     "  } else {\n" +
-    "    float t = sqrt(iter / maxIter);\n" +
+    "    float t = sqrt(iter / uMaxIter);\n" +
     "    vec4 texColor = texture2D(uImage, fract(z * 0.2 + 0.5));\n" +
     "    gl_FragColor = mix(vec4(uBaseColor, 1.0), texColor, t);\n" +
     "  }\n" +
@@ -382,6 +394,15 @@
       "</svg>" +
       "</button>" +
       '<div class="fractal-controls">' +
+      '<div class="fractal-controls-row"><label>Music reactivity <span class="fractal-controls-value" data-value-for="musicReactivityPct"></span></label>' +
+      '<input type="range" data-setting="musicReactivityPct" min="0" max="100" step="5"></div>' +
+      '<div class="fractal-controls-row"><label>Zoom depth <span class="fractal-controls-value" data-value-for="zoomDepth"></span></label>' +
+      '<input type="range" data-setting="zoomDepth" min="1" max="15" step="0.5"></div>' +
+      '<div class="fractal-controls-row"><label>Cycle duration <span class="fractal-controls-value" data-value-for="cycleDurationSec"></span></label>' +
+      '<input type="range" data-setting="cycleDurationSec" min="6" max="60" step="1"></div>' +
+      '<div class="fractal-controls-row fractal-controls-toggle-row">' +
+      '<label><input type="checkbox" data-toggle="growthEnabled"> Fractal growth</label>' +
+      "</div>" +
       '<div class="fractal-controls-row fractal-controls-toggle-row">' +
       '<label><input type="checkbox" data-toggle="ogMode"> OG Fractal</label>' +
       "</div>" +
@@ -392,11 +413,34 @@
     const toggleBtn = el.querySelector(".image-fractal-settings-toggle");
     const panel = el.querySelector(".fractal-controls");
     toggleBtn.addEventListener("click", () => panel.classList.toggle("is-open"));
-    const ogToggle = panel.querySelector('[data-toggle="ogMode"]');
-    ogToggle.checked = fractalSettings.ogMode;
-    ogToggle.addEventListener("change", (e) => {
-      fractalSettings.ogMode = e.target.checked;
-      saveFractalSettings(fractalSettings);
+
+    // Sliders that OG Fractal deliberately ignores (see its own branch
+    // in frame() below) -- ogMode always reproduces the original
+    // behavior verbatim regardless of what these are set to.
+    const FRACTAL_CONTROL_FORMATS = {
+      musicReactivityPct: (v) => v + "%",
+      zoomDepth: (v) => v + "x",
+      cycleDurationSec: (v) => v + "s",
+    };
+    Object.keys(FRACTAL_CONTROL_FORMATS).forEach((key) => {
+      const input = panel.querySelector('[data-setting="' + key + '"]');
+      const valueEl = panel.querySelector('[data-value-for="' + key + '"]');
+      input.value = fractalSettings[key];
+      valueEl.textContent = FRACTAL_CONTROL_FORMATS[key](fractalSettings[key]);
+      input.addEventListener("input", () => {
+        fractalSettings[key] = Number(input.value);
+        valueEl.textContent = FRACTAL_CONTROL_FORMATS[key](fractalSettings[key]);
+        saveFractalSettings(fractalSettings);
+      });
+    });
+
+    ["growthEnabled", "ogMode"].forEach((key) => {
+      const toggle = panel.querySelector('[data-toggle="' + key + '"]');
+      toggle.checked = fractalSettings[key];
+      toggle.addEventListener("change", (e) => {
+        fractalSettings[key] = e.target.checked;
+        saveFractalSettings(fractalSettings);
+      });
     });
     el.querySelector(".image-fractal-close").addEventListener("click", closeFractal);
 
@@ -428,6 +472,7 @@
         center: gl.getUniformLocation(program, "uCenter"),
         baseColor: gl.getUniformLocation(program, "uBaseColor"),
         image: gl.getUniformLocation(program, "uImage"),
+        maxIter: gl.getUniformLocation(program, "uMaxIter"),
       };
 
       fractalTexture = gl.createTexture();
@@ -500,12 +545,12 @@
   // around (centerX, centerY) -- near 0 means the whole area is one flat
   // region (all escaping immediately, or none escaping at all); higher
   // means real boundary detail is nearby. Checked at several zoom levels
-  // spanning the range the render actually passes through over one cycle
-  // (zoom climbs roughly 1 -> 7, see the zoom formula in frame() below),
-  // scored on the worst of them -- a candidate that's only detailed at
-  // one zoom can still open (or drift) into an empty field of color at
-  // another, which single-zoom scoring couldn't catch.
-  const SCORE_ZOOMS = [1, 2, 3.5, 5.5];
+  // spanning the full range either mode's zoom formula can reach (OG
+  // Fractal always 1->7; Smooth mode's zoom depth is now adjustable up
+  // to 15x), scored on the worst of them -- a candidate that's only
+  // detailed at one zoom can still open (or drift) into an empty field
+  // of color at another, which single-zoom scoring couldn't catch.
+  const SCORE_ZOOMS = [1, 2, 3.5, 5.5, 8, 11, 15];
   function scoreJuliaView(cx, cy, centerX, centerY) {
     const GRID = 6;
     let worst = Infinity;
@@ -541,6 +586,9 @@
     }
 
     const gl = fractalGl;
+    const player = window.tuckerMillsMusicPlayer;
+    const waveformUrl = player && player.getCurrentWaveformUrl();
+    if (waveformUrl) loadWaveform(waveformUrl); // kick off the fetch now, before frame() first needs it
     const sourceImg = lightboxImgEl;
     fractalSamplePixel = buildPixelSampler(sourceImg);
     gl.bindTexture(gl.TEXTURE_2D, fractalTexture);
@@ -566,22 +614,21 @@
     const INJECT_BLEND_MS = MANDELBROT_CYCLE_MS * 0.9;
     let injectBlendMs = INJECT_BLEND_MS;
 
-    // "Seamless" mode: same proven zoom ceiling as OG Fractal (7x) --
-    // going deeper than that is what broke the earlier settings-panel
-    // attempt, since the photo-derived c-value heuristic stops reliably
-    // finding real detail well before 7x's replacement (150x+) ever
-    // needed to worry about it -- but stretched across a much longer
-    // cycle for slower, longer exploration, and the transition to a new
-    // photo-derived subject is a zoom-out-and-back-in "morph" spanning
-    // the *whole* cycle (see frame() below) rather than a hard reset
-    // back to zoom=1: radial motion, matching how a fractal viewer
-    // naturally moves, rather than the lateral pan a plain c/center
-    // drift produces while still zoomed in. c/center are always
-    // blending toward the target across the same span, so the fractal
-    // itself keeps morphing continuously -- the moment it stops
-    // changing is exactly when it starts reading as "frozen" rather
-    // than "alive."
-    const SEAMLESS_CYCLE_MS = 20000;
+    // "Smooth" mode: defaults to the same proven zoom ceiling as OG
+    // Fractal (7x, now adjustable via the zoom depth slider) -- going
+    // much deeper is what broke the earlier settings-panel attempt,
+    // since the photo-derived c-value heuristic stops reliably finding
+    // real detail well before 150x+ ever needed to worry about it --
+    // but stretched across an adjustable, longer-than-OG cycle for
+    // slower exploration, and the transition to a new photo-derived
+    // subject is a zoom-out-and-back-in "morph" spanning the *whole*
+    // cycle (see frame() below) rather than a hard reset back to
+    // zoom=1: radial motion, matching how a fractal viewer naturally
+    // moves, rather than the lateral pan a plain c/center drift
+    // produces while still zoomed in. c/center are always blending
+    // toward the target across the same span, so the fractal itself
+    // keeps morphing continuously -- the moment it stops changing is
+    // exactly when it starts reading as "frozen" rather than "alive."
 
     function injectFromImage(now, blendMs) {
       // Most (c, center) combinations give a "boring" view -- either
@@ -657,11 +704,13 @@
         return;
       }
       let zoom;
+      let maxIter = 120;
       if (fractalSettings.ogMode) {
         // Exactly the original behavior: one 6s cycle, zoom climbs
         // 1 -> 7 across the whole thing, then wraps straight back --
-        // preserved verbatim as a selectable option rather than only
-        // living on in git history.
+        // preserved verbatim as a selectable option, deaf to every
+        // slider below (they all live on fractalSettings, but nothing
+        // in this branch reads them).
         const cyclePhase = ((now - startTime) % MANDELBROT_CYCLE_MS) / MANDELBROT_CYCLE_MS;
         if (cyclePhase < lastCyclePhase) injectFromImage(now);
         lastCyclePhase = cyclePhase;
@@ -671,21 +720,34 @@
         // for ~15s of every 20s cycle (zoom pinned at 7 *and* no
         // injection running, since the previous version only injected
         // while entering/leaving a brief dip at the seam). The whole
-        // cycle is the morph now: zoom eases from 1 up to 7 and back
-        // down to 1, symmetric around the wrap (cyclePhase 0 == 1, so
-        // there's still no jump at the seam), and c/center blend
-        // continuously across nearly the entire cycle -- one injection
-        // per cycle, same principle as OG Fractal's own "blend spans
-        // (almost) the whole cycle so nothing ever sits still," just
-        // stretched across a longer cycle and a symmetric zoom shape
-        // instead of a hard reset.
-        const cyclePhase = ((now - startTime) % SEAMLESS_CYCLE_MS) / SEAMLESS_CYCLE_MS;
-        if (cyclePhase < lastCyclePhase) injectFromImage(now, SEAMLESS_CYCLE_MS * 0.98);
+        // cycle is the morph now: zoom eases from 1 up to the depth
+        // setting and back down to 1, symmetric around the wrap
+        // (cyclePhase 0 == 1, so there's still no jump at the seam),
+        // and c/center blend continuously across nearly the entire
+        // cycle -- one injection per cycle, same principle as OG
+        // Fractal's own "blend spans (almost) the whole cycle so
+        // nothing ever sits still," just stretched across an
+        // adjustable cycle length and a symmetric zoom shape instead
+        // of a hard reset.
+        const cycleDurationMs = fractalSettings.cycleDurationSec * 1000;
+        const elapsedSec = (now - startTime) / 1000;
+        const pulse = computePulse(elapsedSec, waveformUrl, player);
+
+        const cyclePhase = ((now - startTime) % cycleDurationMs) / cycleDurationMs;
+        if (cyclePhase < lastCyclePhase) injectFromImage(now, cycleDurationMs * 0.98);
         lastCyclePhase = cyclePhase;
 
         const distFromWrap = Math.min(cyclePhase, 1 - cyclePhase); // 0 at the wrap, 0.5 at the cycle's midpoint (peak zoom)
         const morphPhase = distFromWrap * 2; // 0 at the wrap, 1 at the midpoint
-        zoom = 1 + Math.pow(morphPhase, 1.5) * 6;
+        // 1.5 is the same fixed exponent OG Fractal itself uses --
+        // reactivity=0 (the default, matching "this didn't exist
+        // before") leaves it exactly there; higher reactivity lets the
+        // music pulse wobble it, speeding up/easing off how eagerly
+        // the dive accelerates.
+        const diveExponent = 1.5 + pulse * (fractalSettings.musicReactivityPct / 100) * 0.6;
+        zoom = 1 + Math.pow(morphPhase, diveExponent) * (fractalSettings.zoomDepth - 1);
+
+        if (fractalSettings.growthEnabled) maxIter = 100 + pulse * 50;
       }
 
       const blend = Math.min(1, (now - injectStart) / injectBlendMs);
@@ -699,6 +761,7 @@
       gl.uniform1f(fractalUniforms.zoom, zoom);
       gl.uniform2f(fractalUniforms.c, cCurrent.x, cCurrent.y);
       gl.uniform2f(fractalUniforms.center, centerCurrent.x, centerCurrent.y);
+      gl.uniform1f(fractalUniforms.maxIter, maxIter);
       gl.uniform1i(fractalUniforms.image, 0);
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, fractalTexture);
