@@ -158,12 +158,82 @@
     return waveformCache[url] || null;
   }
 
+  // Optional real-time alternative to the waveform/BPM pulse below --
+  // opt-in only, via a checkbox in the fractal's settings panel (see
+  // buildFractal), since it needs microphone permission. Deliberately
+  // NOT persisted to fractalSettings/localStorage: this always starts
+  // back at "off" on every fresh open of the fractal view, never a
+  // silent re-prompt. A visitor with a loopback/virtual-cable input
+  // device selected (Stereo Mix, VB-Cable, BlackHole, etc.) can feed
+  // their actual system/Bandcamp playback audio in this way -- the
+  // browser has no way to tell "real microphone" apart from "virtual
+  // cable pretending to be one," so this works with headphones plugged
+  // in without ever touching Bandcamp's stream directly. Wired into
+  // computePulse itself (below) rather than duplicated per-visualizer,
+  // so both the fractal and the noise-warp visualizer benefit.
+  let liveAudioContext = null;
+  let liveAudioAnalyser = null;
+  let liveAudioDataArray = null;
+  let liveAudioStream = null;
+
+  function readLiveAudioPulse() {
+    if (!liveAudioAnalyser) return null;
+    liveAudioAnalyser.getByteFrequencyData(liveAudioDataArray);
+    let sum = 0;
+    for (let i = 0; i < liveAudioDataArray.length; i++) sum += liveAudioDataArray[i];
+    return sum / liveAudioDataArray.length / 255;
+  }
+
+  function stopLiveAudioStream() {
+    if (liveAudioStream) liveAudioStream.getTracks().forEach((t) => t.stop());
+    liveAudioStream = null;
+  }
+
+  // Only tears down the *previous* stream once the new one is confirmed
+  // working (stream is fetched before stopLiveAudioStream runs) -- so a
+  // failed device switch (unplugged/removed device) leaves whatever was
+  // already working untouched instead of going silent.
+  async function enableLiveAudio(deviceId, onDisconnect) {
+    const constraints = { audio: deviceId ? { deviceId: { exact: deviceId } } : true };
+    const stream = await navigator.mediaDevices.getUserMedia(constraints);
+    stopLiveAudioStream();
+    if (!liveAudioContext) liveAudioContext = new (window.AudioContext || window.webkitAudioContext)();
+    if (liveAudioContext.state === "suspended") await liveAudioContext.resume();
+    const source = liveAudioContext.createMediaStreamSource(stream);
+    const analyser = liveAudioContext.createAnalyser();
+    analyser.fftSize = 256;
+    source.connect(analyser);
+    liveAudioStream = stream;
+    liveAudioAnalyser = analyser;
+    liveAudioDataArray = new Uint8Array(analyser.frequencyBinCount);
+    stream.getAudioTracks()[0].addEventListener("ended", () => {
+      // Device unplugged/removed mid-session -- only react if a newer
+      // enableLiveAudio call hasn't already replaced this stream.
+      if (liveAudioStream !== stream) return;
+      liveAudioAnalyser = null;
+      liveAudioDataArray = null;
+      liveAudioStream = null;
+      if (onDisconnect) onDisconnect();
+    });
+    return stream;
+  }
+
+  function disableLiveAudio() {
+    stopLiveAudioStream();
+    liveAudioAnalyser = null;
+    liveAudioDataArray = null;
+  }
+
   // Shared by both visualizers: a single 0-1 "how loud/energetic right
-  // now" value, from the track's real waveform where one's available
-  // (see loadWaveform above), or a BPM-timed pulse otherwise. Elapsed
-  // time since the visualizer opened, not the visitor's actual position
-  // in the track -- see the file-level comment above openVisualizer.
+  // now" value -- live microphone/loopback input when the visitor has
+  // opted in (readLiveAudioPulse above), otherwise the track's real
+  // waveform where one's available (see loadWaveform above), or a
+  // BPM-timed pulse as the last resort. Elapsed time since the
+  // visualizer opened, not the visitor's actual position in the track --
+  // see the file-level comment above openVisualizer.
   function computePulse(elapsedSec, waveformUrl, player) {
+    const live = readLiveAudioPulse();
+    if (live !== null) return live;
     const waveform = waveformUrl && loadWaveform(waveformUrl);
     if (waveform) {
       const index = Math.floor((elapsedSec % waveform.duration) / waveform.step);
@@ -396,6 +466,14 @@
       '<div class="fractal-controls">' +
       '<div class="fractal-controls-row"><label>Music reactivity <span class="fractal-controls-value" data-value-for="musicReactivityPct"></span></label>' +
       '<input type="range" data-setting="musicReactivityPct" min="0" max="100" step="5"></div>' +
+      '<div class="fractal-controls-row fractal-controls-toggle-row">' +
+      '<label><input type="checkbox" data-toggle="liveAudio"> Live audio input</label>' +
+      "</div>" +
+      '<div class="fractal-controls-row fractal-controls-audio-device" hidden>' +
+      '<label>Input device</label>' +
+      '<select class="fractal-controls-select" data-audio-device></select>' +
+      '<p class="fractal-controls-audio-status" data-audio-status></p>' +
+      "</div>" +
       '<div class="fractal-controls-row"><label>Zoom depth <span class="fractal-controls-value" data-value-for="zoomDepth"></span></label>' +
       '<input type="range" data-setting="zoomDepth" min="1" max="15" step="0.5"></div>' +
       '<div class="fractal-controls-row"><label>Cycle duration <span class="fractal-controls-value" data-value-for="cycleDurationSec"></span></label>' +
@@ -442,6 +520,85 @@
         saveFractalSettings(fractalSettings);
       });
     });
+
+    // Live audio input: deliberately kept out of fractalSettings/
+    // localStorage (see the comment above enableLiveAudio) -- always
+    // starts unchecked here, wired up manually rather than through the
+    // generic toggle loop above.
+    const liveAudioToggle = panel.querySelector('[data-toggle="liveAudio"]');
+    const audioDeviceRow = panel.querySelector(".fractal-controls-audio-device");
+    const audioDeviceSelect = panel.querySelector("[data-audio-device]");
+    const audioStatusEl = panel.querySelector("[data-audio-status]");
+
+    function populateAudioDeviceOptions() {
+      return navigator.mediaDevices.enumerateDevices().then((devices) => {
+        audioDeviceSelect.textContent = "";
+        devices
+          .filter((d) => d.kind === "audioinput")
+          .forEach((d, i) => {
+            const opt = document.createElement("option");
+            opt.value = d.deviceId;
+            opt.textContent = d.label || "Microphone " + (i + 1);
+            audioDeviceSelect.appendChild(opt);
+          });
+        // enableLiveAudio(null) (the checkbox's first-ever grant) picks
+        // whatever the browser considers its default device, which isn't
+        // necessarily this list's first entry -- read back which track
+        // actually got used and select that option to match.
+        if (liveAudioStream) {
+          const track = liveAudioStream.getAudioTracks()[0];
+          const settings = track && track.getSettings && track.getSettings();
+          if (settings && settings.deviceId) audioDeviceSelect.value = settings.deviceId;
+        }
+      });
+    }
+
+    function handleAudioDisconnect() {
+      liveAudioToggle.checked = false;
+      audioDeviceRow.hidden = true;
+      audioStatusEl.textContent = "Input device disconnected.";
+    }
+
+    const audioSupported = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+    if (!audioSupported) {
+      liveAudioToggle.disabled = true;
+    } else {
+      liveAudioToggle.addEventListener("change", (e) => {
+        if (e.target.checked) {
+          audioDeviceRow.hidden = false;
+          audioStatusEl.textContent = "Requesting microphone access…";
+          enableLiveAudio(audioDeviceSelect.value || null, handleAudioDisconnect)
+            .then(populateAudioDeviceOptions)
+            .then(() => {
+              const label = audioDeviceSelect.selectedOptions[0];
+              audioStatusEl.textContent = "Listening" + (label ? " on " + label.textContent : "") + ".";
+            })
+            .catch(() => {
+              disableLiveAudio();
+              liveAudioToggle.checked = false;
+              audioDeviceRow.hidden = true;
+              audioStatusEl.textContent = "Microphone access denied or unavailable.";
+            });
+        } else {
+          disableLiveAudio();
+          audioDeviceRow.hidden = true;
+          audioStatusEl.textContent = "";
+        }
+      });
+
+      audioDeviceSelect.addEventListener("change", () => {
+        if (!liveAudioToggle.checked) return;
+        audioStatusEl.textContent = "Switching input…";
+        enableLiveAudio(audioDeviceSelect.value, handleAudioDisconnect)
+          .then(() => {
+            audioStatusEl.textContent = "Listening on " + audioDeviceSelect.selectedOptions[0].textContent + ".";
+          })
+          .catch(() => {
+            audioStatusEl.textContent = "Couldn't switch to that device.";
+          });
+      });
+    }
+
     el.querySelector(".image-fractal-close").addEventListener("click", closeFractal);
 
     const canvas = el.querySelector(".image-fractal-canvas");
@@ -777,6 +934,17 @@
     fractalEl.classList.remove("is-open");
     cancelAnimationFrame(fractalRAF);
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    // Stop capturing the moment the view closes -- no stray mic indicator
+    // lingering after the visitor leaves, and the panel (reused verbatim
+    // on the next open, see buildFractal) shouldn't show "on" for a
+    // stream that no longer exists.
+    disableLiveAudio();
+    const liveAudioToggle = fractalEl.querySelector('[data-toggle="liveAudio"]');
+    if (liveAudioToggle) liveAudioToggle.checked = false;
+    const audioDeviceRow = fractalEl.querySelector(".fractal-controls-audio-device");
+    if (audioDeviceRow) audioDeviceRow.hidden = true;
+    const audioStatusEl = fractalEl.querySelector("[data-audio-status]");
+    if (audioStatusEl) audioStatusEl.textContent = "";
   }
 
   function isLightboxOpen() {

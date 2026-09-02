@@ -855,6 +855,32 @@ body.lightbox-open {
   cursor: pointer;
 }
 
+.fractal-controls-audio-device label {
+  display: block;
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.85);
+  margin-bottom: 8px;
+}
+
+.fractal-controls-select {
+  width: 100%;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 8px;
+  color: #fff;
+  padding: 8px 10px;
+  font-size: 0.85rem;
+}
+
+.fractal-controls-audio-status {
+  margin: 8px 0 0;
+  font-size: 0.78rem;
+  color: rgba(255, 255, 255, 0.6);
+}
+
 /* This page is a self-contained "paged" view: the outer .slide doesn't
    scroll at all (overflow-y overridden to hidden below). Only the active
    section's own body scrolls, and accordion.js decides whether a
