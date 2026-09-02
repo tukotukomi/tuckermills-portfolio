@@ -451,8 +451,8 @@
     "}\n" +
     "vec3 boostDetail(vec3 c) {\n" +
     "  vec3 hsv = rgb2hsv(c);\n" +
-    "  hsv.y = clamp(hsv.y * 2.2, 0.0, 1.0);\n" +
-    "  hsv.z = clamp(hsv.z * 1.3, 0.0, 1.0);\n" +
+    "  hsv.y = clamp(hsv.y * 2.6, 0.0, 1.0);\n" +
+    "  hsv.z = clamp(hsv.z * 1.4, 0.0, 1.0);\n" +
     "  return hsv2rgb(hsv);\n" +
     "}\n" +
     // Complex z^power via repeated multiplication (no atan2/log, so no
@@ -488,7 +488,16 @@
     "    vec3 texColor = boostDetail(texture2D(uImage, fract(z * 0.5 + 0.5)).rgb);\n" +
     "    gl_FragColor = vec4(texColor, 1.0);\n" +
     "  } else {\n" +
-    "    float t = sqrt(iter / uMaxIter);\n" +
+    // A steeper curve than sqrt (which is pow(x, 0.5)) -- iter/uMaxIter
+    // reaching even a moderate fraction now pushes t close to 1 quickly,
+    // so pixels with real boundary detail nearby (moderate iteration
+    // counts, not just ones right at the brink of uMaxIter) read as
+    // close to pure texColor instead of a wash that's still 30-50%
+    // uBaseColor. That baseColor bleed was diluting the *detail* itself,
+    // not just the flat background regions boostDetail above was never
+    // meant to touch -- this is the fix for that, boostDetail alone
+    // couldn't compensate for dilution happening after it runs.
+    "    float t = pow(iter / uMaxIter, 0.3);\n" +
     "    vec3 texColor = boostDetail(texture2D(uImage, fract(z * 0.2 + 0.5)).rgb);\n" +
     "    gl_FragColor = mix(vec4(uBaseColor, 1.0), vec4(texColor, 1.0), t);\n" +
     "  }\n" +
