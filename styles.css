@@ -620,11 +620,18 @@ body.lightbox-open {
 
 /* Center and bottom-justified in the lightbox, matching .lightbox-close's
    circular style. */
-.lightbox-visualize {
+/* Houses both action buttons, center/bottom-justified as one group. */
+.lightbox-actions {
   position: absolute;
   bottom: 20px;
   left: 50%;
   transform: translateX(-50%);
+  display: flex;
+  gap: 12px;
+}
+
+.lightbox-visualize,
+.lightbox-fractal {
   appearance: none;
   -webkit-appearance: none;
   -moz-appearance: none;
@@ -640,7 +647,8 @@ body.lightbox-open {
   transition: background-color 0.2s ease;
 }
 
-.lightbox-visualize:hover {
+.lightbox-visualize:hover,
+.lightbox-fractal:hover {
   background: rgba(255, 255, 255, 0.2);
 }
 
@@ -696,6 +704,59 @@ body.lightbox-open {
 }
 
 .image-visualizer-close:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* Fullscreen WebGL "Mandelbrot zoom" view -- same shell pattern as
+   .image-visualizer above (fixed, fades in/out, sits at the same
+   z-index tier), but its content is a <canvas> instead of an <img>+SVG
+   filter. See the file-level comment in gallery.js above openFractal()
+   for what's actually being rendered. */
+.image-fractal {
+  position: fixed;
+  inset: 0;
+  z-index: 3100;
+  background: #000;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.3s ease, visibility 0s linear 0.3s;
+}
+
+.image-fractal.is-open {
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 0.3s ease, visibility 0s linear 0s;
+}
+
+.image-fractal-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.image-fractal-close {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  font-size: 1.6rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.image-fractal-close:hover {
   background: rgba(255, 255, 255, 0.2);
 }
 

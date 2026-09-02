@@ -90,15 +90,21 @@
       '<button type="button" class="lightbox-nav lightbox-prev" aria-label="Previous photo">&lsaquo;</button>' +
       '<button type="button" class="lightbox-nav lightbox-next" aria-label="Next photo">&rsaquo;</button>' +
       '<img class="lightbox-img" alt="">' +
+      '<div class="lightbox-actions">' +
       '<button type="button" class="lightbox-visualize" aria-label="Visualize to music">' +
       '<svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#e3e3e3"><path d="M852-212 732-332l56-56 120 120-56 56ZM708-692l-56-56 120-120 56 56-120 120Zm-456 0L132-812l56-56 120 120-56 56ZM108-212l-56-56 120-120 56 56-120 120Zm246-75 126-76 126 77-33-144 111-96-146-13-58-136-58 135-146 13 111 97-33 143ZM233-120l65-281L80-590l288-25 112-265 112 265 288 25-218 189 65 281-247-149-247 149Zm247-361Z"/></svg>' +
-      "</button>";
+      "</button>" +
+      '<button type="button" class="lightbox-fractal" aria-label="Mandelbrot zoom">' +
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24px" height="24px" fill="#e3e3e3" fill-rule="evenodd"><path d="M12 3 L21 20 L3 20 Z M7.5 11.5 L16.5 11.5 L12 20 Z"/></svg>' +
+      "</button>" +
+      "</div>";
     document.body.appendChild(el);
 
     el.querySelector(".lightbox-close").addEventListener("click", closeLightbox);
     el.querySelector(".lightbox-prev").addEventListener("click", () => stepLightbox(-1));
     el.querySelector(".lightbox-next").addEventListener("click", () => stepLightbox(1));
     el.querySelector(".lightbox-visualize").addEventListener("click", openVisualizer);
+    el.querySelector(".lightbox-fractal").addEventListener("click", openFractal);
     // .lightbox-img is sized to fit its content (max-width/height, not a
     // full-bleed wrapper), so any click that isn't on the image or the
     // buttons lands directly on this backdrop element -- clicking anywhere
@@ -247,7 +253,303 @@
   // browser's own UI/shortcut rather than the close button here.
   document.addEventListener("fullscreenchange", () => {
     if (!document.fullscreenElement && isVisualizerOpen()) closeVisualizer();
+    if (!document.fullscreenElement && isFractalOpen()) closeFractal();
   });
+
+  // "Mandelbrot zoom": a fullscreen WebGL view of the current photo as a
+  // Julia set (z = z^2 + c, fixed c, z0 = pixel position -- a Mandelbrot
+  // is the same formula with c = pixel position instead, but a fixed c
+  // is what lets that c be driven by the photo, see below). No canvas
+  // library, no 3rd-party WebGL helper -- a small hand-written shader.
+  //
+  // "Closely informed by the source image": the photo is a texture the
+  // shader samples using the *iterated* coordinate (not the screen
+  // coordinate), so the rendered colors are the photo's own colors,
+  // warped through the fractal's math rather than a generic palette. And
+  // literally injected into the formula, per the ask: every few seconds,
+  // a fresh pixel is sampled from the photo (via an offscreen 2D canvas,
+  // read once into a plain array -- cheap, no repeated getImageData
+  // calls) and mapped to a new Julia constant c, smoothly interpolated
+  // into. Each injection also resets the zoom, so one "dive" = one fresh
+  // sample of the photo.
+  const MANDELBROT_CYCLE_MS = 6000;
+  const VERTEX_SHADER = "attribute vec2 aPos;\n" + "void main() { gl_Position = vec4(aPos, 0.0, 1.0); }\n";
+  const FRAGMENT_SHADER =
+    "precision highp float;\n" +
+    "uniform vec2 uResolution;\n" +
+    "uniform float uZoom;\n" +
+    "uniform vec2 uC;\n" +
+    "uniform vec2 uCenter;\n" +
+    "uniform sampler2D uImage;\n" +
+    "void main() {\n" +
+    "  vec2 uv = gl_FragCoord.xy / uResolution;\n" +
+    "  vec2 p = uv - 0.5;\n" +
+    "  p.x *= uResolution.x / uResolution.y;\n" +
+    "  vec2 z = p / uZoom + uCenter;\n" +
+    "  float iter = 0.0;\n" +
+    "  const float maxIter = 120.0;\n" +
+    "  for (int i = 0; i < 120; i++) {\n" +
+    "    if (dot(z, z) > 4.0) break;\n" +
+    "    z = vec2(z.x * z.x - z.y * z.y, 2.0 * z.x * z.y) + uC;\n" +
+    "    iter += 1.0;\n" +
+    "  }\n" +
+    "  if (iter >= maxIter) {\n" +
+    "    gl_FragColor = texture2D(uImage, fract(z * 0.5 + 0.5));\n" +
+    "  } else {\n" +
+    "    float t = iter / maxIter;\n" +
+    "    vec4 texColor = texture2D(uImage, fract(z * 0.2 + 0.5));\n" +
+    "    gl_FragColor = mix(vec4(0.05, 0.0, 0.15, 1.0), texColor, t);\n" +
+    "  }\n" +
+    "}\n";
+
+  let fractalEl = null;
+  let fractalCanvasEl = null;
+  let fractalGl = null;
+  let fractalUniforms = null;
+  let fractalTexture = null;
+  let fractalRAF = null;
+  let fractalSamplePixel = null; // (u, v) -> {r, g, b}, built once per photo
+
+  function compileShader(gl, type, source) {
+    const shader = gl.createShader(type);
+    gl.shaderSource(shader, source);
+    gl.compileShader(shader);
+    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+      const info = gl.getShaderInfoLog(shader);
+      gl.deleteShader(shader);
+      throw new Error("Fractal shader failed to compile: " + info);
+    }
+    return shader;
+  }
+
+  function buildFractal() {
+    const el = document.createElement("div");
+    el.className = "image-fractal";
+    el.innerHTML =
+      '<canvas class="image-fractal-canvas"></canvas>' +
+      '<button type="button" class="image-fractal-close" aria-label="Close fractal view">&times;</button>';
+    document.body.appendChild(el);
+    el.querySelector(".image-fractal-close").addEventListener("click", closeFractal);
+
+    const canvas = el.querySelector(".image-fractal-canvas");
+    const glOptions = { preserveDrawingBuffer: true };
+    const gl = canvas.getContext("webgl", glOptions) || canvas.getContext("experimental-webgl", glOptions);
+    let uniforms = null;
+    if (gl) {
+      const program = gl.createProgram();
+      gl.attachShader(program, compileShader(gl, gl.VERTEX_SHADER, VERTEX_SHADER));
+      gl.attachShader(program, compileShader(gl, gl.FRAGMENT_SHADER, FRAGMENT_SHADER));
+      gl.linkProgram(program);
+      if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+        throw new Error("Fractal shader program failed to link: " + gl.getProgramInfoLog(program));
+      }
+      gl.useProgram(program);
+
+      const quad = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, quad);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+      const aPos = gl.getAttribLocation(program, "aPos");
+      gl.enableVertexAttribArray(aPos);
+      gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+
+      uniforms = {
+        resolution: gl.getUniformLocation(program, "uResolution"),
+        zoom: gl.getUniformLocation(program, "uZoom"),
+        c: gl.getUniformLocation(program, "uC"),
+        center: gl.getUniformLocation(program, "uCenter"),
+        image: gl.getUniformLocation(program, "uImage"),
+      };
+
+      fractalTexture = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, fractalTexture);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    }
+
+    fractalGl = gl;
+    fractalUniforms = uniforms;
+    return el;
+  }
+
+  // A tiny offscreen copy of the photo, read into a plain pixel array
+  // once, so repeated random sampling (every cycle) is just array math --
+  // no repeated canvas readbacks.
+  function buildPixelSampler(imgEl) {
+    const size = 48;
+    const c = document.createElement("canvas");
+    c.width = size;
+    c.height = size;
+    const ctx = c.getContext("2d");
+    ctx.drawImage(imgEl, 0, 0, size, size);
+    const data = ctx.getImageData(0, 0, size, size).data;
+    return function (u, v) {
+      const x = Math.min(size - 1, Math.max(0, Math.floor(u * size)));
+      const y = Math.min(size - 1, Math.max(0, Math.floor(v * size)));
+      const i = (y * size + x) * 4;
+      return { r: data[i] / 255, g: data[i + 1] / 255, b: data[i + 2] / 255 };
+    };
+  }
+
+  function isFractalOpen() {
+    return !!fractalEl && fractalEl.classList.contains("is-open");
+  }
+
+  // Cheap CPU-side echo of the shader's own iteration math, used only to
+  // score candidate (c, center) pairs before committing to one (see
+  // injectFromImage below) -- a handful of these per injection, every
+  // few seconds, is trivial compared to doing it per-pixel on the GPU
+  // every frame.
+  function juliaIterations(zx, zy, cx, cy, maxIter) {
+    let iter = 0;
+    while (iter < maxIter) {
+      if (zx * zx + zy * zy > 4) break;
+      const nzx = zx * zx - zy * zy + cx;
+      const nzy = 2 * zx * zy + cy;
+      zx = nzx;
+      zy = nzy;
+      iter++;
+    }
+    return iter;
+  }
+
+  // How much escape-time varies across a small grid of sample points
+  // around (centerX, centerY) at a representative zoom -- near 0 means
+  // the whole area is one flat region (all escaping immediately, or none
+  // escaping at all); higher means real boundary detail is nearby.
+  function scoreJuliaView(cx, cy, centerX, centerY) {
+    const GRID = 6;
+    const SAMPLE_ZOOM = 3;
+    let minIter = Infinity;
+    let maxIter = -Infinity;
+    for (let i = 0; i < GRID; i++) {
+      for (let j = 0; j < GRID; j++) {
+        const px = (i / (GRID - 1) - 0.5) / SAMPLE_ZOOM + centerX;
+        const py = (j / (GRID - 1) - 0.5) / SAMPLE_ZOOM + centerY;
+        const it = juliaIterations(px, py, cx, cy, 60);
+        if (it < minIter) minIter = it;
+        if (it > maxIter) maxIter = it;
+      }
+    }
+    return maxIter - minIter;
+  }
+
+  function openFractal() {
+    if (!fractalEl) fractalEl = buildFractal();
+    fractalCanvasEl = fractalEl.querySelector(".image-fractal-canvas");
+    fractalEl.classList.add("is-open");
+    if (fractalEl.requestFullscreen) fractalEl.requestFullscreen().catch(() => {});
+
+    if (!fractalGl) {
+      // WebGL unavailable (very old/restricted browser) -- nothing to
+      // render; leave the close button reachable rather than a blank
+      // frozen screen.
+      return;
+    }
+
+    const gl = fractalGl;
+    const sourceImg = lightboxImgEl;
+    fractalSamplePixel = buildPixelSampler(sourceImg);
+    gl.bindTexture(gl.TEXTURE_2D, fractalTexture);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, sourceImg);
+
+    let cCurrent = { x: 0.3, y: 0.4 };
+    let cTarget = { x: 0.3, y: 0.4 };
+    let cFrom = { x: 0.3, y: 0.4 };
+    let centerCurrent = { x: 0.15, y: 0.2 };
+    let centerTarget = { x: 0.15, y: 0.2 };
+    let centerFrom = { x: 0.15, y: 0.2 };
+    let injectStart = 0;
+    const INJECT_BLEND_MS = 1500;
+
+    function injectFromImage(now) {
+      // Most (c, center) combinations give a "boring" view -- either
+      // everything escapes immediately or nothing does, both flat --
+      // regardless of which shell/heuristic picked them. Rather than
+      // accept whatever the first random pixel gives, sample several
+      // candidate pixels and keep whichever actually shows escape-time
+      // variance nearby (scoreJuliaView above), i.e. real boundary detail
+      // to zoom into. Still entirely image-derived, just the best of a
+      // few tries instead of the first one.
+      let best = null;
+      for (let attempt = 0; attempt < 6; attempt++) {
+        const px = fractalSamplePixel(Math.random(), Math.random());
+        // The pixel's hue angle (from R/G) picks a direction in the
+        // complex plane; a shell of radius ~0.65-0.9 (nudged by
+        // brightness) tends to land nearer the Mandelbrot set's own
+        // boundary than a uniform random point would.
+        const angle = Math.atan2(px.g - 0.5, px.r - 0.5);
+        const radius = 0.65 + px.b * 0.25;
+        const c = { x: Math.cos(angle) * radius, y: Math.sin(angle) * radius };
+        // Zooming in on a fixed point (e.g. the origin) often lands on a
+        // featureless stretch for an arbitrary c -- the richest boundary
+        // detail tends to cluster near the value of c itself (c is the
+        // orbit of the critical point z=0 after one step), so the zoom
+        // target rides along with c instead of staying put.
+        const center = { x: c.x * 0.5, y: c.y * 0.5 };
+        const score = scoreJuliaView(c.x, c.y, center.x, center.y);
+        if (!best || score > best.score) best = { c, center, score };
+      }
+      cFrom = cCurrent;
+      cTarget = best.c;
+      centerFrom = centerCurrent;
+      centerTarget = best.center;
+      injectStart = now;
+    }
+
+    const startTime = performance.now();
+    injectFromImage(startTime);
+    let lastCyclePhase = 0;
+
+    function resize() {
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      fractalCanvasEl.width = window.innerWidth * dpr;
+      fractalCanvasEl.height = window.innerHeight * dpr;
+      gl.viewport(0, 0, fractalCanvasEl.width, fractalCanvasEl.height);
+    }
+    resize();
+    window.addEventListener("resize", resize);
+
+    function frame(now) {
+      if (!isFractalOpen()) {
+        window.removeEventListener("resize", resize);
+        return;
+      }
+      const cyclePhase = ((now - startTime) % MANDELBROT_CYCLE_MS) / MANDELBROT_CYCLE_MS;
+      if (cyclePhase < lastCyclePhase) injectFromImage(now);
+      lastCyclePhase = cyclePhase;
+
+      const blend = Math.min(1, (now - injectStart) / INJECT_BLEND_MS);
+      cCurrent = { x: cFrom.x + (cTarget.x - cFrom.x) * blend, y: cFrom.y + (cTarget.y - cFrom.y) * blend };
+      centerCurrent = {
+        x: centerFrom.x + (centerTarget.x - centerFrom.x) * blend,
+        y: centerFrom.y + (centerTarget.y - centerFrom.y) * blend,
+      };
+      // Capped lower than the noise-warp's zoom range -- the higher this
+      // goes, the more likely it drifts past whatever boundary detail was
+      // near the target and into a flat stretch on either side of it.
+      const zoom = 1 + Math.pow(cyclePhase, 1.5) * 6;
+
+      gl.uniform2f(fractalUniforms.resolution, fractalCanvasEl.width, fractalCanvasEl.height);
+      gl.uniform1f(fractalUniforms.zoom, zoom);
+      gl.uniform2f(fractalUniforms.c, cCurrent.x, cCurrent.y);
+      gl.uniform2f(fractalUniforms.center, centerCurrent.x, centerCurrent.y);
+      gl.uniform1i(fractalUniforms.image, 0);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, fractalTexture);
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+      fractalRAF = requestAnimationFrame(frame);
+    }
+    fractalRAF = requestAnimationFrame(frame);
+  }
+
+  function closeFractal() {
+    if (!isFractalOpen()) return;
+    fractalEl.classList.remove("is-open");
+    cancelAnimationFrame(fractalRAF);
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  }
 
   function isLightboxOpen() {
     return !!lightboxEl && lightboxEl.classList.contains("is-open");
@@ -276,6 +578,7 @@
   function closeLightbox() {
     if (!isLightboxOpen()) return;
     closeVisualizer();
+    closeFractal();
     lightboxEl.classList.remove("is-open");
     document.body.classList.remove("lightbox-open");
   }
@@ -288,13 +591,15 @@
 
   document.addEventListener("keydown", (e) => {
     if (!isLightboxOpen()) return;
-    // Escape backs out one layer at a time -- out of the visualizer first
-    // if it's open, then out of the lightbox itself on a second press.
+    // Escape backs out one layer at a time -- out of the fractal view or
+    // visualizer first if either is open, then out of the lightbox
+    // itself on a following press.
     if (e.key === "Escape") {
-      if (isVisualizerOpen()) closeVisualizer();
+      if (isFractalOpen()) closeFractal();
+      else if (isVisualizerOpen()) closeVisualizer();
       else closeLightbox();
-    } else if (isVisualizerOpen()) {
-      // no-op: arrow keys don't navigate while the visualizer is open
+    } else if (isFractalOpen() || isVisualizerOpen()) {
+      // no-op: arrow keys don't navigate while either overlay is open
     } else if (e.key === "ArrowLeft") stepLightbox(-1);
     else if (e.key === "ArrowRight") stepLightbox(1);
   });
