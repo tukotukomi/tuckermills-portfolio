@@ -128,8 +128,13 @@
   let visualizerEl = null;
   let visualizerImgEl = null;
   let visualizerDisplacementEl = null;
+  let visualizerTurbulenceEl = null;
   let visualizerRAF = null;
   const waveformCache = {};
+  // How long one "descend into finer fractal detail, then reset" cycle
+  // takes -- independent of and layered on top of the audio-driven pulse
+  // above, so the two rhythms don't lock to each other.
+  const FRACTAL_CYCLE_MS = 10000;
 
   function loadWaveform(url) {
     if (!url) return null;
@@ -173,6 +178,7 @@
       visualizerEl = buildVisualizer();
       visualizerImgEl = visualizerEl.querySelector(".image-visualizer-img");
       visualizerDisplacementEl = visualizerEl.querySelector("feDisplacementMap");
+      visualizerTurbulenceEl = visualizerEl.querySelector("feTurbulence");
     }
     visualizerImgEl.src = lightboxItems[lightboxIndex].src;
     visualizerEl.classList.add("is-open");
@@ -182,11 +188,32 @@
     const waveformUrl = player && player.getCurrentWaveformUrl();
     if (waveformUrl) loadWaveform(waveformUrl); // kick off the fetch now, before frame() first needs it
 
+    // Re-seeded on open and on every cycle reset below, so the noise
+    // pattern -- and so the exact shape of the warp -- differs each time,
+    // per the "randomized each time" ask.
+    function reseed() {
+      visualizerTurbulenceEl.setAttribute("seed", String(Math.floor(Math.random() * 1000)));
+    }
+    reseed();
+    let lastCyclePhase = 0;
+
     const startTime = performance.now();
     function frame(now) {
       if (!isVisualizerOpen()) return;
       const elapsedSec = (now - startTime) / 1000;
       const waveform = waveformUrl && loadWaveform(waveformUrl);
+
+      // "Descend into fractal detail": baseFrequency and numOctaves both
+      // climb across the cycle, packing in progressively finer, more
+      // layered noise -- feTurbulence's own fractal octaves are what
+      // make this read as "deeper" rather than just "busier" -- then
+      // snap back to a shallow start and reseed for the next descent.
+      const cyclePhase = (((now - startTime) % FRACTAL_CYCLE_MS) / FRACTAL_CYCLE_MS);
+      if (cyclePhase < lastCyclePhase) reseed();
+      lastCyclePhase = cyclePhase;
+      const freq = 0.006 + cyclePhase * 0.034;
+      visualizerTurbulenceEl.setAttribute("baseFrequency", `${freq.toFixed(4)} ${(freq * 1.5).toFixed(4)}`);
+      visualizerTurbulenceEl.setAttribute("numOctaves", String(1 + Math.floor(cyclePhase * 4)));
 
       let pulse;
       if (waveform) {
