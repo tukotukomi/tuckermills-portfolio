@@ -375,6 +375,11 @@
     // same default as what's hardcoded today, just now adjustable.
     zoomDepth: 7,
     cycleDurationSec: 20,
+    // 2 is the classic z^2+c shape everything else here was tuned
+    // around -- replaces the per-open weighted-random roll a previous
+    // version used to fight repetitive shapes; this slider is direct
+    // manual control instead, see its wiring in buildFractal below.
+    fractalPower: 2,
   };
   const FRACTAL_SETTINGS_KEY = "tuckerMillsFractalSettings";
 
@@ -442,17 +447,17 @@
     "  return hsv2rgb(hsv);\n" +
     "}\n" +
     // Complex z^power via repeated multiplication (no atan2/log, so no
-    // branch-cut seam artifact) rather than a fixed square -- lets
-    // openFractal randomize uPower per viewing session (2/3/4) so
-    // different opens explore genuinely different fractal families
-    // (2/3/4-fold rotational symmetry), not just a different c on the
-    // same z^2+c shape every time. Loop bound is a compile-time constant
-    // (uPower itself is a runtime float, same pattern as uMaxIter above)
-    // capped at power=4 -- juliaIterations in JS must stay in lockstep,
-    // since scoring validates candidates against this exact formula.
+    // branch-cut seam artifact) rather than a fixed square -- driven by
+    // the "Fractal shape" slider (fractalPower in buildFractal below) so
+    // 2/3/4/5/6-fold rotational symmetry is a direct, live-adjustable
+    // choice instead of just a different c on the same z^2+c shape every
+    // time. Loop bound is a compile-time constant (uPower itself is a
+    // runtime float, same pattern as uMaxIter above) capped at power=6 --
+    // juliaIterations in JS must stay in lockstep, since scoring
+    // validates candidates against this exact formula.
     "vec2 cplxPow(vec2 z, float power) {\n" +
     "  vec2 r = z;\n" +
-    "  for (int k = 1; k < 4; k++) {\n" +
+    "  for (int k = 1; k < 6; k++) {\n" +
     "    if (float(k) >= power) break;\n" +
     "    r = vec2(r.x * z.x - r.y * z.y, r.x * z.y + r.y * z.x);\n" +
     "  }\n" +
@@ -488,6 +493,15 @@
   let fractalRAF = null;
   let fractalSamplePixel = null; // (u, v) -> {r, g, b}, built once per photo
   let fractalSettings = null; // loaded/mutated live by the settings panel
+  // The active openFractal() closure's own injectFromImage, so the
+  // settings panel (built once in buildFractal, reused across opens) can
+  // trigger an immediate re-score/re-injection when a setting that
+  // changes the fractal's actual shape (the "Fractal shape" power
+  // slider) is dragged -- otherwise the currently-displayed c/center,
+  // scored and chosen for the *previous* power, could read as flat under
+  // the new one until the next naturally-scheduled cycle wrap. Null
+  // whenever the fractal view is closed, see closeFractal.
+  let activeReinject = null;
 
   function compileShader(gl, type, source) {
     const shader = gl.createShader(type);
@@ -526,6 +540,8 @@
       '<select class="fractal-controls-select" data-audio-device></select>' +
       '<p class="fractal-controls-audio-status" data-audio-status></p>' +
       "</div>" +
+      '<div class="fractal-controls-row"><label>Fractal shape <span class="fractal-controls-value" data-value-for="fractalPower"></span></label>' +
+      '<input type="range" data-setting="fractalPower" min="2" max="6" step="1"></div>' +
       '<div class="fractal-controls-row"><label>Zoom depth <span class="fractal-controls-value" data-value-for="zoomDepth"></span></label>' +
       '<input type="range" data-setting="zoomDepth" min="1" max="15" step="0.5"></div>' +
       '<div class="fractal-controls-row"><label>Cycle duration <span class="fractal-controls-value" data-value-for="cycleDurationSec"></span></label>' +
@@ -549,6 +565,7 @@
     // behavior verbatim regardless of what these are set to.
     const FRACTAL_CONTROL_FORMATS = {
       musicReactivityPct: (v) => v + "%",
+      fractalPower: (v) => v + "-fold",
       zoomDepth: (v) => v + "x",
       cycleDurationSec: (v) => v + "s",
     };
@@ -562,6 +579,17 @@
         valueEl.textContent = FRACTAL_CONTROL_FORMATS[key](fractalSettings[key]);
         saveFractalSettings(fractalSettings);
       });
+    });
+
+    // Unlike the other sliders, changing shape changes what the
+    // currently-displayed c/center actually looks like -- they were
+    // scored/chosen for the *previous* power, and the same point can
+    // read as flat under a different one. A short, snappy re-injection
+    // (not the full cycle-length blend an ordinary wrap uses) makes the
+    // slider feel directly responsive instead of leaving a stale/
+    // possibly-flat view on screen until the next scheduled cycle wrap.
+    panel.querySelector('[data-setting="fractalPower"]').addEventListener("input", () => {
+      if (activeReinject) activeReinject(performance.now(), 1200);
     });
 
     ["growthEnabled", "ogMode"].forEach((key) => {
@@ -738,9 +766,9 @@
   // injectFromImage below) -- a handful of these per injection, every
   // few seconds, is trivial compared to doing it per-pixel on the GPU
   // every frame. power must match whatever uPower the shader is actually
-  // rendering with (see openFractal/frame's currentPower) -- scoring
-  // against the wrong exponent's shape would validate candidates for a
-  // fractal that isn't the one on screen.
+  // rendering with (fractalSettings.fractalPower, or 2 for OG Fractal --
+  // see frame()) -- scoring against the wrong exponent's shape would
+  // validate candidates for a fractal that isn't the one on screen.
   function juliaIterations(zx, zy, cx, cy, maxIter, power) {
     let iter = 0;
     while (iter < maxIter) {
@@ -824,19 +852,6 @@
     const avg = fractalSamplePixel.average;
     gl.uniform3f(fractalUniforms.baseColor, avg.r * 0.7, avg.g * 0.7, avg.b * 0.7);
 
-    // Picked once per viewing session, not per injection -- changing the
-    // exponent mid-cycle would make an otherwise-smooth morph jump
-    // between visibly different fractal families. z^2+c (the classic,
-    // proven-safe shape everything so far has been tuned around) stays
-    // the most likely outcome; z^3/z^4 give genuinely different
-    // rotational symmetry and boundary character, so reopening the same
-    // photo (or a different one) doesn't always land on the same "type"
-    // of fractal. OG Fractal ignores this entirely and always renders/
-    // scores at power 2 -- see its branch in frame() and injectFromImage
-    // below -- matching its own "exact original behavior" invariant.
-    const POWER_CHOICES = [2, 2, 2, 2, 2, 3, 3, 3, 4, 4];
-    const currentPower = POWER_CHOICES[Math.floor(Math.random() * POWER_CHOICES.length)];
-
     let cCurrent = { x: 0.3, y: 0.4 };
     let cTarget = { x: 0.3, y: 0.4 };
     let cFrom = { x: 0.3, y: 0.4 };
@@ -886,10 +901,11 @@
       // richer candidates most photos do reach within the attempt budget.
       const MIN_SCORE = 20;
       const MAX_ATTEMPTS = 40;
-      // OG Fractal always scores/renders at power 2, regardless of what
-      // currentPower rolled for this session -- see the comment above
-      // currentPower's declaration.
-      const scoringPower = fractalSettings.ogMode ? 2 : currentPower;
+      // OG Fractal always scores/renders at power 2, ignoring the
+      // "Fractal shape" slider -- matches its own "exact original
+      // behavior" invariant, same as every other Smooth-mode-only
+      // setting.
+      const scoringPower = fractalSettings.ogMode ? 2 : fractalSettings.fractalPower;
       let best = null;
       for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
         const px = fractalSamplePixel(Math.random(), Math.random());
@@ -917,6 +933,7 @@
       injectStart = now;
       injectBlendMs = blendMs || INJECT_BLEND_MS;
     }
+    activeReinject = injectFromImage;
 
     const startTime = performance.now();
     injectFromImage(startTime);
@@ -995,10 +1012,12 @@
 
         if (fractalSettings.growthEnabled) maxIter = 100 + pulse * 50;
       }
-      // See currentPower's declaration above -- OG Fractal always
-      // renders (and, via scoringPower in injectFromImage, always scores
-      // candidates) at power 2, matching its own verbatim invariant.
-      const power = fractalSettings.ogMode ? 2 : currentPower;
+      // Read live every frame (not captured once) so dragging the
+      // "Fractal shape" slider takes effect immediately -- OG Fractal
+      // always renders (and, via scoringPower in injectFromImage, always
+      // scores candidates) at power 2, matching its own verbatim
+      // invariant.
+      const power = fractalSettings.ogMode ? 2 : fractalSettings.fractalPower;
 
       const blend = Math.min(1, (now - injectStart) / injectBlendMs);
       cCurrent = { x: cFrom.x + (cTarget.x - cFrom.x) * blend, y: cFrom.y + (cTarget.y - cFrom.y) * blend };
@@ -1028,6 +1047,7 @@
     fractalEl.classList.remove("is-open");
     cancelAnimationFrame(fractalRAF);
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    activeReinject = null;
     // Stop capturing the moment the view closes -- no stray mic indicator
     // lingering after the visitor leaves, and the panel (reused verbatim
     // on the next open, see buildFractal) shouldn't show "on" for a
