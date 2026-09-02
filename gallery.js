@@ -280,6 +280,7 @@
     "uniform float uZoom;\n" +
     "uniform vec2 uC;\n" +
     "uniform vec2 uCenter;\n" +
+    "uniform vec3 uBaseColor;\n" +
     "uniform sampler2D uImage;\n" +
     "void main() {\n" +
     "  vec2 uv = gl_FragCoord.xy / uResolution;\n" +
@@ -296,9 +297,9 @@
     "  if (iter >= maxIter) {\n" +
     "    gl_FragColor = texture2D(uImage, fract(z * 0.5 + 0.5));\n" +
     "  } else {\n" +
-    "    float t = iter / maxIter;\n" +
+    "    float t = sqrt(iter / maxIter);\n" +
     "    vec4 texColor = texture2D(uImage, fract(z * 0.2 + 0.5));\n" +
-    "    gl_FragColor = mix(vec4(0.05, 0.0, 0.15, 1.0), texColor, t);\n" +
+    "    gl_FragColor = mix(vec4(uBaseColor, 1.0), texColor, t);\n" +
     "  }\n" +
     "}\n";
 
@@ -357,6 +358,7 @@
         zoom: gl.getUniformLocation(program, "uZoom"),
         c: gl.getUniformLocation(program, "uC"),
         center: gl.getUniformLocation(program, "uCenter"),
+        baseColor: gl.getUniformLocation(program, "uBaseColor"),
         image: gl.getUniformLocation(program, "uImage"),
       };
 
@@ -374,7 +376,9 @@
 
   // A tiny offscreen copy of the photo, read into a plain pixel array
   // once, so repeated random sampling (every cycle) is just array math --
-  // no repeated canvas readbacks.
+  // no repeated canvas readbacks. Also computes the photo's own average
+  // color (sampler.average) in the same pass, for the "escaped" region's
+  // base color -- see buildFractal()'s FRAGMENT_SHADER comment.
   function buildPixelSampler(imgEl) {
     const size = 48;
     const c = document.createElement("canvas");
@@ -383,12 +387,23 @@
     const ctx = c.getContext("2d");
     ctx.drawImage(imgEl, 0, 0, size, size);
     const data = ctx.getImageData(0, 0, size, size).data;
-    return function (u, v) {
+
+    let rSum = 0, gSum = 0, bSum = 0;
+    const pixelCount = size * size;
+    for (let i = 0; i < data.length; i += 4) {
+      rSum += data[i];
+      gSum += data[i + 1];
+      bSum += data[i + 2];
+    }
+
+    const sampler = function (u, v) {
       const x = Math.min(size - 1, Math.max(0, Math.floor(u * size)));
       const y = Math.min(size - 1, Math.max(0, Math.floor(v * size)));
       const i = (y * size + x) * 4;
       return { r: data[i] / 255, g: data[i + 1] / 255, b: data[i + 2] / 255 };
     };
+    sampler.average = { r: rSum / pixelCount / 255, g: gSum / pixelCount / 255, b: bSum / pixelCount / 255 };
+    return sampler;
   }
 
   function isFractalOpen() {
@@ -452,6 +467,12 @@
     fractalSamplePixel = buildPixelSampler(sourceImg);
     gl.bindTexture(gl.TEXTURE_2D, fractalTexture);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, sourceImg);
+    // The escaped region's base color (mixed with the photo near the
+    // boundary) was previously a fixed purple, unrelated to whatever
+    // photo was loaded -- now it's the photo's own average color,
+    // darkened to keep some depth/contrast rather than a flat wash.
+    const avg = fractalSamplePixel.average;
+    gl.uniform3f(fractalUniforms.baseColor, avg.r * 0.4, avg.g * 0.4, avg.b * 0.4);
 
     let cCurrent = { x: 0.3, y: 0.4 };
     let cTarget = { x: 0.3, y: 0.4 };
