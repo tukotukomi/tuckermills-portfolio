@@ -285,6 +285,37 @@
   // into. Each injection also resets the zoom, so one "dive" = one fresh
   // sample of the photo.
   const MANDELBROT_CYCLE_MS = 6000;
+
+  // Minimal, per-visitor settings -- just the one toggle for now. Kept
+  // deliberately small after the last settings panel grew sliders for
+  // every tunable variable and made it easy to combine them into
+  // something that didn't look good; any future sliders read their own
+  // keys off this same object without OG Fractal needing to know they
+  // exist.
+  const FRACTAL_DEFAULTS = {
+    ogMode: false,
+  };
+  const FRACTAL_SETTINGS_KEY = "tuckerMillsFractalSettings";
+
+  function loadFractalSettings() {
+    try {
+      const raw = localStorage.getItem(FRACTAL_SETTINGS_KEY);
+      const parsed = raw ? JSON.parse(raw) : {};
+      return Object.assign({}, FRACTAL_DEFAULTS, parsed);
+    } catch (e) {
+      return Object.assign({}, FRACTAL_DEFAULTS);
+    }
+  }
+
+  function saveFractalSettings(settings) {
+    try {
+      localStorage.setItem(FRACTAL_SETTINGS_KEY, JSON.stringify(settings));
+    } catch (e) {
+      // Private browsing / storage disabled -- settings just won't
+      // persist across visits, nothing else depends on this succeeding.
+    }
+  }
+
   const VERTEX_SHADER = "attribute vec2 aPos;\n" + "void main() { gl_Position = vec4(aPos, 0.0, 1.0); }\n";
   const FRAGMENT_SHADER =
     "precision highp float;\n" +
@@ -322,6 +353,7 @@
   let fractalTexture = null;
   let fractalRAF = null;
   let fractalSamplePixel = null; // (u, v) -> {r, g, b}, built once per photo
+  let fractalSettings = null; // loaded/mutated live by the settings panel
 
   function compileShader(gl, type, source) {
     const shader = gl.createShader(type);
@@ -340,8 +372,32 @@
     el.className = "image-fractal";
     el.innerHTML =
       '<canvas class="image-fractal-canvas"></canvas>' +
-      '<button type="button" class="image-fractal-close" aria-label="Close fractal view">&times;</button>';
+      '<button type="button" class="image-fractal-close" aria-label="Close fractal view">&times;</button>' +
+      '<button type="button" class="image-fractal-settings-toggle" aria-label="Fractal settings">' +
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="22px" height="22px" fill="none" ' +
+      'stroke="#e3e3e3" stroke-width="2" stroke-linecap="round">' +
+      '<line x1="4" y1="6" x2="20" y2="6"/><circle cx="9" cy="6" r="2" fill="#e3e3e3" stroke="none"/>' +
+      '<line x1="4" y1="12" x2="20" y2="12"/><circle cx="16" cy="12" r="2" fill="#e3e3e3" stroke="none"/>' +
+      '<line x1="4" y1="18" x2="20" y2="18"/><circle cx="11" cy="18" r="2" fill="#e3e3e3" stroke="none"/>' +
+      "</svg>" +
+      "</button>" +
+      '<div class="fractal-controls">' +
+      '<div class="fractal-controls-row fractal-controls-toggle-row">' +
+      '<label><input type="checkbox" data-toggle="ogMode"> OG Fractal</label>' +
+      "</div>" +
+      "</div>";
     document.body.appendChild(el);
+
+    fractalSettings = loadFractalSettings();
+    const toggleBtn = el.querySelector(".image-fractal-settings-toggle");
+    const panel = el.querySelector(".fractal-controls");
+    toggleBtn.addEventListener("click", () => panel.classList.toggle("is-open"));
+    const ogToggle = panel.querySelector('[data-toggle="ogMode"]');
+    ogToggle.checked = fractalSettings.ogMode;
+    ogToggle.addEventListener("change", (e) => {
+      fractalSettings.ogMode = e.target.checked;
+      saveFractalSettings(fractalSettings);
+    });
     el.querySelector(".image-fractal-close").addEventListener("click", closeFractal);
 
     const canvas = el.querySelector(".image-fractal-canvas");
@@ -508,8 +564,27 @@
     // drifting, never static -- covering the same distance over ~3.6x
     // longer also reads as a slower, gentler drift rather than a snap.
     const INJECT_BLEND_MS = MANDELBROT_CYCLE_MS * 0.9;
+    let injectBlendMs = INJECT_BLEND_MS;
 
-    function injectFromImage(now) {
+    // "Seamless" mode: same proven zoom ceiling as OG Fractal (7x) --
+    // going deeper than that is what broke the earlier settings-panel
+    // attempt, since the photo-derived c-value heuristic stops reliably
+    // finding real detail well before 7x's replacement (150x+) ever
+    // needed to worry about it -- but stretched across a much longer
+    // cycle for slower, longer exploration, and instead of a hard reset
+    // back to zoom=1, the transition to a new photo-derived subject is
+    // a brief zoom-out-and-back-in "morph": radial motion, matching how
+    // a fractal viewer naturally moves, rather than the lateral pan a
+    // plain c/center drift produces while still zoomed in. The morph
+    // happens while zoomed out specifically so that pan is happening
+    // where it's least visible (a given absolute shift in c/center
+    // covers much less of the frame at low zoom than at 7x), then the
+    // view zooms back in already arrived at the new subject.
+    const SEAMLESS_CYCLE_MS = 20000;
+    const MORPH_FRACTION = 0.25; // final quarter of the cycle is the morph
+    let seamlessMorphed = false;
+
+    function injectFromImage(now, blendMs) {
       // Most (c, center) combinations give a "boring" view -- either
       // everything escapes immediately or nothing does, both flat --
       // regardless of which shell/heuristic picked them. Rather than
@@ -548,6 +623,7 @@
       centerFrom = centerCurrent;
       centerTarget = best.center;
       injectStart = now;
+      injectBlendMs = blendMs || INJECT_BLEND_MS;
     }
 
     const startTime = performance.now();
@@ -581,20 +657,57 @@
         window.removeEventListener("resize", resize);
         return;
       }
-      const cyclePhase = ((now - startTime) % MANDELBROT_CYCLE_MS) / MANDELBROT_CYCLE_MS;
-      if (cyclePhase < lastCyclePhase) injectFromImage(now);
-      lastCyclePhase = cyclePhase;
+      let zoom;
+      if (fractalSettings.ogMode) {
+        // Exactly the original behavior: one 6s cycle, zoom climbs
+        // 1 -> 7 across the whole thing, then wraps straight back --
+        // preserved verbatim as a selectable option rather than only
+        // living on in git history.
+        const cyclePhase = ((now - startTime) % MANDELBROT_CYCLE_MS) / MANDELBROT_CYCLE_MS;
+        if (cyclePhase < lastCyclePhase) injectFromImage(now);
+        lastCyclePhase = cyclePhase;
+        zoom = 1 + Math.pow(cyclePhase, 1.5) * 6;
+      } else {
+        const cyclePhase = ((now - startTime) % SEAMLESS_CYCLE_MS) / SEAMLESS_CYCLE_MS;
+        lastCyclePhase = cyclePhase;
 
-      const blend = Math.min(1, (now - injectStart) / INJECT_BLEND_MS);
+        // The dip is centered *on* the wrap (cyclePhase 0 == 1) rather
+        // than confined to one side of it -- zoom is 1 exactly at the
+        // wrap and climbs back to 7 on both sides, so cyclePhase=1's
+        // zoom matches cyclePhase=0's exactly and there's no jump at
+        // the seam. distFromWrap is 0 at the wrap, rising to 0.5 at the
+        // cycle's midpoint (the middle of the hold).
+        const distFromWrap = Math.min(cyclePhase, 1 - cyclePhase);
+        const dipHalfWidth = MORPH_FRACTION / 2;
+        if (distFromWrap < dipHalfWidth) {
+          if (!seamlessMorphed) {
+            // Inject once, right as the dip begins (crossing into the
+            // dip region on the way down), blended over ~95% of the
+            // dip's full width -- both halves, down and back up, which
+            // straddle the wrap itself -- so c/center are still
+            // arriving right as zoom finishes climbing back to 7, not
+            // finishing early and freezing. seamlessMorphed stays true
+            // across the wrap (only reset once back in the hold below)
+            // since the dip spans both sides of it -- resetting right
+            // at the wrap would fire a second, redundant injection
+            // moments after the first.
+            injectFromImage(now, MORPH_FRACTION * SEAMLESS_CYCLE_MS * 0.95);
+            seamlessMorphed = true;
+          }
+          const dipPhase = distFromWrap / dipHalfWidth; // 0 at the wrap, 1 at the dip's edge
+          zoom = 1 + Math.pow(dipPhase, 1.5) * 6;
+        } else {
+          seamlessMorphed = false; // re-armed for the next dip
+          zoom = 7;
+        }
+      }
+
+      const blend = Math.min(1, (now - injectStart) / injectBlendMs);
       cCurrent = { x: cFrom.x + (cTarget.x - cFrom.x) * blend, y: cFrom.y + (cTarget.y - cFrom.y) * blend };
       centerCurrent = {
         x: centerFrom.x + (centerTarget.x - centerFrom.x) * blend,
         y: centerFrom.y + (centerTarget.y - centerFrom.y) * blend,
       };
-      // Capped lower than the noise-warp's zoom range -- the higher this
-      // goes, the more likely it drifts past whatever boundary detail was
-      // near the target and into a flat stretch on either side of it.
-      const zoom = 1 + Math.pow(cyclePhase, 1.5) * 6;
 
       gl.uniform2f(fractalUniforms.resolution, fractalCanvasEl.width, fractalCanvasEl.height);
       gl.uniform1f(fractalUniforms.zoom, zoom);
