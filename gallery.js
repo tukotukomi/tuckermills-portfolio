@@ -167,7 +167,12 @@
     const waveform = waveformUrl && loadWaveform(waveformUrl);
     if (waveform) {
       const index = Math.floor((elapsedSec % waveform.duration) / waveform.step);
-      return waveform.amplitude[Math.min(index, waveform.amplitude.length - 1)];
+      const value = waveform.amplitude[Math.min(index, waveform.amplitude.length - 1)];
+      // Guards against ever feeding a bad value (a malformed/truncated
+      // waveform, an out-of-range index) into a CSS/SVG attribute
+      // downstream, which -- unlike a plain JS NaN -- the browser logs
+      // as a console error rather than silently coercing.
+      if (typeof value === "number" && !Number.isNaN(value)) return value;
     }
     const bpm = (player && player.getCurrentBPM()) || 120;
     const beatPhase = (elapsedSec % (60 / bpm)) / (60 / bpm);
@@ -480,6 +485,9 @@
     }
 
     const gl = fractalGl;
+    const player = window.tuckerMillsMusicPlayer;
+    const waveformUrl = player && player.getCurrentWaveformUrl();
+    if (waveformUrl) loadWaveform(waveformUrl); // kick off the fetch now, before frame() first needs it
     const sourceImg = lightboxImgEl;
     fractalSamplePixel = buildPixelSampler(sourceImg);
     gl.bindTexture(gl.TEXTURE_2D, fractalTexture);
@@ -586,10 +594,21 @@
         x: centerFrom.x + (centerTarget.x - centerFrom.x) * blend,
         y: centerFrom.y + (centerTarget.y - centerFrom.y) * blend,
       };
-      // Capped lower than the noise-warp's zoom range -- the higher this
-      // goes, the more likely it drifts past whatever boundary detail was
-      // near the target and into a flat stretch on either side of it.
-      const zoom = 1 + Math.pow(cyclePhase, 1.5) * 6;
+      const elapsedSec = (now - startTime) / 1000;
+      const pulse = computePulse(elapsedSec, waveformUrl, player);
+
+      // A smooth triangle instead of a sawtooth: zoom eases in over the
+      // first half of the cycle and back out over the second, landing
+      // on the same zoom=1 the next dive starts from (where
+      // injectFromImage's cycle-wrap fires, below) via a continuous
+      // glide rather than an instant snap back -- same overall zoom
+      // range [1, 7] either way, just no reset to smooth over anymore.
+      // The exponent -- how eagerly it accelerates into/out of the dive
+      // -- breathes with the waveform pulse instead of the flashing
+      // that came from pulsing iteration count.
+      const divePhase = cyclePhase < 0.5 ? cyclePhase * 2 : (1 - cyclePhase) * 2;
+      const diveExponent = 1.2 + pulse * 0.6;
+      const zoom = 1 + Math.pow(divePhase, diveExponent) * 6;
 
       gl.uniform2f(fractalUniforms.resolution, fractalCanvasEl.width, fractalCanvasEl.height);
       gl.uniform1f(fractalUniforms.zoom, zoom);
