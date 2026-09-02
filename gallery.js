@@ -1089,9 +1089,14 @@
       // doesn't help while still mid-blend toward it. Checked
       // periodically (not every frame -- real cost) against whatever's
       // actually on screen right now, at the current zoom; if it reads
-      // flat for too long, forces an early, fast re-injection instead of
+      // flat for too long, forces an early re-injection instead of
       // waiting out the rest of the scheduled cycle -- this is what
-      // actually bounds how long a flat/flashing stretch can last.
+      // actually bounds how long a flat/flashing stretch can last. The
+      // blend itself is deliberately slow (WATCHDOG_REINJECT_BLEND_MS,
+      // separate from the power slider's own snappy 1200ms reinject --
+      // that one wants immediate feedback for a manual drag, this one
+      // wants to read as the fractal continuing to melt into its next
+      // subject rather than visibly snapping/resetting).
       if (!fractalSettings.ogMode) {
         if (now - lastFlatCheck > 500) {
           lastFlatCheck = now;
@@ -1099,7 +1104,8 @@
           if (liveScore < 15) {
             if (flatSince === null) flatSince = now;
             else if (now - flatSince > 2500) {
-              injectFromImage(now, 1500);
+              const WATCHDOG_REINJECT_BLEND_MS = 5000;
+              injectFromImage(now, WATCHDOG_REINJECT_BLEND_MS);
               flatSince = null;
             }
           } else {
