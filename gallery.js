@@ -563,18 +563,18 @@
         y: centerFrom.y + (centerTarget.y - centerFrom.y) * blend,
       };
       // "Breathing with the music": a real-waveform (or BPM-fallback)
-      // pulse, same source as the noise-warp visualizer, nudges the zoom
-      // a few percent and the escape-time iteration budget by a few tens
-      // -- a slight bounce in scale plus a slight grow/shrink in fractal
-      // detail, layered on top of the steady zoom-in/drift rather than
-      // replacing it, so it reads as breathing, not a new motion.
+      // pulse, same source as the noise-warp visualizer, nudges the
+      // escape-time iteration budget by a few tens -- a slight grow/
+      // shrink in fractal detail, layered on top of the steady zoom-in/
+      // drift rather than replacing it, so it reads as breathing, not a
+      // new motion.
       const elapsedSec = (now - startTime) / 1000;
       const pulse = computePulse(elapsedSec, waveformUrl, player);
 
       // Capped lower than the noise-warp's zoom range -- the higher this
       // goes, the more likely it drifts past whatever boundary detail was
       // near the target and into a flat stretch on either side of it.
-      const zoom = (1 + Math.pow(cyclePhase, 1.5) * 6) * (1 + pulse * 0.08);
+      const zoom = 1 + Math.pow(cyclePhase, 1.5) * 6;
       const maxIter = 100 + pulse * 50;
 
       gl.uniform2f(fractalUniforms.resolution, fractalCanvasEl.width, fractalCanvasEl.height);
