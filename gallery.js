@@ -947,17 +947,7 @@
         // music pulse wobble it, speeding up/easing off how eagerly
         // the dive accelerates.
         const diveExponent = 1.5 + pulse * (fractalSettings.musicReactivityPct / 100) * 0.6;
-        // Never renders at true zoom=1 -- the widest possible view, where
-        // even a well-scored candidate (its detail validated on a coarse
-        // sample grid, not full screen coverage) is most likely to read as
-        // a small colorful pocket in an otherwise flat frame. A modest
-        // floor shrinks the visible area enough to noticeably cut down how
-        // often/long that flat moment is on screen, without meaningfully
-        // changing the overall dive shape -- clamped to zoomDepth itself so
-        // a very low zoom-depth slider setting still degrades gracefully
-        // instead of inverting the dive direction.
-        const zoomFloor = Math.min(1.5, fractalSettings.zoomDepth);
-        zoom = zoomFloor + Math.pow(morphPhase, diveExponent) * (fractalSettings.zoomDepth - zoomFloor);
+        zoom = 1 + Math.pow(morphPhase, diveExponent) * (fractalSettings.zoomDepth - 1);
 
         if (fractalSettings.growthEnabled) maxIter = 100 + pulse * 50;
       }
