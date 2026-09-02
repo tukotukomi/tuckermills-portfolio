@@ -34,6 +34,31 @@
       waveform: null,
       url: "https://imdifficult.bandcamp.com/track/hard-to-say-2",
     },
+    {
+      artist: "Freak Slug",
+      title: "Care",
+      trackId: 4196327114,
+      duration: 169,
+      // Autocorrelation estimate off the waveform's own RMS envelope
+      // (see waveforms/README) rather than tapped out by hand -- it's
+      // only a fallback here since this track has a real waveform, but
+      // still worth a sanity-check/re-tap if it's ever used standalone.
+      bpm: 171,
+      waveform: "waveforms/freak-slug-care.json",
+      url: "https://freakslug.bandcamp.com/track/care",
+    },
+    {
+      artist: "Gigamesh + Elohim + Thomas Adagio",
+      title: "Everything In Its Right Place",
+      trackId: 2787788808,
+      duration: 236,
+      // Autocorrelation estimate (see waveforms/README) -- lands solidly
+      // in typical house tempo, matching the track's genre tags, so more
+      // confidence here than usual for this method.
+      bpm: 133,
+      waveform: "waveforms/gigamesh-everything-in-its-right-place.json",
+      url: "https://gigamesh.bandcamp.com/track/everything-in-its-right-place",
+    },
   ];
 
   const musicPlayer = document.getElementById("music-player");
