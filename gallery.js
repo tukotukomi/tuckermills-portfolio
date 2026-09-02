@@ -327,7 +327,20 @@
   // read/write is defensive and just falls back to defaults on failure.
   const FRACTAL_DEFAULTS = {
     diveDurationSec: 45,
-    maxDepth: 800,
+    // The random shell-heuristic c-value picker (see injectFromImage
+    // below) reliably finds boundary detail that stays rich up to
+    // roughly 400-600x -- past that it's increasingly likely to have
+    // zoomed past whatever local complexity that particular c actually
+    // has, into a smooth/flat stretch, regardless of how well the
+    // candidate scored at injection time. True "infinite" deep zoom
+    // needs a much more deliberate c-search than a random heuristic can
+    // give (real deep-zoom fractal tools use iterative refinement, well
+    // beyond scope here) -- so the range stays bounded to where this
+    // heuristic is reliable rather than promising a depth it can't back
+    // up. Confirmed by direct comparison in the browser: 100-400 stayed
+    // consistently rich, 600 started showing visible grain, 800 was a
+    // flat, featureless field.
+    maxDepth: 150,
     reinjectIntervalSec: 6,
     musicReactivityPct: 50,
     resetStyle: "smooth", // "smooth" | "sawtooth"
@@ -451,7 +464,7 @@
       '<div class="fractal-controls-row"><label>Dive duration <span class="fractal-controls-value" data-value-for="diveDurationSec"></span></label>' +
       '<input type="range" data-setting="diveDurationSec" min="20" max="90" step="1"></div>' +
       '<div class="fractal-controls-row"><label>Max depth <span class="fractal-controls-value" data-value-for="maxDepth"></span></label>' +
-      '<input type="range" data-setting="maxDepth" min="100" max="3000" step="50"></div>' +
+      '<input type="range" data-setting="maxDepth" min="50" max="500" step="25"></div>' +
       '<div class="fractal-controls-row"><label>Detail refresh rate <span class="fractal-controls-value" data-value-for="reinjectIntervalSec"></span></label>' +
       '<input type="range" data-setting="reinjectIntervalSec" min="3" max="15" step="1"></div>' +
       '<div class="fractal-controls-row"><label>Music reactivity <span class="fractal-controls-value" data-value-for="musicReactivityPct"></span></label>' +
