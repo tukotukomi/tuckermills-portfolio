@@ -503,13 +503,11 @@
     let centerTarget = { x: 0.15, y: 0.2 };
     let centerFrom = { x: 0.15, y: 0.2 };
     let injectStart = 0;
-    // Spans the whole cycle (not a blend that finishes early and then
-    // sits frozen while only zoom keeps changing) so c/center are always
-    // drifting, never static, right up until the next injection takes
-    // over -- at 0.9x, the blend completed 10% of the cycle (~600ms)
-    // early and froze there until the wrap, which is exactly the
-    // "freezes for a moment before resuming" pause a viewer would catch.
-    const INJECT_BLEND_MS = MANDELBROT_CYCLE_MS;
+    // Spans almost the whole cycle (not a short blend that then sits
+    // frozen while only zoom keeps changing) so c/center are always
+    // drifting, never static -- covering the same distance over ~3.6x
+    // longer also reads as a slower, gentler drift rather than a snap.
+    const INJECT_BLEND_MS = MANDELBROT_CYCLE_MS * 0.9;
 
     function injectFromImage(now) {
       // Most (c, center) combinations give a "boring" view -- either
