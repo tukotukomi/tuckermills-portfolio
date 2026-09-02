@@ -407,6 +407,39 @@
     "uniform vec3 uBaseColor;\n" +
     "uniform sampler2D uImage;\n" +
     "uniform float uMaxIter;\n" +
+    // Standard compact GLSL RGB<->HSV pair, used by boostDetail below to
+    // boost only the photo-sampled "detail" color (texColor, both
+    // branches) -- deliberately NOT applied to uBaseColor (the escaped
+    // region's flat background average, set once in openFractal) or to
+    // the final composited color, so a background-brightness/saturation
+    // tweak and a detail-vividness tweak stay two independent levers
+    // instead of one blunt post-process. Texture sampling loses real
+    // vividness vs. the source photo two ways: LINEAR filtering blends
+    // across neighboring pixels of very different color (the z-driven UV
+    // jumps chaotically frame to frame, so "neighboring" here isn't
+    // spatially coherent the way a normal texture map is), and every
+    // exterior-branch pixel still has *some* uBaseColor mixed in via t<1
+    // even at high iteration counts, both of which dull the actual photo
+    // detail that's supposed to be showing through.
+    "vec3 rgb2hsv(vec3 c) {\n" +
+    "  vec4 K = vec4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);\n" +
+    "  vec4 p = mix(vec4(c.bg, K.wz), vec4(c.gb, K.xy), step(c.b, c.g));\n" +
+    "  vec4 q = mix(vec4(p.xyw, c.r), vec4(c.r, p.yzx), step(p.x, c.r));\n" +
+    "  float d = q.x - min(q.w, q.y);\n" +
+    "  float e = 1.0e-10;\n" +
+    "  return vec3(abs(q.z + (q.w - q.y) / (6.0 * d + e)), d / (q.x + e), q.x);\n" +
+    "}\n" +
+    "vec3 hsv2rgb(vec3 c) {\n" +
+    "  vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);\n" +
+    "  vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);\n" +
+    "  return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);\n" +
+    "}\n" +
+    "vec3 boostDetail(vec3 c) {\n" +
+    "  vec3 hsv = rgb2hsv(c);\n" +
+    "  hsv.y = clamp(hsv.y * 2.2, 0.0, 1.0);\n" +
+    "  hsv.z = clamp(hsv.z * 1.3, 0.0, 1.0);\n" +
+    "  return hsv2rgb(hsv);\n" +
+    "}\n" +
     "void main() {\n" +
     "  vec2 uv = gl_FragCoord.xy / uResolution;\n" +
     "  vec2 p = uv - 0.5;\n" +
@@ -420,11 +453,12 @@
     "    iter += 1.0;\n" +
     "  }\n" +
     "  if (iter >= uMaxIter) {\n" +
-    "    gl_FragColor = texture2D(uImage, fract(z * 0.5 + 0.5));\n" +
+    "    vec3 texColor = boostDetail(texture2D(uImage, fract(z * 0.5 + 0.5)).rgb);\n" +
+    "    gl_FragColor = vec4(texColor, 1.0);\n" +
     "  } else {\n" +
     "    float t = sqrt(iter / uMaxIter);\n" +
-    "    vec4 texColor = texture2D(uImage, fract(z * 0.2 + 0.5));\n" +
-    "    gl_FragColor = mix(vec4(uBaseColor, 1.0), texColor, t);\n" +
+    "    vec3 texColor = boostDetail(texture2D(uImage, fract(z * 0.2 + 0.5)).rgb);\n" +
+    "    gl_FragColor = mix(vec4(uBaseColor, 1.0), vec4(texColor, 1.0), t);\n" +
     "  }\n" +
     "}\n";
 
@@ -754,8 +788,14 @@
     // boundary) was previously a fixed purple, unrelated to whatever
     // photo was loaded -- now it's the photo's own average color,
     // darkened to keep some depth/contrast rather than a flat wash.
+    // *0.4 (was the original value) crushed this to under half the
+    // photo's brightness across most of the frame -- this base color
+    // dominates any pixel that escapes quickly, which is most of the
+    // screen away from actual boundary detail, so that dimming read as
+    // the whole fractal looking dark. *0.7 keeps a visible "in shadow"
+    // read without crushing it this hard.
     const avg = fractalSamplePixel.average;
-    gl.uniform3f(fractalUniforms.baseColor, avg.r * 0.4, avg.g * 0.4, avg.b * 0.4);
+    gl.uniform3f(fractalUniforms.baseColor, avg.r * 0.7, avg.g * 0.7, avg.b * 0.7);
 
     let cCurrent = { x: 0.3, y: 0.4 };
     let cTarget = { x: 0.3, y: 0.4 };
