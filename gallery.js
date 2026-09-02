@@ -158,6 +158,24 @@
     return waveformCache[url] || null;
   }
 
+  // Shared by both visualizers: a single 0-1 "how loud/energetic right
+  // now" value, from the track's real waveform where one's available
+  // (see loadWaveform above), or a BPM-timed pulse otherwise. Elapsed
+  // time since the visualizer opened, not the visitor's actual position
+  // in the track -- see the file-level comment above openVisualizer.
+  function computePulse(elapsedSec, waveformUrl, player) {
+    const waveform = waveformUrl && loadWaveform(waveformUrl);
+    if (waveform) {
+      const index = Math.floor((elapsedSec % waveform.duration) / waveform.step);
+      return waveform.amplitude[Math.min(index, waveform.amplitude.length - 1)];
+    }
+    const bpm = (player && player.getCurrentBPM()) || 120;
+    const beatPhase = (elapsedSec % (60 / bpm)) / (60 / bpm);
+    // Squared sine: a sharper rise-and-fall per beat than a plain sine,
+    // reading more like a pulse than a slow wobble.
+    return Math.sin(beatPhase * Math.PI) ** 2;
+  }
+
   function buildVisualizer() {
     const el = document.createElement("div");
     el.className = "image-visualizer";
@@ -207,7 +225,6 @@
     function frame(now) {
       if (!isVisualizerOpen()) return;
       const elapsedSec = (now - startTime) / 1000;
-      const waveform = waveformUrl && loadWaveform(waveformUrl);
 
       // "Descend into fractal detail": baseFrequency and numOctaves both
       // climb across the cycle, packing in progressively finer, more
@@ -221,17 +238,7 @@
       visualizerTurbulenceEl.setAttribute("baseFrequency", `${freq.toFixed(4)} ${(freq * 1.5).toFixed(4)}`);
       visualizerTurbulenceEl.setAttribute("numOctaves", String(1 + Math.floor(cyclePhase * 4)));
 
-      let pulse;
-      if (waveform) {
-        const index = Math.floor((elapsedSec % waveform.duration) / waveform.step);
-        pulse = waveform.amplitude[Math.min(index, waveform.amplitude.length - 1)];
-      } else {
-        const bpm = (player && player.getCurrentBPM()) || 120;
-        const beatPhase = (elapsedSec % (60 / bpm)) / (60 / bpm);
-        // Squared sine: a sharper rise-and-fall per beat than a plain
-        // sine, reading more like a pulse than a slow wobble.
-        pulse = Math.sin(beatPhase * Math.PI) ** 2;
-      }
+      const pulse = computePulse(elapsedSec, waveformUrl, player);
 
       visualizerDisplacementEl.setAttribute("scale", (pulse * 45).toFixed(1));
       visualizerImgEl.style.transform = `scale(${(1 + pulse * 0.06).toFixed(3)})`;
@@ -282,22 +289,23 @@
     "uniform vec2 uCenter;\n" +
     "uniform vec3 uBaseColor;\n" +
     "uniform sampler2D uImage;\n" +
+    "uniform float uMaxIter;\n" +
     "void main() {\n" +
     "  vec2 uv = gl_FragCoord.xy / uResolution;\n" +
     "  vec2 p = uv - 0.5;\n" +
     "  p.x *= uResolution.x / uResolution.y;\n" +
     "  vec2 z = p / uZoom + uCenter;\n" +
     "  float iter = 0.0;\n" +
-    "  const float maxIter = 120.0;\n" +
-    "  for (int i = 0; i < 120; i++) {\n" +
+    "  for (int i = 0; i < 150; i++) {\n" +
+    "    if (float(i) >= uMaxIter) break;\n" +
     "    if (dot(z, z) > 4.0) break;\n" +
     "    z = vec2(z.x * z.x - z.y * z.y, 2.0 * z.x * z.y) + uC;\n" +
     "    iter += 1.0;\n" +
     "  }\n" +
-    "  if (iter >= maxIter) {\n" +
+    "  if (iter >= uMaxIter) {\n" +
     "    gl_FragColor = texture2D(uImage, fract(z * 0.5 + 0.5));\n" +
     "  } else {\n" +
-    "    float t = sqrt(iter / maxIter);\n" +
+    "    float t = sqrt(iter / uMaxIter);\n" +
     "    vec4 texColor = texture2D(uImage, fract(z * 0.2 + 0.5));\n" +
     "    gl_FragColor = mix(vec4(uBaseColor, 1.0), texColor, t);\n" +
     "  }\n" +
@@ -360,6 +368,7 @@
         center: gl.getUniformLocation(program, "uCenter"),
         baseColor: gl.getUniformLocation(program, "uBaseColor"),
         image: gl.getUniformLocation(program, "uImage"),
+        maxIter: gl.getUniformLocation(program, "uMaxIter"),
       };
 
       fractalTexture = gl.createTexture();
@@ -463,6 +472,9 @@
     }
 
     const gl = fractalGl;
+    const player = window.tuckerMillsMusicPlayer;
+    const waveformUrl = player && player.getCurrentWaveformUrl();
+    if (waveformUrl) loadWaveform(waveformUrl); // kick off the fetch now, before frame() first needs it
     const sourceImg = lightboxImgEl;
     fractalSamplePixel = buildPixelSampler(sourceImg);
     gl.bindTexture(gl.TEXTURE_2D, fractalTexture);
@@ -550,15 +562,26 @@
         x: centerFrom.x + (centerTarget.x - centerFrom.x) * blend,
         y: centerFrom.y + (centerTarget.y - centerFrom.y) * blend,
       };
+      // "Breathing with the music": a real-waveform (or BPM-fallback)
+      // pulse, same source as the noise-warp visualizer, nudges the zoom
+      // a few percent and the escape-time iteration budget by a few tens
+      // -- a slight bounce in scale plus a slight grow/shrink in fractal
+      // detail, layered on top of the steady zoom-in/drift rather than
+      // replacing it, so it reads as breathing, not a new motion.
+      const elapsedSec = (now - startTime) / 1000;
+      const pulse = computePulse(elapsedSec, waveformUrl, player);
+
       // Capped lower than the noise-warp's zoom range -- the higher this
       // goes, the more likely it drifts past whatever boundary detail was
       // near the target and into a flat stretch on either side of it.
-      const zoom = 1 + Math.pow(cyclePhase, 1.5) * 6;
+      const zoom = (1 + Math.pow(cyclePhase, 1.5) * 6) * (1 + pulse * 0.08);
+      const maxIter = 100 + pulse * 50;
 
       gl.uniform2f(fractalUniforms.resolution, fractalCanvasEl.width, fractalCanvasEl.height);
       gl.uniform1f(fractalUniforms.zoom, zoom);
       gl.uniform2f(fractalUniforms.c, cCurrent.x, cCurrent.y);
       gl.uniform2f(fractalUniforms.center, centerCurrent.x, centerCurrent.y);
+      gl.uniform1f(fractalUniforms.maxIter, maxIter);
       gl.uniform1i(fractalUniforms.image, 0);
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, fractalTexture);
