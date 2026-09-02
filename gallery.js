@@ -571,18 +571,17 @@
     // attempt, since the photo-derived c-value heuristic stops reliably
     // finding real detail well before 7x's replacement (150x+) ever
     // needed to worry about it -- but stretched across a much longer
-    // cycle for slower, longer exploration, and instead of a hard reset
-    // back to zoom=1, the transition to a new photo-derived subject is
-    // a brief zoom-out-and-back-in "morph": radial motion, matching how
-    // a fractal viewer naturally moves, rather than the lateral pan a
-    // plain c/center drift produces while still zoomed in. The morph
-    // happens while zoomed out specifically so that pan is happening
-    // where it's least visible (a given absolute shift in c/center
-    // covers much less of the frame at low zoom than at 7x), then the
-    // view zooms back in already arrived at the new subject.
+    // cycle for slower, longer exploration, and the transition to a new
+    // photo-derived subject is a zoom-out-and-back-in "morph" spanning
+    // the *whole* cycle (see frame() below) rather than a hard reset
+    // back to zoom=1: radial motion, matching how a fractal viewer
+    // naturally moves, rather than the lateral pan a plain c/center
+    // drift produces while still zoomed in. c/center are always
+    // blending toward the target across the same span, so the fractal
+    // itself keeps morphing continuously -- the moment it stops
+    // changing is exactly when it starts reading as "frozen" rather
+    // than "alive."
     const SEAMLESS_CYCLE_MS = 20000;
-    const MORPH_FRACTION = 0.25; // final quarter of the cycle is the morph
-    let seamlessMorphed = false;
 
     function injectFromImage(now, blendMs) {
       // Most (c, center) combinations give a "boring" view -- either
@@ -668,38 +667,25 @@
         lastCyclePhase = cyclePhase;
         zoom = 1 + Math.pow(cyclePhase, 1.5) * 6;
       } else {
+        // No static "hold" at the ceiling -- that's exactly what froze
+        // for ~15s of every 20s cycle (zoom pinned at 7 *and* no
+        // injection running, since the previous version only injected
+        // while entering/leaving a brief dip at the seam). The whole
+        // cycle is the morph now: zoom eases from 1 up to 7 and back
+        // down to 1, symmetric around the wrap (cyclePhase 0 == 1, so
+        // there's still no jump at the seam), and c/center blend
+        // continuously across nearly the entire cycle -- one injection
+        // per cycle, same principle as OG Fractal's own "blend spans
+        // (almost) the whole cycle so nothing ever sits still," just
+        // stretched across a longer cycle and a symmetric zoom shape
+        // instead of a hard reset.
         const cyclePhase = ((now - startTime) % SEAMLESS_CYCLE_MS) / SEAMLESS_CYCLE_MS;
+        if (cyclePhase < lastCyclePhase) injectFromImage(now, SEAMLESS_CYCLE_MS * 0.98);
         lastCyclePhase = cyclePhase;
 
-        // The dip is centered *on* the wrap (cyclePhase 0 == 1) rather
-        // than confined to one side of it -- zoom is 1 exactly at the
-        // wrap and climbs back to 7 on both sides, so cyclePhase=1's
-        // zoom matches cyclePhase=0's exactly and there's no jump at
-        // the seam. distFromWrap is 0 at the wrap, rising to 0.5 at the
-        // cycle's midpoint (the middle of the hold).
-        const distFromWrap = Math.min(cyclePhase, 1 - cyclePhase);
-        const dipHalfWidth = MORPH_FRACTION / 2;
-        if (distFromWrap < dipHalfWidth) {
-          if (!seamlessMorphed) {
-            // Inject once, right as the dip begins (crossing into the
-            // dip region on the way down), blended over ~95% of the
-            // dip's full width -- both halves, down and back up, which
-            // straddle the wrap itself -- so c/center are still
-            // arriving right as zoom finishes climbing back to 7, not
-            // finishing early and freezing. seamlessMorphed stays true
-            // across the wrap (only reset once back in the hold below)
-            // since the dip spans both sides of it -- resetting right
-            // at the wrap would fire a second, redundant injection
-            // moments after the first.
-            injectFromImage(now, MORPH_FRACTION * SEAMLESS_CYCLE_MS * 0.95);
-            seamlessMorphed = true;
-          }
-          const dipPhase = distFromWrap / dipHalfWidth; // 0 at the wrap, 1 at the dip's edge
-          zoom = 1 + Math.pow(dipPhase, 1.5) * 6;
-        } else {
-          seamlessMorphed = false; // re-armed for the next dip
-          zoom = 7;
-        }
+        const distFromWrap = Math.min(cyclePhase, 1 - cyclePhase); // 0 at the wrap, 0.5 at the cycle's midpoint (peak zoom)
+        const morphPhase = distFromWrap * 2; // 0 at the wrap, 1 at the midpoint
+        zoom = 1 + Math.pow(morphPhase, 1.5) * 6;
       }
 
       const blend = Math.min(1, (now - injectStart) / injectBlendMs);
