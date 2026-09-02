@@ -389,6 +389,13 @@
     // version used to fight repetitive shapes; this slider is direct
     // manual control instead, see its wiring in buildFractal below.
     fractalPower: 2,
+    // 60%, not 100% ("current behavior") -- once detail got a real
+    // saturation/vividness boost (boostDetail in FRAGMENT_SHADER), the
+    // background started reading noticeably brighter/more saturated by
+    // contrast next to it, even though its own color never changed.
+    // 60% is a deliberate starting fix for that, not a neutral default;
+    // the slider still runs 0-150% for further tuning either direction.
+    bgSaturationPct: 60,
   };
   const FRACTAL_SETTINGS_KEY = "tuckerMillsFractalSettings";
 
@@ -422,13 +429,14 @@
     "uniform sampler2D uImage;\n" +
     "uniform float uMaxIter;\n" +
     "uniform float uPower;\n" +
+    "uniform float uBgSaturation;\n" +
     // Standard compact GLSL RGB<->HSV pair, used by boostDetail below to
     // boost only the photo-sampled "detail" color (texColor, both
-    // branches) -- deliberately NOT applied to uBaseColor (the escaped
-    // region's flat background average, set once in openFractal) or to
-    // the final composited color, so a background-brightness/saturation
-    // tweak and a detail-vividness tweak stay two independent levers
-    // instead of one blunt post-process. Texture sampling loses real
+    // branches), and separately to scale uBaseColor's own saturation via
+    // the "Background saturation" slider (see the mix below) -- the two
+    // never share one adjustment, so a background tweak and a detail
+    // tweak stay independent levers instead of one blunt post-process.
+    // Texture sampling loses real
     // vividness vs. the source photo two ways: LINEAR filtering blends
     // across neighboring pixels of very different color (the z-driven UV
     // jumps chaotically frame to frame, so "neighboring" here isn't
@@ -499,7 +507,18 @@
     // couldn't compensate for dilution happening after it runs.
     "    float t = pow(iter / uMaxIter, 0.3);\n" +
     "    vec3 texColor = boostDetail(texture2D(uImage, fract(z * 0.2 + 0.5)).rgb);\n" +
-    "    gl_FragColor = mix(vec4(uBaseColor, 1.0), vec4(texColor, 1.0), t);\n" +
+    // uBaseColor itself stays exactly the photo-average value set once
+    // in openFractal -- this only scales its *saturation* (hue/value
+    // untouched), live-adjustable via the "Background saturation"
+    // slider, independent from boostDetail's own fixed detail-color
+    // boost above. Needed once detail got noticeably more vivid: the
+    // background reads *relatively* brighter/more saturated next to it
+    // now than it used to, even though uBaseColor's own value never
+    // changed -- a contrast effect, not a bug in either boost.
+    "    vec3 bgHsv = rgb2hsv(uBaseColor);\n" +
+    "    bgHsv.y = clamp(bgHsv.y * uBgSaturation, 0.0, 1.0);\n" +
+    "    vec3 bgColor = hsv2rgb(bgHsv);\n" +
+    "    gl_FragColor = mix(vec4(bgColor, 1.0), vec4(texColor, 1.0), t);\n" +
     "  }\n" +
     "}\n";
 
@@ -560,6 +579,8 @@
       "</div>" +
       '<div class="fractal-controls-row"><label>Fractal shape <span class="fractal-controls-value" data-value-for="fractalPower"></span></label>' +
       '<input type="range" data-setting="fractalPower" min="2" max="6" step="1"></div>' +
+      '<div class="fractal-controls-row"><label>Background saturation <span class="fractal-controls-value" data-value-for="bgSaturationPct"></span></label>' +
+      '<input type="range" data-setting="bgSaturationPct" min="0" max="150" step="5"></div>' +
       '<div class="fractal-controls-row"><label>Zoom depth <span class="fractal-controls-value" data-value-for="zoomDepth"></span></label>' +
       '<input type="range" data-setting="zoomDepth" min="1" max="15" step="0.5"></div>' +
       '<div class="fractal-controls-row"><label>Cycle duration <span class="fractal-controls-value" data-value-for="cycleDurationSec"></span></label>' +
@@ -584,6 +605,7 @@
     const FRACTAL_CONTROL_FORMATS = {
       musicReactivityPct: (v) => v + "%",
       fractalPower: (v) => v + "-fold",
+      bgSaturationPct: (v) => v + "%",
       zoomDepth: (v) => v + "x",
       cycleDurationSec: (v) => v + "s",
     };
@@ -729,6 +751,7 @@
         image: gl.getUniformLocation(program, "uImage"),
         maxIter: gl.getUniformLocation(program, "uMaxIter"),
         power: gl.getUniformLocation(program, "uPower"),
+        bgSaturation: gl.getUniformLocation(program, "uBgSaturation"),
       };
 
       fractalTexture = gl.createTexture();
@@ -1045,6 +1068,9 @@
       // scores candidates) at power 2, matching its own verbatim
       // invariant.
       const power = fractalSettings.ogMode ? 2 : fractalSettings.fractalPower;
+      // 1.0 for OG Fractal (its own original, unadjusted background) --
+      // same verbatim-invariant pattern as power above.
+      const bgSaturation = fractalSettings.ogMode ? 1.0 : fractalSettings.bgSaturationPct / 100;
 
       const blend = Math.min(1, (now - injectStart) / injectBlendMs);
       cCurrent = { x: cFrom.x + (cTarget.x - cFrom.x) * blend, y: cFrom.y + (cTarget.y - cFrom.y) * blend };
@@ -1088,6 +1114,7 @@
       gl.uniform2f(fractalUniforms.center, centerCurrent.x, centerCurrent.y);
       gl.uniform1f(fractalUniforms.maxIter, maxIter);
       gl.uniform1f(fractalUniforms.power, power);
+      gl.uniform1f(fractalUniforms.bgSaturation, bgSaturation);
       gl.uniform1i(fractalUniforms.image, 0);
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, fractalTexture);
