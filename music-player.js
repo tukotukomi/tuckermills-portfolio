@@ -9,6 +9,12 @@
   //     whole seconds.
   //   - bpm has no public source for most indie tracks -- tap it out (a
   //     tap-tempo app/site, or a DAW if you have one) and note it here.
+  //   - waveform (optional) points to a precomputed amplitude-over-time
+  //     JSON for the gallery's image visualizer -- see waveforms/README
+  //     (generated offline via ffmpeg's astats filter from a legitimately
+  //     owned copy of the track, never from scraping Bandcamp's stream;
+  //     the raw audio file itself is never hosted, only the derived
+  //     numbers). Tracks without one fall back to a BPM-timed pulse.
   const PLAYLIST = [
     {
       artist: "Cruel Buddhist",
@@ -16,6 +22,7 @@
       trackId: 299601388,
       duration: 214,
       bpm: 120,
+      waveform: "waveforms/cruel-buddhist-innumerable-benefits.json",
       url: "https://cruelbuddhist.bandcamp.com/track/the-innumerable-benefits-of-high-speed-rail",
     },
     {
@@ -24,6 +31,7 @@
       trackId: 190151794,
       duration: 224,
       bpm: 120,
+      waveform: null,
       url: "https://imdifficult.bandcamp.com/track/hard-to-say-2",
     },
   ];
@@ -205,6 +213,9 @@
   window.tuckerMillsMusicPlayer = {
     getCurrentBPM: function () {
       return PLAYLIST[currentIndex].bpm;
+    },
+    getCurrentWaveformUrl: function () {
+      return PLAYLIST[currentIndex].waveform || null;
     },
   };
 })();

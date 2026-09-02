@@ -111,18 +111,41 @@
   }
 
   // "Visualize to music": a fullscreen, cover-fit view of the current
-  // photo, warped on a beat pulse timed to the current track's BPM (see
-  // window.tuckerMillsMusicPlayer in music-player.js). There's no way to
-  // read the actual audio playing in Bandcamp's cross-origin iframe --
-  // no exposed API, and Web Audio can't analyze a media element outside
-  // its own document -- so this is a timed approximation against the
-  // track's hand-noted tempo, not real audio analysis. The warp itself
-  // is a native SVG filter (feTurbulence + feDisplacementMap), animated
-  // by rewriting its scale each frame -- no canvas, no libraries.
+  // photo, warped in time with the music. There's no way to read the
+  // actual audio playing in Bandcamp's cross-origin iframe -- no exposed
+  // API, and Web Audio can't analyze a media element outside its own
+  // document -- so where a track has a precomputed waveform (see
+  // PLAYLIST.waveform in music-player.js, generated offline from a
+  // legitimately owned copy), the warp intensity is driven by that
+  // track's real amplitude-over-time data; tracks without one fall back
+  // to a beat pulse timed to the hand-noted BPM. Either way this is
+  // driven from elapsed time since the visualizer opened, not the
+  // visitor's actual position in the track -- Bandcamp exposes no
+  // playback-position readout either, so there's no way to know where
+  // they actually are. The warp itself is a native SVG filter
+  // (feTurbulence + feDisplacementMap), animated by rewriting its scale
+  // each frame -- no canvas, no libraries.
   let visualizerEl = null;
   let visualizerImgEl = null;
   let visualizerDisplacementEl = null;
   let visualizerRAF = null;
+  const waveformCache = {};
+
+  function loadWaveform(url) {
+    if (!url) return null;
+    if (!(url in waveformCache)) {
+      waveformCache[url] = null; // marks "fetch in flight" so we don't refetch
+      fetch(url)
+        .then((r) => r.json())
+        .then((data) => {
+          waveformCache[url] = data;
+        })
+        .catch(() => {
+          delete waveformCache[url];
+        });
+    }
+    return waveformCache[url] || null;
+  }
 
   function buildVisualizer() {
     const el = document.createElement("div");
@@ -155,19 +178,32 @@
     visualizerEl.classList.add("is-open");
     if (visualizerEl.requestFullscreen) visualizerEl.requestFullscreen().catch(() => {});
 
+    const player = window.tuckerMillsMusicPlayer;
+    const waveformUrl = player && player.getCurrentWaveformUrl();
+    if (waveformUrl) loadWaveform(waveformUrl); // kick off the fetch now, before frame() first needs it
+
     const startTime = performance.now();
     function frame(now) {
       if (!isVisualizerOpen()) return;
-      const bpm = (window.tuckerMillsMusicPlayer && window.tuckerMillsMusicPlayer.getCurrentBPM()) || 120;
-      const beatMs = (60 / bpm) * 1000;
-      const phase = ((now - startTime) % beatMs) / beatMs;
-      // Squared sine: a sharper rise-and-fall per beat than a plain sine,
-      // reading more like a pulse than a slow wobble.
-      const pulse = Math.sin(phase * Math.PI) ** 2;
+      const elapsedSec = (now - startTime) / 1000;
+      const waveform = waveformUrl && loadWaveform(waveformUrl);
+
+      let pulse;
+      if (waveform) {
+        const index = Math.floor((elapsedSec % waveform.duration) / waveform.step);
+        pulse = waveform.amplitude[Math.min(index, waveform.amplitude.length - 1)];
+      } else {
+        const bpm = (player && player.getCurrentBPM()) || 120;
+        const beatPhase = (elapsedSec % (60 / bpm)) / (60 / bpm);
+        // Squared sine: a sharper rise-and-fall per beat than a plain
+        // sine, reading more like a pulse than a slow wobble.
+        pulse = Math.sin(beatPhase * Math.PI) ** 2;
+      }
+
       visualizerDisplacementEl.setAttribute("scale", (pulse * 45).toFixed(1));
       visualizerImgEl.style.transform = `scale(${(1 + pulse * 0.06).toFixed(3)})`;
       visualizerImgEl.style.filter =
-        `url(#visualizer-warp) hue-rotate(${(phase * 25).toFixed(1)}deg) brightness(${(1 + pulse * 0.15).toFixed(3)})`;
+        `url(#visualizer-warp) hue-rotate(${((elapsedSec * 12) % 360).toFixed(1)}deg) brightness(${(1 + pulse * 0.15).toFixed(3)})`;
       visualizerRAF = requestAnimationFrame(frame);
     }
     visualizerRAF = requestAnimationFrame(frame);
