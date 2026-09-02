@@ -278,18 +278,13 @@
   // shader samples using the *iterated* coordinate (not the screen
   // coordinate), so the rendered colors are the photo's own colors,
   // warped through the fractal's math rather than a generic palette. And
-  // literally injected into the formula, per the ask: a fresh pixel is
-  // sampled from the photo (via an offscreen 2D canvas, read once into a
-  // plain array -- cheap, no repeated getImageData calls) and mapped to
-  // a new Julia constant c, smoothly interpolated into. Rather than one
-  // dive = one fresh sample, the view now dives continuously deeper
-  // across a much longer arc (see FRACTAL_DEFAULTS.diveDurationSec
-  // below) and re-samples the photo periodically *at whatever depth it's
-  // currently at*, without resetting zoom -- new structure keeps
-  // surfacing without the view ever visually retreating, until the arc's
-  // own scheduled (and smooth) retreat back to the start. See
-  // openFractal() for the full state machine, and buildFractalControls()
-  // for the public settings panel that exposes these as live sliders.
+  // literally injected into the formula, per the ask: every few seconds,
+  // a fresh pixel is sampled from the photo (via an offscreen 2D canvas,
+  // read once into a plain array -- cheap, no repeated getImageData
+  // calls) and mapped to a new Julia constant c, smoothly interpolated
+  // into. Each injection also resets the zoom, so one "dive" = one fresh
+  // sample of the photo.
+  const MANDELBROT_CYCLE_MS = 6000;
   const VERTEX_SHADER = "attribute vec2 aPos;\n" + "void main() { gl_Position = vec4(aPos, 0.0, 1.0); }\n";
   const FRAGMENT_SHADER =
     "precision highp float;\n" +
@@ -299,74 +294,26 @@
     "uniform vec2 uCenter;\n" +
     "uniform vec3 uBaseColor;\n" +
     "uniform sampler2D uImage;\n" +
-    "uniform float uMaxIter;\n" +
     "void main() {\n" +
     "  vec2 uv = gl_FragCoord.xy / uResolution;\n" +
     "  vec2 p = uv - 0.5;\n" +
     "  p.x *= uResolution.x / uResolution.y;\n" +
     "  vec2 z = p / uZoom + uCenter;\n" +
     "  float iter = 0.0;\n" +
-    "  for (int i = 0; i < 150; i++) {\n" +
-    "    if (float(i) >= uMaxIter) break;\n" +
+    "  const float maxIter = 120.0;\n" +
+    "  for (int i = 0; i < 120; i++) {\n" +
     "    if (dot(z, z) > 4.0) break;\n" +
     "    z = vec2(z.x * z.x - z.y * z.y, 2.0 * z.x * z.y) + uC;\n" +
     "    iter += 1.0;\n" +
     "  }\n" +
-    "  if (iter >= uMaxIter) {\n" +
+    "  if (iter >= maxIter) {\n" +
     "    gl_FragColor = texture2D(uImage, fract(z * 0.5 + 0.5));\n" +
     "  } else {\n" +
-    "    float t = sqrt(iter / uMaxIter);\n" +
+    "    float t = sqrt(iter / maxIter);\n" +
     "    vec4 texColor = texture2D(uImage, fract(z * 0.2 + 0.5));\n" +
     "    gl_FragColor = mix(vec4(uBaseColor, 1.0), texColor, t);\n" +
     "  }\n" +
     "}\n";
-
-  // Public, per-visitor tunable settings for the fractal visualizer,
-  // exposed via the settings panel built in buildFractalControls() and
-  // persisted in localStorage -- a pure per-viewer convenience, so every
-  // read/write is defensive and just falls back to defaults on failure.
-  const FRACTAL_DEFAULTS = {
-    diveDurationSec: 45,
-    // The random shell-heuristic c-value picker (see injectFromImage
-    // below) reliably finds boundary detail that stays rich up to
-    // roughly 400-600x -- past that it's increasingly likely to have
-    // zoomed past whatever local complexity that particular c actually
-    // has, into a smooth/flat stretch, regardless of how well the
-    // candidate scored at injection time. True "infinite" deep zoom
-    // needs a much more deliberate c-search than a random heuristic can
-    // give (real deep-zoom fractal tools use iterative refinement, well
-    // beyond scope here) -- so the range stays bounded to where this
-    // heuristic is reliable rather than promising a depth it can't back
-    // up. Confirmed by direct comparison in the browser: 100-400 stayed
-    // consistently rich, 600 started showing visible grain, 800 was a
-    // flat, featureless field.
-    maxDepth: 150,
-    reinjectIntervalSec: 6,
-    musicReactivityPct: 50,
-    resetStyle: "smooth", // "smooth" | "sawtooth"
-    growthEnabled: false,
-    zoomBumpEnabled: false,
-  };
-  const FRACTAL_SETTINGS_KEY = "tuckerMillsFractalSettings";
-
-  function loadFractalSettings() {
-    try {
-      const raw = localStorage.getItem(FRACTAL_SETTINGS_KEY);
-      const parsed = raw ? JSON.parse(raw) : {};
-      return Object.assign({}, FRACTAL_DEFAULTS, parsed);
-    } catch (e) {
-      return Object.assign({}, FRACTAL_DEFAULTS);
-    }
-  }
-
-  function saveFractalSettings(settings) {
-    try {
-      localStorage.setItem(FRACTAL_SETTINGS_KEY, JSON.stringify(settings));
-    } catch (e) {
-      // Private browsing / storage disabled -- settings just won't
-      // persist across visits, nothing else depends on this succeeding.
-    }
-  }
 
   let fractalEl = null;
   let fractalCanvasEl = null;
@@ -375,7 +322,6 @@
   let fractalTexture = null;
   let fractalRAF = null;
   let fractalSamplePixel = null; // (u, v) -> {r, g, b}, built once per photo
-  let fractalSettings = null; // loaded/mutated live by buildFractalControls()
 
   function compileShader(gl, type, source) {
     const shader = gl.createShader(type);
@@ -389,115 +335,14 @@
     return shader;
   }
 
-  // Every range control's slider value maps directly to its settings
-  // key (no separate 0-1/percent conversions to juggle in the UI layer)
-  // -- keyed here once and reused for both populating and formatting.
-  const FRACTAL_CONTROL_FORMATS = {
-    diveDurationSec: (v) => v + "s",
-    maxDepth: (v) => v + "x",
-    reinjectIntervalSec: (v) => v + "s",
-    musicReactivityPct: (v) => v + "%",
-  };
-
-  function buildFractalControls(el, settings) {
-    const toggleBtn = el.querySelector(".image-fractal-settings-toggle");
-    const panel = el.querySelector(".fractal-controls");
-    toggleBtn.addEventListener("click", () => panel.classList.toggle("is-open"));
-
-    function refreshInputs() {
-      Object.keys(FRACTAL_CONTROL_FORMATS).forEach((key) => {
-        const input = panel.querySelector('[data-setting="' + key + '"]');
-        const valueEl = panel.querySelector('[data-value-for="' + key + '"]');
-        input.value = settings[key];
-        valueEl.textContent = FRACTAL_CONTROL_FORMATS[key](settings[key]);
-      });
-      panel.querySelector('[data-select="resetStyle"]').value = settings.resetStyle;
-      panel.querySelector('[data-toggle="growthEnabled"]').checked = settings.growthEnabled;
-      panel.querySelector('[data-toggle="zoomBumpEnabled"]').checked = settings.zoomBumpEnabled;
-    }
-    refreshInputs();
-
-    Object.keys(FRACTAL_CONTROL_FORMATS).forEach((key) => {
-      const input = panel.querySelector('[data-setting="' + key + '"]');
-      input.addEventListener("input", () => {
-        settings[key] = Number(input.value);
-        panel.querySelector('[data-value-for="' + key + '"]').textContent = FRACTAL_CONTROL_FORMATS[key](settings[key]);
-        saveFractalSettings(settings);
-      });
-    });
-
-    panel.querySelector('[data-select="resetStyle"]').addEventListener("change", (e) => {
-      settings.resetStyle = e.target.value;
-      if (settings.resetStyle === "classic") {
-        // "Classic" is the exact pre-panel experience, not just this
-        // dive-style's curve shape -- snapping duration/depth back to
-        // their original values too (6s cycle, 7x zoom ceiling) is
-        // what makes this a true one-click restore rather than one
-        // more thing to hand-tune. Still adjustable afterward, same as
-        // any other setting, for anyone who wants the classic *shape*
-        // at a different pace or depth.
-        settings.diveDurationSec = 6;
-        settings.maxDepth = 7;
-        settings.growthEnabled = false;
-        settings.zoomBumpEnabled = false;
-        refreshInputs();
-      }
-      saveFractalSettings(settings);
-    });
-    panel.querySelector('[data-toggle="growthEnabled"]').addEventListener("change", (e) => {
-      settings.growthEnabled = e.target.checked;
-      saveFractalSettings(settings);
-    });
-    panel.querySelector('[data-toggle="zoomBumpEnabled"]').addEventListener("change", (e) => {
-      settings.zoomBumpEnabled = e.target.checked;
-      saveFractalSettings(settings);
-    });
-
-    el.querySelector(".fractal-controls-reset").addEventListener("click", () => {
-      Object.assign(settings, FRACTAL_DEFAULTS);
-      refreshInputs();
-      saveFractalSettings(settings);
-    });
-  }
-
   function buildFractal() {
     const el = document.createElement("div");
     el.className = "image-fractal";
     el.innerHTML =
       '<canvas class="image-fractal-canvas"></canvas>' +
-      '<button type="button" class="image-fractal-close" aria-label="Close fractal view">&times;</button>' +
-      '<button type="button" class="image-fractal-settings-toggle" aria-label="Fractal settings">' +
-      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="22px" height="22px" fill="none" ' +
-      'stroke="#e3e3e3" stroke-width="2" stroke-linecap="round">' +
-      '<line x1="4" y1="6" x2="20" y2="6"/><circle cx="9" cy="6" r="2" fill="#e3e3e3" stroke="none"/>' +
-      '<line x1="4" y1="12" x2="20" y2="12"/><circle cx="16" cy="12" r="2" fill="#e3e3e3" stroke="none"/>' +
-      '<line x1="4" y1="18" x2="20" y2="18"/><circle cx="11" cy="18" r="2" fill="#e3e3e3" stroke="none"/>' +
-      "</svg>" +
-      "</button>" +
-      '<div class="fractal-controls">' +
-      '<div class="fractal-controls-row"><label>Dive duration <span class="fractal-controls-value" data-value-for="diveDurationSec"></span></label>' +
-      '<input type="range" data-setting="diveDurationSec" min="5" max="90" step="1"></div>' +
-      '<div class="fractal-controls-row"><label>Max depth <span class="fractal-controls-value" data-value-for="maxDepth"></span></label>' +
-      '<input type="range" data-setting="maxDepth" min="5" max="500" step="1"></div>' +
-      '<div class="fractal-controls-row"><label>Detail refresh rate <span class="fractal-controls-value" data-value-for="reinjectIntervalSec"></span></label>' +
-      '<input type="range" data-setting="reinjectIntervalSec" min="3" max="15" step="1"></div>' +
-      '<div class="fractal-controls-row"><label>Music reactivity <span class="fractal-controls-value" data-value-for="musicReactivityPct"></span></label>' +
-      '<input type="range" data-setting="musicReactivityPct" min="0" max="100" step="5"></div>' +
-      '<div class="fractal-controls-row"><label>Dive style</label>' +
-      '<select class="fractal-controls-select" data-select="resetStyle">' +
-      '<option value="smooth">Smooth (continuous dive)</option>' +
-      '<option value="sawtooth">Sawtooth (hard reset)</option>' +
-      '<option value="classic">Classic (original)</option>' +
-      "</select></div>" +
-      '<div class="fractal-controls-row fractal-controls-toggle-row"><label><input type="checkbox" data-toggle="growthEnabled"> Iteration growth</label></div>' +
-      '<div class="fractal-controls-row fractal-controls-toggle-row"><label><input type="checkbox" data-toggle="zoomBumpEnabled"> Zoom bump</label></div>' +
-      '<button type="button" class="fractal-controls-reset">Reset to defaults</button>' +
-      "</div>";
+      '<button type="button" class="image-fractal-close" aria-label="Close fractal view">&times;</button>';
     document.body.appendChild(el);
     el.querySelector(".image-fractal-close").addEventListener("click", closeFractal);
-
-    fractalSettings = loadFractalSettings();
-    buildFractalControls(el, fractalSettings);
 
     const canvas = el.querySelector(".image-fractal-canvas");
     const glOptions = { preserveDrawingBuffer: true };
@@ -527,7 +372,6 @@
         center: gl.getUniformLocation(program, "uCenter"),
         baseColor: gl.getUniformLocation(program, "uBaseColor"),
         image: gl.getUniformLocation(program, "uImage"),
-        maxIter: gl.getUniformLocation(program, "uMaxIter"),
       };
 
       fractalTexture = gl.createTexture();
@@ -600,18 +444,17 @@
   // around (centerX, centerY) -- near 0 means the whole area is one flat
   // region (all escaping immediately, or none escaping at all); higher
   // means real boundary detail is nearby. Checked at several zoom levels
-  // spanning the range the render will actually pass through before the
-  // next injection -- scored on the worst of them, since a candidate
-  // that's only detailed at one zoom can still open (or drift) into an
-  // empty field of color at another. Zoom now climbs continuously and
-  // re-injection happens at whatever depth the dive has reached (see
-  // openFractal()), so the caller passes in the zoom range to validate
-  // rather than a fixed one.
-  function scoreJuliaView(cx, cy, centerX, centerY, sampleZooms) {
+  // spanning the range the render actually passes through over one cycle
+  // (zoom climbs roughly 1 -> 7, see the zoom formula in frame() below),
+  // scored on the worst of them -- a candidate that's only detailed at
+  // one zoom can still open (or drift) into an empty field of color at
+  // another, which single-zoom scoring couldn't catch.
+  const SCORE_ZOOMS = [1, 2, 3.5, 5.5];
+  function scoreJuliaView(cx, cy, centerX, centerY) {
     const GRID = 6;
     let worst = Infinity;
-    for (let z = 0; z < sampleZooms.length; z++) {
-      const sampleZoom = sampleZooms[z];
+    for (let z = 0; z < SCORE_ZOOMS.length; z++) {
+      const sampleZoom = SCORE_ZOOMS[z];
       let minIter = Infinity;
       let maxIter = -Infinity;
       for (let i = 0; i < GRID; i++) {
@@ -642,9 +485,6 @@
     }
 
     const gl = fractalGl;
-    const player = window.tuckerMillsMusicPlayer;
-    const waveformUrl = player && player.getCurrentWaveformUrl();
-    if (waveformUrl) loadWaveform(waveformUrl); // kick off the fetch now, before frame() first needs it
     const sourceImg = lightboxImgEl;
     fractalSamplePixel = buildPixelSampler(sourceImg);
     gl.bindTexture(gl.TEXTURE_2D, fractalTexture);
@@ -663,35 +503,24 @@
     let centerTarget = { x: 0.15, y: 0.2 };
     let centerFrom = { x: 0.15, y: 0.2 };
     let injectStart = 0;
-    // How long the current blend spans -- set per-injection (see
-    // injectFromImage's blendMs param below), not a fixed constant.
-    // Blending quickly and then sitting still for the rest of the
-    // interval between injections is exactly the "static for most of
-    // the time, only zoom moving" bug fixed earlier this session (by
-    // spanning ~90% of the cycle instead of a short fixed blend) --
-    // reproduced here at first because this became a fixed 2000ms
-    // regardless of mode, which is far shorter than a 6s classic-mode
-    // cycle or even a default 6s reinjectIntervalSec in smooth mode.
-    // c/center need to keep drifting for nearly the whole interval
-    // between injections, whatever that interval currently is, for the
-    // fractals to read as continuously melting into each other rather
-    // than blend-then-freeze.
-    let injectBlendMs = 2000;
+    // Spans almost the whole cycle (not a short blend that then sits
+    // frozen while only zoom keeps changing) so c/center are always
+    // drifting, never static -- covering the same distance over ~3.6x
+    // longer also reads as a slower, gentler drift rather than a snap.
+    const INJECT_BLEND_MS = MANDELBROT_CYCLE_MS * 0.9;
 
-    // Most (c, center) combinations give a "boring" view -- either
-    // everything escapes immediately or nothing does, both flat --
-    // regardless of which shell/heuristic picked them. Rather than
-    // accept whatever the first random pixel gives, sample candidate
-    // pixels and keep whichever actually shows escape-time variance
-    // nearby (scoreJuliaView above) across sampleZooms, i.e. real
-    // boundary detail to zoom into over the range this injection will
-    // actually be on screen for. snap=true sets cFrom/centerFrom to the
-    // new target too, so the blend below immediately reads as "already
-    // there" -- used for the very first injection (nothing to blend
-    // from yet) and sawtooth mode's instant resets; every other
-    // injection blends smoothly from wherever the view currently is,
-    // over blendMs (see injectBlendMs above).
-    function injectFromImage(now, sampleZooms, snap, blendMs) {
+    function injectFromImage(now) {
+      // Most (c, center) combinations give a "boring" view -- either
+      // everything escapes immediately or nothing does, both flat --
+      // regardless of which shell/heuristic picked them. Rather than
+      // accept whatever the first random pixel gives, sample candidate
+      // pixels and keep whichever actually shows escape-time variance
+      // nearby (scoreJuliaView above), i.e. real boundary detail to zoom
+      // into. Still entirely image-derived, just the best of several
+      // tries instead of the first one -- and instead of a fixed small
+      // batch, keeps trying (up to a cap) until one clears a "not flat"
+      // bar, so a genuinely empty field of color takes a run of bad luck
+      // across dozens of attempts to slip through, not just six.
       const MIN_SCORE = 10;
       const MAX_ATTEMPTS = 40;
       let best = null;
@@ -710,34 +539,33 @@
         // orbit of the critical point z=0 after one step), so the zoom
         // target rides along with c instead of staying put.
         const center = { x: c.x * 0.5, y: c.y * 0.5 };
-        const score = scoreJuliaView(c.x, c.y, center.x, center.y, sampleZooms);
+        const score = scoreJuliaView(c.x, c.y, center.x, center.y);
         if (!best || score > best.score) best = { c, center, score };
         if (best.score >= MIN_SCORE) break;
       }
+      cFrom = cCurrent;
       cTarget = best.c;
+      centerFrom = centerCurrent;
       centerTarget = best.center;
-      cFrom = snap ? best.c : cCurrent;
-      centerFrom = snap ? best.center : centerCurrent;
       injectStart = now;
-      injectBlendMs = blendMs;
     }
 
-    // The zoom range a fresh dive starts in -- used for the very first
-    // injection and every arc-boundary injection, before the dive has
-    // climbed to any real depth yet.
-    const START_SCORE_ZOOMS = [1, 2, 3.5, 5.5];
-
     const startTime = performance.now();
-    let diveStartTime = startTime;
-    let lastReinjectTime = startTime;
+    injectFromImage(startTime);
+    // The hardcoded {0.3, 0.4} default above isn't photo-derived or
+    // scored -- it's just a starting point for cFrom/centerFrom to blend
+    // away from. Blending the first cycle away from it wasted the
+    // opening seconds on that unvalidated view instead of the one
+    // scoring just picked, which is exactly the "empty field of color"
+    // this scoring pass is meant to avoid. Only the very first cycle
+    // needs this snap; every later injectFromImage call blends from
+    // wherever the view already is, which is always itself a scored,
+    // detailed position.
+    cCurrent = cTarget;
+    centerCurrent = centerTarget;
+    cFrom = cTarget;
+    centerFrom = centerTarget;
     let lastCyclePhase = 0;
-    let retreatInjected = false;
-    // Snapping (rather than blending away from the hardcoded {0.3, 0.4}
-    // default above, which isn't photo-derived or scored) means the
-    // opening frame shows the scored view directly instead of that
-    // unvalidated default -- exactly the "empty field of color" this
-    // scoring pass exists to avoid.
-    injectFromImage(startTime, START_SCORE_ZOOMS, true, fractalSettings.diveDurationSec * 1000 * 0.9);
 
     function resize() {
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -748,132 +576,30 @@
     resize();
     window.addEventListener("resize", resize);
 
-    // The last stretch of a smooth-mode dive eases back down to zoom=1
-    // (see computeZoom below) so the next dive can start exactly where
-    // this one lands -- no re-injection during that stretch, since the
-    // view is already settling toward the arc-start candidate, not
-    // somewhere a mid-dive sample should be blending it away from.
-    const RETREAT_FRACTION = 0.15;
-
-    function computeZoom(phase, exponent, maxDepth) {
-      if (phase < 1 - RETREAT_FRACTION) {
-        const diveProgress = phase / (1 - RETREAT_FRACTION);
-        return 1 + Math.pow(diveProgress, exponent) * (maxDepth - 1);
-      }
-      const retreatProgress = (phase - (1 - RETREAT_FRACTION)) / RETREAT_FRACTION;
-      return 1 + Math.pow(1 - retreatProgress, exponent) * (maxDepth - 1);
-    }
-
     function frame(now) {
       if (!isFractalOpen()) {
         window.removeEventListener("resize", resize);
         return;
       }
-      const settings = fractalSettings;
-      const diveDurationMs = settings.diveDurationSec * 1000;
-      const reinjectIntervalMs = settings.reinjectIntervalSec * 1000;
+      const cyclePhase = ((now - startTime) % MANDELBROT_CYCLE_MS) / MANDELBROT_CYCLE_MS;
+      if (cyclePhase < lastCyclePhase) injectFromImage(now);
+      lastCyclePhase = cyclePhase;
 
-      const elapsedSec = (now - startTime) / 1000;
-      const pulse = computePulse(elapsedSec, waveformUrl, player);
-      const diveExponent = 1.2 + pulse * (settings.musicReactivityPct / 100) * 1.2;
-
-      let zoom;
-      if (settings.resetStyle === "sawtooth") {
-        // Zoom climbs once per cycle and wraps straight back to 1, with
-        // c/center snapping to a fresh candidate at that same instant --
-        // rather than smooth mode's continuous re-injection at depth.
-        const cyclePhase = ((now - diveStartTime) % diveDurationMs) / diveDurationMs;
-        if (cyclePhase < lastCyclePhase) injectFromImage(now, START_SCORE_ZOOMS, true, diveDurationMs * 0.9);
-        lastCyclePhase = cyclePhase;
-        zoom = 1 + Math.pow(cyclePhase, diveExponent) * (settings.maxDepth - 1);
-      } else if (settings.resetStyle === "classic") {
-        // Faithfully reproduces the pre-panel behavior this whole
-        // settings panel grew out of: a symmetric triangle -- equal
-        // time diving in and easing back out -- with exactly one
-        // photo injection per cycle (blended, never snapped after the
-        // very first) and no mid-dive re-injection at all. Smooth
-        // mode's 85/15 split and continuous re-injection is a
-        // deliberately different rhythm, not a superset of this one,
-        // so it needed its own branch rather than being reachable via
-        // slider values alone.
-        const cyclePhase = ((now - diveStartTime) % diveDurationMs) / diveDurationMs;
-        // Spans ~90% of the cycle -- not a short blend that then sits
-        // frozen while only zoom keeps changing -- so c/center are
-        // always drifting, never static, and the fractals read as
-        // continuously melting into each other rather than a series of
-        // freeze-frames with zoom moving between them.
-        if (cyclePhase < lastCyclePhase) injectFromImage(now, START_SCORE_ZOOMS, false, diveDurationMs * 0.9);
-        lastCyclePhase = cyclePhase;
-        const triPhase = cyclePhase < 0.5 ? cyclePhase * 2 : (1 - cyclePhase) * 2;
-        zoom = 1 + Math.pow(triPhase, diveExponent) * (settings.maxDepth - 1);
-      } else {
-        let arcElapsed = now - diveStartTime;
-        if (arcElapsed >= diveDurationMs) {
-          diveStartTime = now;
-          arcElapsed = 0;
-          retreatInjected = false;
-          injectFromImage(now, START_SCORE_ZOOMS, false, reinjectIntervalMs * 0.9);
-        }
-        const arcPhase = arcElapsed / diveDurationMs;
-        zoom = computeZoom(arcPhase, diveExponent, settings.maxDepth);
-
-        const inRetreat = arcPhase >= 1 - RETREAT_FRACTION;
-        if (!inRetreat && now - lastReinjectTime >= reinjectIntervalMs) {
-          // Re-inject at the CURRENT depth, not a reset -- new detail
-          // surfaces without the dive ever visually retreating. Scored
-          // against where zoom actually will be by the *next* injection
-          // (dive duration and refresh rate are both user-tunable now,
-          // so a fixed multiplier could undershoot under an aggressive
-          // combination -- e.g. a short refresh rate paired with a fast
-          // dive) rather than a fixed multiplier guessed from the old
-          // static cycle.
-          const nextPhase = Math.min(1 - RETREAT_FRACTION, (arcElapsed + reinjectIntervalMs) / diveDurationMs);
-          const zoomAtNextReinject = computeZoom(nextPhase, diveExponent, settings.maxDepth);
-          // Spans ~90% of the interval until the *next* re-injection
-          // (not a short fixed blend) so c/center keep drifting the
-          // whole time between injections, rather than arriving quickly
-          // and then sitting static while only zoom keeps changing.
-          injectFromImage(
-            now,
-            [zoom, (zoom + zoomAtNextReinject) / 2, zoomAtNextReinject * 1.3],
-            false,
-            reinjectIntervalMs * 0.9
-          );
-          lastReinjectTime = now;
-        } else if (inRetreat && !retreatInjected) {
-          // The moment retreat begins, c/center are still blending
-          // toward whatever the last mid-dive re-injection targeted --
-          // validated only at that deep zoom, not the much lower zoom
-          // the retreat is about to descend through. Without this, the
-          // retreat could glide zoom back down over a c/center that was
-          // never scored for what it now shows -- the same "empty field"
-          // problem the scoring pass exists to prevent, just reappearing
-          // at the tail of the arc. One blended (not snapped) injection
-          // scored for the low-zoom range fixes it, timed close enough
-          // to the retreat's own descent that both land around the same
-          // time. Blend spans ~90% of the retreat's own duration, same
-          // reasoning as every other injection -- keep drifting for
-          // (almost) the whole stretch it's on screen for.
-          injectFromImage(now, START_SCORE_ZOOMS, false, RETREAT_FRACTION * diveDurationMs * 0.9);
-          retreatInjected = true;
-        }
-      }
-      if (settings.zoomBumpEnabled) zoom *= 1 + pulse * 0.08;
-
-      const blend = Math.min(1, (now - injectStart) / injectBlendMs);
+      const blend = Math.min(1, (now - injectStart) / INJECT_BLEND_MS);
       cCurrent = { x: cFrom.x + (cTarget.x - cFrom.x) * blend, y: cFrom.y + (cTarget.y - cFrom.y) * blend };
       centerCurrent = {
         x: centerFrom.x + (centerTarget.x - centerFrom.x) * blend,
         y: centerFrom.y + (centerTarget.y - centerFrom.y) * blend,
       };
-
-      const maxIter = settings.growthEnabled ? 100 + pulse * 50 : 120;
+      // Capped lower than the noise-warp's zoom range -- the higher this
+      // goes, the more likely it drifts past whatever boundary detail was
+      // near the target and into a flat stretch on either side of it.
+      const zoom = 1 + Math.pow(cyclePhase, 1.5) * 6;
 
       gl.uniform2f(fractalUniforms.resolution, fractalCanvasEl.width, fractalCanvasEl.height);
       gl.uniform1f(fractalUniforms.zoom, zoom);
       gl.uniform2f(fractalUniforms.c, cCurrent.x, cCurrent.y);
       gl.uniform2f(fractalUniforms.center, centerCurrent.x, centerCurrent.y);
-      gl.uniform1f(fractalUniforms.maxIter, maxIter);
       gl.uniform1i(fractalUniforms.image, 0);
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, fractalTexture);
