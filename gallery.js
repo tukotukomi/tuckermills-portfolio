@@ -663,13 +663,20 @@
     let centerTarget = { x: 0.15, y: 0.2 };
     let centerFrom = { x: 0.15, y: 0.2 };
     let injectStart = 0;
-    // A short, fixed blend -- long enough to never look like a snap,
-    // short enough that periodic mid-dive re-injections (every
-    // reinjectIntervalSec) settle well before the next one fires.
-    // Unlike the old triangle-wave cycle, this no longer needs to span
-    // "almost the whole cycle" itself, since c/center no longer reset
-    // on the same clock the zoom does.
-    const INJECT_BLEND_MS = 2000;
+    // How long the current blend spans -- set per-injection (see
+    // injectFromImage's blendMs param below), not a fixed constant.
+    // Blending quickly and then sitting still for the rest of the
+    // interval between injections is exactly the "static for most of
+    // the time, only zoom moving" bug fixed earlier this session (by
+    // spanning ~90% of the cycle instead of a short fixed blend) --
+    // reproduced here at first because this became a fixed 2000ms
+    // regardless of mode, which is far shorter than a 6s classic-mode
+    // cycle or even a default 6s reinjectIntervalSec in smooth mode.
+    // c/center need to keep drifting for nearly the whole interval
+    // between injections, whatever that interval currently is, for the
+    // fractals to read as continuously melting into each other rather
+    // than blend-then-freeze.
+    let injectBlendMs = 2000;
 
     // Most (c, center) combinations give a "boring" view -- either
     // everything escapes immediately or nothing does, both flat --
@@ -682,8 +689,9 @@
     // new target too, so the blend below immediately reads as "already
     // there" -- used for the very first injection (nothing to blend
     // from yet) and sawtooth mode's instant resets; every other
-    // injection blends smoothly from wherever the view currently is.
-    function injectFromImage(now, sampleZooms, snap) {
+    // injection blends smoothly from wherever the view currently is,
+    // over blendMs (see injectBlendMs above).
+    function injectFromImage(now, sampleZooms, snap, blendMs) {
       const MIN_SCORE = 10;
       const MAX_ATTEMPTS = 40;
       let best = null;
@@ -711,6 +719,7 @@
       cFrom = snap ? best.c : cCurrent;
       centerFrom = snap ? best.center : centerCurrent;
       injectStart = now;
+      injectBlendMs = blendMs;
     }
 
     // The zoom range a fresh dive starts in -- used for the very first
@@ -728,7 +737,7 @@
     // opening frame shows the scored view directly instead of that
     // unvalidated default -- exactly the "empty field of color" this
     // scoring pass exists to avoid.
-    injectFromImage(startTime, START_SCORE_ZOOMS, true);
+    injectFromImage(startTime, START_SCORE_ZOOMS, true, fractalSettings.diveDurationSec * 1000 * 0.9);
 
     function resize() {
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -774,7 +783,7 @@
         // c/center snapping to a fresh candidate at that same instant --
         // rather than smooth mode's continuous re-injection at depth.
         const cyclePhase = ((now - diveStartTime) % diveDurationMs) / diveDurationMs;
-        if (cyclePhase < lastCyclePhase) injectFromImage(now, START_SCORE_ZOOMS, true);
+        if (cyclePhase < lastCyclePhase) injectFromImage(now, START_SCORE_ZOOMS, true, diveDurationMs * 0.9);
         lastCyclePhase = cyclePhase;
         zoom = 1 + Math.pow(cyclePhase, diveExponent) * (settings.maxDepth - 1);
       } else if (settings.resetStyle === "classic") {
@@ -788,7 +797,12 @@
         // so it needed its own branch rather than being reachable via
         // slider values alone.
         const cyclePhase = ((now - diveStartTime) % diveDurationMs) / diveDurationMs;
-        if (cyclePhase < lastCyclePhase) injectFromImage(now, START_SCORE_ZOOMS, false);
+        // Spans ~90% of the cycle -- not a short blend that then sits
+        // frozen while only zoom keeps changing -- so c/center are
+        // always drifting, never static, and the fractals read as
+        // continuously melting into each other rather than a series of
+        // freeze-frames with zoom moving between them.
+        if (cyclePhase < lastCyclePhase) injectFromImage(now, START_SCORE_ZOOMS, false, diveDurationMs * 0.9);
         lastCyclePhase = cyclePhase;
         const triPhase = cyclePhase < 0.5 ? cyclePhase * 2 : (1 - cyclePhase) * 2;
         zoom = 1 + Math.pow(triPhase, diveExponent) * (settings.maxDepth - 1);
@@ -798,7 +812,7 @@
           diveStartTime = now;
           arcElapsed = 0;
           retreatInjected = false;
-          injectFromImage(now, START_SCORE_ZOOMS, false);
+          injectFromImage(now, START_SCORE_ZOOMS, false, reinjectIntervalMs * 0.9);
         }
         const arcPhase = arcElapsed / diveDurationMs;
         zoom = computeZoom(arcPhase, diveExponent, settings.maxDepth);
@@ -815,7 +829,16 @@
           // static cycle.
           const nextPhase = Math.min(1 - RETREAT_FRACTION, (arcElapsed + reinjectIntervalMs) / diveDurationMs);
           const zoomAtNextReinject = computeZoom(nextPhase, diveExponent, settings.maxDepth);
-          injectFromImage(now, [zoom, (zoom + zoomAtNextReinject) / 2, zoomAtNextReinject * 1.3], false);
+          // Spans ~90% of the interval until the *next* re-injection
+          // (not a short fixed blend) so c/center keep drifting the
+          // whole time between injections, rather than arriving quickly
+          // and then sitting static while only zoom keeps changing.
+          injectFromImage(
+            now,
+            [zoom, (zoom + zoomAtNextReinject) / 2, zoomAtNextReinject * 1.3],
+            false,
+            reinjectIntervalMs * 0.9
+          );
           lastReinjectTime = now;
         } else if (inRetreat && !retreatInjected) {
           // The moment retreat begins, c/center are still blending
@@ -828,14 +851,16 @@
           // at the tail of the arc. One blended (not snapped) injection
           // scored for the low-zoom range fixes it, timed close enough
           // to the retreat's own descent that both land around the same
-          // time.
-          injectFromImage(now, START_SCORE_ZOOMS, false);
+          // time. Blend spans ~90% of the retreat's own duration, same
+          // reasoning as every other injection -- keep drifting for
+          // (almost) the whole stretch it's on screen for.
+          injectFromImage(now, START_SCORE_ZOOMS, false, RETREAT_FRACTION * diveDurationMs * 0.9);
           retreatInjected = true;
         }
       }
       if (settings.zoomBumpEnabled) zoom *= 1 + pulse * 0.08;
 
-      const blend = Math.min(1, (now - injectStart) / INJECT_BLEND_MS);
+      const blend = Math.min(1, (now - injectStart) / injectBlendMs);
       cCurrent = { x: cFrom.x + (cTarget.x - cFrom.x) * blend, y: cFrom.y + (cTarget.y - cFrom.y) * blend };
       centerCurrent = {
         x: centerFrom.x + (centerTarget.x - centerFrom.x) * blend,
