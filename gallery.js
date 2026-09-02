@@ -460,7 +460,11 @@
     let centerTarget = { x: 0.15, y: 0.2 };
     let centerFrom = { x: 0.15, y: 0.2 };
     let injectStart = 0;
-    const INJECT_BLEND_MS = 1500;
+    // Spans almost the whole cycle (not a short blend that then sits
+    // frozen while only zoom keeps changing) so c/center are always
+    // drifting, never static -- covering the same distance over ~3.6x
+    // longer also reads as a slower, gentler drift rather than a snap.
+    const INJECT_BLEND_MS = MANDELBROT_CYCLE_MS * 0.9;
 
     function injectFromImage(now) {
       // Most (c, center) combinations give a "boring" view -- either
