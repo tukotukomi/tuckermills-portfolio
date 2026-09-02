@@ -438,24 +438,34 @@
   }
 
   // How much escape-time varies across a small grid of sample points
-  // around (centerX, centerY) at a representative zoom -- near 0 means
-  // the whole area is one flat region (all escaping immediately, or none
-  // escaping at all); higher means real boundary detail is nearby.
+  // around (centerX, centerY) -- near 0 means the whole area is one flat
+  // region (all escaping immediately, or none escaping at all); higher
+  // means real boundary detail is nearby. Checked at several zoom levels
+  // spanning the range the render actually passes through over one cycle
+  // (zoom climbs roughly 1 -> 7, see the zoom formula in frame() below),
+  // scored on the worst of them -- a candidate that's only detailed at
+  // one zoom can still open (or drift) into an empty field of color at
+  // another, which single-zoom scoring couldn't catch.
+  const SCORE_ZOOMS = [1, 2, 3.5, 5.5];
   function scoreJuliaView(cx, cy, centerX, centerY) {
     const GRID = 6;
-    const SAMPLE_ZOOM = 3;
-    let minIter = Infinity;
-    let maxIter = -Infinity;
-    for (let i = 0; i < GRID; i++) {
-      for (let j = 0; j < GRID; j++) {
-        const px = (i / (GRID - 1) - 0.5) / SAMPLE_ZOOM + centerX;
-        const py = (j / (GRID - 1) - 0.5) / SAMPLE_ZOOM + centerY;
-        const it = juliaIterations(px, py, cx, cy, 60);
-        if (it < minIter) minIter = it;
-        if (it > maxIter) maxIter = it;
+    let worst = Infinity;
+    for (let z = 0; z < SCORE_ZOOMS.length; z++) {
+      const sampleZoom = SCORE_ZOOMS[z];
+      let minIter = Infinity;
+      let maxIter = -Infinity;
+      for (let i = 0; i < GRID; i++) {
+        for (let j = 0; j < GRID; j++) {
+          const px = (i / (GRID - 1) - 0.5) / sampleZoom + centerX;
+          const py = (j / (GRID - 1) - 0.5) / sampleZoom + centerY;
+          const it = juliaIterations(px, py, cx, cy, 60);
+          if (it < minIter) minIter = it;
+          if (it > maxIter) maxIter = it;
+        }
       }
+      worst = Math.min(worst, maxIter - minIter);
     }
-    return maxIter - minIter;
+    return worst;
   }
 
   function openFractal() {
@@ -503,13 +513,18 @@
       // Most (c, center) combinations give a "boring" view -- either
       // everything escapes immediately or nothing does, both flat --
       // regardless of which shell/heuristic picked them. Rather than
-      // accept whatever the first random pixel gives, sample several
-      // candidate pixels and keep whichever actually shows escape-time
-      // variance nearby (scoreJuliaView above), i.e. real boundary detail
-      // to zoom into. Still entirely image-derived, just the best of a
-      // few tries instead of the first one.
+      // accept whatever the first random pixel gives, sample candidate
+      // pixels and keep whichever actually shows escape-time variance
+      // nearby (scoreJuliaView above), i.e. real boundary detail to zoom
+      // into. Still entirely image-derived, just the best of several
+      // tries instead of the first one -- and instead of a fixed small
+      // batch, keeps trying (up to a cap) until one clears a "not flat"
+      // bar, so a genuinely empty field of color takes a run of bad luck
+      // across dozens of attempts to slip through, not just six.
+      const MIN_SCORE = 10;
+      const MAX_ATTEMPTS = 40;
       let best = null;
-      for (let attempt = 0; attempt < 6; attempt++) {
+      for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
         const px = fractalSamplePixel(Math.random(), Math.random());
         // The pixel's hue angle (from R/G) picks a direction in the
         // complex plane; a shell of radius ~0.65-0.9 (nudged by
@@ -526,6 +541,7 @@
         const center = { x: c.x * 0.5, y: c.y * 0.5 };
         const score = scoreJuliaView(c.x, c.y, center.x, center.y);
         if (!best || score > best.score) best = { c, center, score };
+        if (best.score >= MIN_SCORE) break;
       }
       cFrom = cCurrent;
       cTarget = best.c;
@@ -536,6 +552,19 @@
 
     const startTime = performance.now();
     injectFromImage(startTime);
+    // The hardcoded {0.3, 0.4} default above isn't photo-derived or
+    // scored -- it's just a starting point for cFrom/centerFrom to blend
+    // away from. Blending the first cycle away from it wasted the
+    // opening seconds on that unvalidated view instead of the one
+    // scoring just picked, which is exactly the "empty field of color"
+    // this scoring pass is meant to avoid. Only the very first cycle
+    // needs this snap; every later injectFromImage call blends from
+    // wherever the view already is, which is always itself a scored,
+    // detailed position.
+    cCurrent = cTarget;
+    centerCurrent = centerTarget;
+    cFrom = cTarget;
+    centerFrom = centerTarget;
     let lastCyclePhase = 0;
 
     function resize() {
