@@ -51,6 +51,15 @@
         "000046.jpg",
       ],
     },
+    "gallery-color-travels-grid": {
+      folder: "Images/Photography/Collections/color-travels/",
+      images: [
+        "banner-2.jpg",
+        "000293960002.jpg",
+        "000293960030.jpg",
+        "000294510012.jpg",
+      ],
+    },
   };
 
   const BREAKPOINTS = [

@@ -321,9 +321,9 @@ Fluent in Chinese (Mandarin) and known for working with diverse multinational te
           <a class="photo-banner route-link" data-route="gallery-china-bw" href="/photography/china-bw">
             <img class="photo-banner-img" src="Images/Photography/banner-1.jpg" alt="">
           </a>
-          <div class="photo-banner">
+          <a class="photo-banner route-link" data-route="gallery-color-travels" href="/photography/color-travels">
             <img class="photo-banner-img" src="Images/Photography/banner-2.jpg" alt="">
-          </div>
+          </a>
           <a class="photo-banner route-link" data-route="gallery-china-travels-bw" href="/photography/china-travels-bw">
             <img class="photo-banner-img" src="Images/Photography/banner-3.jpg" alt="">
           </a>
@@ -363,6 +363,13 @@ Fluent in Chinese (Mandarin) and known for working with diverse multinational te
       <div class="page-gallery-inner">
         <h2 class="page-title" data-i18n="gallery.chinaTravelsBw.title">China Travels</h2>
         <div class="gallery-grid" id="gallery-china-travels-bw-grid"></div>
+      </div>
+    </section>
+
+    <section class="slide page page-gallery" data-page="gallery-color-travels">
+      <div class="page-gallery-inner">
+        <h2 class="page-title" data-i18n="gallery.colorTravels.title">Travels in Color</h2>
+        <div class="gallery-grid" id="gallery-color-travels-grid"></div>
       </div>
     </section>
   </div>
@@ -416,7 +423,7 @@ Fluent in Chinese (Mandarin) and known for working with diverse multinational te
         sessionStorage.removeItem("spa-redirect-path");
         if (redirect !== location.pathname) history.replaceState(null, "", redirect);
       }
-      var routeIndex = { "/": 0, "/professional": 1, "/side-projects": 2, "/photography": 3, "/about-me": 4, "/photography/wildflowers": 5, "/photography/china-bw": 6, "/photography/china-travels-bw": 7 };
+      var routeIndex = { "/": 0, "/professional": 1, "/side-projects": 2, "/photography": 3, "/about-me": 4, "/photography/wildflowers": 5, "/photography/china-bw": 6, "/photography/china-travels-bw": 7, "/photography/color-travels": 8 };
       var path = location.pathname.replace(/\/$/, "") || "/";
       var index = routeIndex[path] || 0;
       var track = document.getElementById("track");

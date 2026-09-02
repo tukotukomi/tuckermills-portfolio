@@ -8,6 +8,7 @@
     "gallery-wildflowers",
     "gallery-china-bw",
     "gallery-china-travels-bw",
+    "gallery-color-travels",
   ];
   const PATHS = {
     home: "/",
@@ -18,6 +19,7 @@
     "gallery-wildflowers": "/photography/wildflowers",
     "gallery-china-bw": "/photography/china-bw",
     "gallery-china-travels-bw": "/photography/china-travels-bw",
+    "gallery-color-travels": "/photography/color-travels",
   };
   // Sub-pages (gallery collections) highlight their parent's nav pill
   // rather than none at all -- add future collections' routes here too.
@@ -25,6 +27,7 @@
     "gallery-wildflowers": "photography",
     "gallery-china-bw": "photography",
     "gallery-china-travels-bw": "photography",
+    "gallery-color-travels": "photography",
   };
   const TRANSITION_MS = 600; // matches .slide's opacity transition in styles.css
 
