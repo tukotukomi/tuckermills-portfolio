@@ -407,6 +407,7 @@
     "uniform vec3 uBaseColor;\n" +
     "uniform sampler2D uImage;\n" +
     "uniform float uMaxIter;\n" +
+    "uniform float uPower;\n" +
     // Standard compact GLSL RGB<->HSV pair, used by boostDetail below to
     // boost only the photo-sampled "detail" color (texColor, both
     // branches) -- deliberately NOT applied to uBaseColor (the escaped
@@ -440,6 +441,23 @@
     "  hsv.z = clamp(hsv.z * 1.3, 0.0, 1.0);\n" +
     "  return hsv2rgb(hsv);\n" +
     "}\n" +
+    // Complex z^power via repeated multiplication (no atan2/log, so no
+    // branch-cut seam artifact) rather than a fixed square -- lets
+    // openFractal randomize uPower per viewing session (2/3/4) so
+    // different opens explore genuinely different fractal families
+    // (2/3/4-fold rotational symmetry), not just a different c on the
+    // same z^2+c shape every time. Loop bound is a compile-time constant
+    // (uPower itself is a runtime float, same pattern as uMaxIter above)
+    // capped at power=4 -- juliaIterations in JS must stay in lockstep,
+    // since scoring validates candidates against this exact formula.
+    "vec2 cplxPow(vec2 z, float power) {\n" +
+    "  vec2 r = z;\n" +
+    "  for (int k = 1; k < 4; k++) {\n" +
+    "    if (float(k) >= power) break;\n" +
+    "    r = vec2(r.x * z.x - r.y * z.y, r.x * z.y + r.y * z.x);\n" +
+    "  }\n" +
+    "  return r;\n" +
+    "}\n" +
     "void main() {\n" +
     "  vec2 uv = gl_FragCoord.xy / uResolution;\n" +
     "  vec2 p = uv - 0.5;\n" +
@@ -449,7 +467,7 @@
     "  for (int i = 0; i < 150; i++) {\n" +
     "    if (float(i) >= uMaxIter) break;\n" +
     "    if (dot(z, z) > 4.0) break;\n" +
-    "    z = vec2(z.x * z.x - z.y * z.y, 2.0 * z.x * z.y) + uC;\n" +
+    "    z = cplxPow(z, uPower) + uC;\n" +
     "    iter += 1.0;\n" +
     "  }\n" +
     "  if (iter >= uMaxIter) {\n" +
@@ -664,6 +682,7 @@
         baseColor: gl.getUniformLocation(program, "uBaseColor"),
         image: gl.getUniformLocation(program, "uImage"),
         maxIter: gl.getUniformLocation(program, "uMaxIter"),
+        power: gl.getUniformLocation(program, "uPower"),
       };
 
       fractalTexture = gl.createTexture();
@@ -718,15 +737,23 @@
   // score candidate (c, center) pairs before committing to one (see
   // injectFromImage below) -- a handful of these per injection, every
   // few seconds, is trivial compared to doing it per-pixel on the GPU
-  // every frame.
-  function juliaIterations(zx, zy, cx, cy, maxIter) {
+  // every frame. power must match whatever uPower the shader is actually
+  // rendering with (see openFractal/frame's currentPower) -- scoring
+  // against the wrong exponent's shape would validate candidates for a
+  // fractal that isn't the one on screen.
+  function juliaIterations(zx, zy, cx, cy, maxIter, power) {
     let iter = 0;
     while (iter < maxIter) {
       if (zx * zx + zy * zy > 4) break;
-      const nzx = zx * zx - zy * zy + cx;
-      const nzy = 2 * zx * zy + cy;
-      zx = nzx;
-      zy = nzy;
+      let rx = zx, ry = zy;
+      for (let k = 1; k < power; k++) {
+        const nrx = rx * zx - ry * zy;
+        const nry = rx * zy + ry * zx;
+        rx = nrx;
+        ry = nry;
+      }
+      zx = rx + cx;
+      zy = ry + cy;
       iter++;
     }
     return iter;
@@ -742,7 +769,7 @@
   // detailed at one zoom can still open (or drift) into an empty field
   // of color at another, which single-zoom scoring couldn't catch.
   const SCORE_ZOOMS = [1, 2, 3.5, 5.5, 8, 11, 15];
-  function scoreJuliaView(cx, cy, centerX, centerY) {
+  function scoreJuliaView(cx, cy, centerX, centerY, power) {
     const GRID = 6;
     let worst = Infinity;
     for (let z = 0; z < SCORE_ZOOMS.length; z++) {
@@ -753,7 +780,7 @@
         for (let j = 0; j < GRID; j++) {
           const px = (i / (GRID - 1) - 0.5) / sampleZoom + centerX;
           const py = (j / (GRID - 1) - 0.5) / sampleZoom + centerY;
-          const it = juliaIterations(px, py, cx, cy, 60);
+          const it = juliaIterations(px, py, cx, cy, 60, power);
           if (it < minIter) minIter = it;
           if (it > maxIter) maxIter = it;
         }
@@ -796,6 +823,19 @@
     // read without crushing it this hard.
     const avg = fractalSamplePixel.average;
     gl.uniform3f(fractalUniforms.baseColor, avg.r * 0.7, avg.g * 0.7, avg.b * 0.7);
+
+    // Picked once per viewing session, not per injection -- changing the
+    // exponent mid-cycle would make an otherwise-smooth morph jump
+    // between visibly different fractal families. z^2+c (the classic,
+    // proven-safe shape everything so far has been tuned around) stays
+    // the most likely outcome; z^3/z^4 give genuinely different
+    // rotational symmetry and boundary character, so reopening the same
+    // photo (or a different one) doesn't always land on the same "type"
+    // of fractal. OG Fractal ignores this entirely and always renders/
+    // scores at power 2 -- see its branch in frame() and injectFromImage
+    // below -- matching its own "exact original behavior" invariant.
+    const POWER_CHOICES = [2, 2, 2, 2, 2, 3, 3, 3, 4, 4];
+    const currentPower = POWER_CHOICES[Math.floor(Math.random() * POWER_CHOICES.length)];
 
     let cCurrent = { x: 0.3, y: 0.4 };
     let cTarget = { x: 0.3, y: 0.4 };
@@ -846,6 +886,10 @@
       // richer candidates most photos do reach within the attempt budget.
       const MIN_SCORE = 20;
       const MAX_ATTEMPTS = 40;
+      // OG Fractal always scores/renders at power 2, regardless of what
+      // currentPower rolled for this session -- see the comment above
+      // currentPower's declaration.
+      const scoringPower = fractalSettings.ogMode ? 2 : currentPower;
       let best = null;
       for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
         const px = fractalSamplePixel(Math.random(), Math.random());
@@ -862,7 +906,7 @@
         // orbit of the critical point z=0 after one step), so the zoom
         // target rides along with c instead of staying put.
         const center = { x: c.x * 0.5, y: c.y * 0.5 };
-        const score = scoreJuliaView(c.x, c.y, center.x, center.y);
+        const score = scoreJuliaView(c.x, c.y, center.x, center.y, scoringPower);
         if (!best || score > best.score) best = { c, center, score };
         if (best.score >= MIN_SCORE) break;
       }
@@ -951,6 +995,10 @@
 
         if (fractalSettings.growthEnabled) maxIter = 100 + pulse * 50;
       }
+      // See currentPower's declaration above -- OG Fractal always
+      // renders (and, via scoringPower in injectFromImage, always scores
+      // candidates) at power 2, matching its own verbatim invariant.
+      const power = fractalSettings.ogMode ? 2 : currentPower;
 
       const blend = Math.min(1, (now - injectStart) / injectBlendMs);
       cCurrent = { x: cFrom.x + (cTarget.x - cFrom.x) * blend, y: cFrom.y + (cTarget.y - cFrom.y) * blend };
@@ -964,6 +1012,7 @@
       gl.uniform2f(fractalUniforms.c, cCurrent.x, cCurrent.y);
       gl.uniform2f(fractalUniforms.center, centerCurrent.x, centerCurrent.y);
       gl.uniform1f(fractalUniforms.maxIter, maxIter);
+      gl.uniform1f(fractalUniforms.power, power);
       gl.uniform1i(fractalUniforms.image, 0);
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, fractalTexture);
