@@ -282,6 +282,8 @@
     "uniform vec2 uCenter;\n" +
     "uniform vec3 uBaseColor;\n" +
     "uniform sampler2D uImage;\n" +
+    "uniform sampler2D uPrevFrame;\n" +
+    "uniform float uBlend;\n" +
     "void main() {\n" +
     "  vec2 uv = gl_FragCoord.xy / uResolution;\n" +
     "  vec2 p = uv - 0.5;\n" +
@@ -294,20 +296,60 @@
     "    z = vec2(z.x * z.x - z.y * z.y, 2.0 * z.x * z.y) + uC;\n" +
     "    iter += 1.0;\n" +
     "  }\n" +
+    "  vec4 freshColor;\n" +
     "  if (iter >= maxIter) {\n" +
-    "    gl_FragColor = texture2D(uImage, fract(z * 0.5 + 0.5));\n" +
+    "    vec4 texColor = texture2D(uImage, fract(z * 0.5 + 0.5));\n" +
+    "    freshColor = mix(texColor, vec4(uBaseColor, 1.0), 0.15);\n" +
     "  } else {\n" +
     "    float t = sqrt(iter / maxIter);\n" +
     "    vec4 texColor = texture2D(uImage, fract(z * 0.2 + 0.5));\n" +
-    "    gl_FragColor = mix(vec4(uBaseColor, 1.0), texColor, t);\n" +
+    "    freshColor = mix(vec4(uBaseColor, 1.0), texColor, t);\n" +
     "  }\n" +
+    "  vec4 prevColor = texture2D(uPrevFrame, uv);\n" +
+    "  gl_FragColor = mix(freshColor, prevColor, uBlend);\n" +
     "}\n";
+  // A trailing blend of each frame with the previous one, sampled at the
+  // same screen position -- this is what "reduce the chance of an empty
+  // flashing screen" actually needed. Julia sets are chaotic: even while
+  // c/center drift smoothly (see INJECT_BLEND_MS below), the escape-time
+  // math can flip a whole region from "escapes fast" to "never escapes"
+  // between two adjacent frames, which reads as a hard color flash no
+  // matter how gently the underlying parameters are moving. Blending
+  // toward last frame's rendered color turns that flip into a fade over
+  // a handful of frames instead of an instant cut.
+  const FRAME_BLEND = 0.85;
+  const BLIT_FRAGMENT_SHADER =
+    "precision highp float;\n" +
+    "uniform sampler2D uTex;\n" +
+    "uniform vec2 uResolution;\n" +
+    "void main() {\n" +
+    "  gl_FragColor = texture2D(uTex, gl_FragCoord.xy / uResolution);\n" +
+    "}\n";
+
+  function createFBOTexture(gl, width, height) {
+    const tex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    const fb = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    return { fb: fb, tex: tex };
+  }
 
   let fractalEl = null;
   let fractalCanvasEl = null;
   let fractalGl = null;
+  let fractalProgram = null;
   let fractalUniforms = null;
   let fractalTexture = null;
+  let fractalQuadBuffer = null;
+  let blitProgram = null;
+  let blitUniforms = null;
   let fractalRAF = null;
   let fractalSamplePixel = null; // (u, v) -> {r, g, b}, built once per photo
 
@@ -337,22 +379,36 @@
     const gl = canvas.getContext("webgl", glOptions) || canvas.getContext("experimental-webgl", glOptions);
     let uniforms = null;
     if (gl) {
+      // Both programs bind "aPos" to attribute 0 explicitly, so the same
+      // quad buffer/vertex setup works for either without re-binding
+      // per draw call (needed since each frame now draws twice -- see
+      // the two-pass render in openFractal below).
       const program = gl.createProgram();
       gl.attachShader(program, compileShader(gl, gl.VERTEX_SHADER, VERTEX_SHADER));
       gl.attachShader(program, compileShader(gl, gl.FRAGMENT_SHADER, FRAGMENT_SHADER));
+      gl.bindAttribLocation(program, 0, "aPos");
       gl.linkProgram(program);
       if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
         throw new Error("Fractal shader program failed to link: " + gl.getProgramInfoLog(program));
       }
-      gl.useProgram(program);
+
+      const blit = gl.createProgram();
+      gl.attachShader(blit, compileShader(gl, gl.VERTEX_SHADER, VERTEX_SHADER));
+      gl.attachShader(blit, compileShader(gl, gl.FRAGMENT_SHADER, BLIT_FRAGMENT_SHADER));
+      gl.bindAttribLocation(blit, 0, "aPos");
+      gl.linkProgram(blit);
+      if (!gl.getProgramParameter(blit, gl.LINK_STATUS)) {
+        throw new Error("Fractal blit shader program failed to link: " + gl.getProgramInfoLog(blit));
+      }
 
       const quad = gl.createBuffer();
       gl.bindBuffer(gl.ARRAY_BUFFER, quad);
       gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
-      const aPos = gl.getAttribLocation(program, "aPos");
-      gl.enableVertexAttribArray(aPos);
-      gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+      gl.enableVertexAttribArray(0);
+      gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+      fractalQuadBuffer = quad;
 
+      gl.useProgram(program);
       uniforms = {
         resolution: gl.getUniformLocation(program, "uResolution"),
         zoom: gl.getUniformLocation(program, "uZoom"),
@@ -360,7 +416,16 @@
         center: gl.getUniformLocation(program, "uCenter"),
         baseColor: gl.getUniformLocation(program, "uBaseColor"),
         image: gl.getUniformLocation(program, "uImage"),
+        prevFrame: gl.getUniformLocation(program, "uPrevFrame"),
+        blend: gl.getUniformLocation(program, "uBlend"),
       };
+
+      blitUniforms = {
+        tex: gl.getUniformLocation(blit, "uTex"),
+        resolution: gl.getUniformLocation(blit, "uResolution"),
+      };
+      blitProgram = blit;
+      fractalProgram = program;
 
       fractalTexture = gl.createTexture();
       gl.bindTexture(gl.TEXTURE_2D, fractalTexture);
@@ -429,24 +494,36 @@
   }
 
   // How much escape-time varies across a small grid of sample points
-  // around (centerX, centerY) at a representative zoom -- near 0 means
-  // the whole area is one flat region (all escaping immediately, or none
-  // escaping at all); higher means real boundary detail is nearby.
+  // around (centerX, centerY) -- near 0 means the whole area is one flat
+  // region (all escaping immediately, or none escaping at all); higher
+  // means real boundary detail is nearby. Checked at two zoom levels --
+  // roughly the zoom the view actually opens at (1.2, since the render
+  // starts at zoom=1 and climbs from there) and a mid-cycle zoom (3) --
+  // and scored on the worse of the two. Scoring only the higher zoom
+  // used to let a candidate look detailed once already zoomed in while
+  // still opening on a flat, empty field for the first second or two
+  // (with c/center still drifting during that stretch, that flat field
+  // visibly shifted hue -- the "flashing" a viewer would actually see).
   function scoreJuliaView(cx, cy, centerX, centerY) {
     const GRID = 6;
-    const SAMPLE_ZOOM = 3;
-    let minIter = Infinity;
-    let maxIter = -Infinity;
-    for (let i = 0; i < GRID; i++) {
-      for (let j = 0; j < GRID; j++) {
-        const px = (i / (GRID - 1) - 0.5) / SAMPLE_ZOOM + centerX;
-        const py = (j / (GRID - 1) - 0.5) / SAMPLE_ZOOM + centerY;
-        const it = juliaIterations(px, py, cx, cy, 60);
-        if (it < minIter) minIter = it;
-        if (it > maxIter) maxIter = it;
+    const SAMPLE_ZOOMS = [1.2, 3];
+    let worst = Infinity;
+    for (let z = 0; z < SAMPLE_ZOOMS.length; z++) {
+      const sampleZoom = SAMPLE_ZOOMS[z];
+      let minIter = Infinity;
+      let maxIter = -Infinity;
+      for (let i = 0; i < GRID; i++) {
+        for (let j = 0; j < GRID; j++) {
+          const px = (i / (GRID - 1) - 0.5) / sampleZoom + centerX;
+          const py = (j / (GRID - 1) - 0.5) / sampleZoom + centerY;
+          const it = juliaIterations(px, py, cx, cy, 60);
+          if (it < minIter) minIter = it;
+          if (it > maxIter) maxIter = it;
+        }
       }
+      worst = Math.min(worst, maxIter - minIter);
     }
-    return maxIter - minIter;
+    return worst;
   }
 
   function openFractal() {
@@ -526,11 +603,33 @@
     injectFromImage(startTime);
     let lastCyclePhase = 0;
 
+    // Ping-pong pair for the frame-blend trail (see FRAME_BLEND above):
+    // each frame renders into whichever FBO wasn't just displayed,
+    // sampling the other one as "last frame", then that result is
+    // blitted to the visible canvas.
+    let pingPong = [null, null];
+    let pingPongIndex = 0;
+    let skipBlendOnce = true; // true right after (re)creating the FBOs -- no valid "previous frame" to sample yet
+
+    function deletePingPong() {
+      pingPong.forEach(function (fbo) {
+        if (!fbo) return;
+        gl.deleteFramebuffer(fbo.fb);
+        gl.deleteTexture(fbo.tex);
+      });
+    }
+
     function resize() {
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
       fractalCanvasEl.width = window.innerWidth * dpr;
       fractalCanvasEl.height = window.innerHeight * dpr;
       gl.viewport(0, 0, fractalCanvasEl.width, fractalCanvasEl.height);
+      deletePingPong();
+      pingPong = [
+        createFBOTexture(gl, fractalCanvasEl.width, fractalCanvasEl.height),
+        createFBOTexture(gl, fractalCanvasEl.width, fractalCanvasEl.height),
+      ];
+      skipBlendOnce = true;
     }
     resize();
     window.addEventListener("resize", resize);
@@ -538,6 +637,7 @@
     function frame(now) {
       if (!isFractalOpen()) {
         window.removeEventListener("resize", resize);
+        deletePingPong();
         return;
       }
       const cyclePhase = ((now - startTime) % MANDELBROT_CYCLE_MS) / MANDELBROT_CYCLE_MS;
@@ -555,15 +655,40 @@
       // near the target and into a flat stretch on either side of it.
       const zoom = 1 + Math.pow(cyclePhase, 1.5) * 6;
 
+      const writeFBO = pingPong[pingPongIndex];
+      const readFBO = pingPong[1 - pingPongIndex];
+
+      gl.useProgram(fractalProgram);
+      gl.bindBuffer(gl.ARRAY_BUFFER, fractalQuadBuffer);
+      gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, writeFBO.fb);
+      gl.viewport(0, 0, fractalCanvasEl.width, fractalCanvasEl.height);
       gl.uniform2f(fractalUniforms.resolution, fractalCanvasEl.width, fractalCanvasEl.height);
       gl.uniform1f(fractalUniforms.zoom, zoom);
       gl.uniform2f(fractalUniforms.c, cCurrent.x, cCurrent.y);
       gl.uniform2f(fractalUniforms.center, centerCurrent.x, centerCurrent.y);
+      gl.uniform1f(fractalUniforms.blend, skipBlendOnce ? 0 : FRAME_BLEND);
       gl.uniform1i(fractalUniforms.image, 0);
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, fractalTexture);
+      gl.uniform1i(fractalUniforms.prevFrame, 1);
+      gl.activeTexture(gl.TEXTURE1);
+      gl.bindTexture(gl.TEXTURE_2D, readFBO.tex);
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+      skipBlendOnce = false;
+
+      gl.useProgram(blitProgram);
+      gl.bindBuffer(gl.ARRAY_BUFFER, fractalQuadBuffer);
+      gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      gl.viewport(0, 0, fractalCanvasEl.width, fractalCanvasEl.height);
+      gl.uniform2f(blitUniforms.resolution, fractalCanvasEl.width, fractalCanvasEl.height);
+      gl.uniform1i(blitUniforms.tex, 0);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, writeFBO.tex);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
+      pingPongIndex = 1 - pingPongIndex;
       fractalRAF = requestAnimationFrame(frame);
     }
     fractalRAF = requestAnimationFrame(frame);
