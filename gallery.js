@@ -806,11 +806,15 @@
   // detailed at one zoom can still open (or drift) into an empty field
   // of color at another, which single-zoom scoring couldn't catch.
   const SCORE_ZOOMS = [1, 2, 3.5, 5.5, 8, 11, 15];
-  function scoreJuliaView(cx, cy, centerX, centerY, power) {
+  // zooms defaults to the full validated range above; the flatness
+  // watchdog in frame() instead passes a single-element array (whatever
+  // zoom is actually on screen right now) for a much cheaper live check.
+  function scoreJuliaView(cx, cy, centerX, centerY, power, zooms) {
     const GRID = 6;
+    const checkZooms = zooms || SCORE_ZOOMS;
     let worst = Infinity;
-    for (let z = 0; z < SCORE_ZOOMS.length; z++) {
-      const sampleZoom = SCORE_ZOOMS[z];
+    for (let z = 0; z < checkZooms.length; z++) {
+      const sampleZoom = checkZooms[z];
       let minIter = Infinity;
       let maxIter = -Infinity;
       for (let i = 0; i < GRID; i++) {
@@ -960,6 +964,11 @@
     cFrom = cTarget;
     centerFrom = centerTarget;
     let lastCyclePhase = 0;
+    // Flatness watchdog state (Smooth mode only) -- see its check in
+    // frame() below for why this exists alongside MIN_SCORE-validated
+    // injection rather than instead of it.
+    let flatSince = null;
+    let lastFlatCheck = 0;
 
     function resize() {
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -1034,6 +1043,35 @@
         x: centerFrom.x + (centerTarget.x - centerFrom.x) * blend,
         y: centerFrom.y + (centerTarget.y - centerFrom.y) * blend,
       };
+
+      // Flatness watchdog (Smooth mode only -- OG Fractal is untouched,
+      // per its verbatim invariant): a candidate is validated only *at
+      // the target* injectFromImage picked -- the straight-line blend
+      // path between two individually-good c/center values isn't itself
+      // validated, and complex parameter space isn't convex, so that
+      // path can still cut through flat/boring territory even between
+      // two good endpoints. A better-scored target (MIN_SCORE above)
+      // doesn't help while still mid-blend toward it. Checked
+      // periodically (not every frame -- real cost) against whatever's
+      // actually on screen right now, at the current zoom; if it reads
+      // flat for too long, forces an early, fast re-injection instead of
+      // waiting out the rest of the scheduled cycle -- this is what
+      // actually bounds how long a flat/flashing stretch can last.
+      if (!fractalSettings.ogMode) {
+        if (now - lastFlatCheck > 500) {
+          lastFlatCheck = now;
+          const liveScore = scoreJuliaView(cCurrent.x, cCurrent.y, centerCurrent.x, centerCurrent.y, power, [zoom]);
+          if (liveScore < 15) {
+            if (flatSince === null) flatSince = now;
+            else if (now - flatSince > 2500) {
+              injectFromImage(now, 1500);
+              flatSince = null;
+            }
+          } else {
+            flatSince = null;
+          }
+        }
+      }
 
       gl.uniform2f(fractalUniforms.resolution, fractalCanvasEl.width, fractalCanvasEl.height);
       gl.uniform1f(fractalUniforms.zoom, zoom);
