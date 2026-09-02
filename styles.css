@@ -849,6 +849,25 @@ body.lightbox-open {
   cursor: pointer;
 }
 
+.fractal-controls-select {
+  width: 100%;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 8px;
+  color: #fff;
+  font-size: 0.85rem;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.fractal-controls-select option {
+  /* Native dropdown list rows ignore the panel's own dark background
+     unless given one explicitly. */
+  background: #2a2a2a;
+  color: #fff;
+}
+
 .fractal-controls-reset {
   appearance: none;
   -webkit-appearance: none;

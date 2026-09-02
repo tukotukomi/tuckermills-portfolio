@@ -411,7 +411,7 @@
         input.value = settings[key];
         valueEl.textContent = FRACTAL_CONTROL_FORMATS[key](settings[key]);
       });
-      panel.querySelector('[data-toggle="resetStyle"]').checked = settings.resetStyle === "sawtooth";
+      panel.querySelector('[data-select="resetStyle"]').value = settings.resetStyle;
       panel.querySelector('[data-toggle="growthEnabled"]').checked = settings.growthEnabled;
       panel.querySelector('[data-toggle="zoomBumpEnabled"]').checked = settings.zoomBumpEnabled;
     }
@@ -426,8 +426,22 @@
       });
     });
 
-    panel.querySelector('[data-toggle="resetStyle"]').addEventListener("change", (e) => {
-      settings.resetStyle = e.target.checked ? "sawtooth" : "smooth";
+    panel.querySelector('[data-select="resetStyle"]').addEventListener("change", (e) => {
+      settings.resetStyle = e.target.value;
+      if (settings.resetStyle === "classic") {
+        // "Classic" is the exact pre-panel experience, not just this
+        // dive-style's curve shape -- snapping duration/depth back to
+        // their original values too (6s cycle, 7x zoom ceiling) is
+        // what makes this a true one-click restore rather than one
+        // more thing to hand-tune. Still adjustable afterward, same as
+        // any other setting, for anyone who wants the classic *shape*
+        // at a different pace or depth.
+        settings.diveDurationSec = 6;
+        settings.maxDepth = 7;
+        settings.growthEnabled = false;
+        settings.zoomBumpEnabled = false;
+        refreshInputs();
+      }
       saveFractalSettings(settings);
     });
     panel.querySelector('[data-toggle="growthEnabled"]').addEventListener("change", (e) => {
@@ -462,14 +476,19 @@
       "</button>" +
       '<div class="fractal-controls">' +
       '<div class="fractal-controls-row"><label>Dive duration <span class="fractal-controls-value" data-value-for="diveDurationSec"></span></label>' +
-      '<input type="range" data-setting="diveDurationSec" min="20" max="90" step="1"></div>' +
+      '<input type="range" data-setting="diveDurationSec" min="5" max="90" step="1"></div>' +
       '<div class="fractal-controls-row"><label>Max depth <span class="fractal-controls-value" data-value-for="maxDepth"></span></label>' +
-      '<input type="range" data-setting="maxDepth" min="50" max="500" step="25"></div>' +
+      '<input type="range" data-setting="maxDepth" min="5" max="500" step="1"></div>' +
       '<div class="fractal-controls-row"><label>Detail refresh rate <span class="fractal-controls-value" data-value-for="reinjectIntervalSec"></span></label>' +
       '<input type="range" data-setting="reinjectIntervalSec" min="3" max="15" step="1"></div>' +
       '<div class="fractal-controls-row"><label>Music reactivity <span class="fractal-controls-value" data-value-for="musicReactivityPct"></span></label>' +
       '<input type="range" data-setting="musicReactivityPct" min="0" max="100" step="5"></div>' +
-      '<div class="fractal-controls-row fractal-controls-toggle-row"><label><input type="checkbox" data-toggle="resetStyle"> Sawtooth reset</label></div>' +
+      '<div class="fractal-controls-row"><label>Dive style</label>' +
+      '<select class="fractal-controls-select" data-select="resetStyle">' +
+      '<option value="smooth">Smooth (continuous dive)</option>' +
+      '<option value="sawtooth">Sawtooth (hard reset)</option>' +
+      '<option value="classic">Classic (original)</option>' +
+      "</select></div>" +
       '<div class="fractal-controls-row fractal-controls-toggle-row"><label><input type="checkbox" data-toggle="growthEnabled"> Iteration growth</label></div>' +
       '<div class="fractal-controls-row fractal-controls-toggle-row"><label><input type="checkbox" data-toggle="zoomBumpEnabled"> Zoom bump</label></div>' +
       '<button type="button" class="fractal-controls-reset">Reset to defaults</button>' +
@@ -751,14 +770,28 @@
 
       let zoom;
       if (settings.resetStyle === "sawtooth") {
-        // The original behavior, kept available as an explicit choice:
-        // zoom climbs once per cycle and wraps straight back to 1, with
+        // Zoom climbs once per cycle and wraps straight back to 1, with
         // c/center snapping to a fresh candidate at that same instant --
         // rather than smooth mode's continuous re-injection at depth.
         const cyclePhase = ((now - diveStartTime) % diveDurationMs) / diveDurationMs;
         if (cyclePhase < lastCyclePhase) injectFromImage(now, START_SCORE_ZOOMS, true);
         lastCyclePhase = cyclePhase;
         zoom = 1 + Math.pow(cyclePhase, diveExponent) * (settings.maxDepth - 1);
+      } else if (settings.resetStyle === "classic") {
+        // Faithfully reproduces the pre-panel behavior this whole
+        // settings panel grew out of: a symmetric triangle -- equal
+        // time diving in and easing back out -- with exactly one
+        // photo injection per cycle (blended, never snapped after the
+        // very first) and no mid-dive re-injection at all. Smooth
+        // mode's 85/15 split and continuous re-injection is a
+        // deliberately different rhythm, not a superset of this one,
+        // so it needed its own branch rather than being reachable via
+        // slider values alone.
+        const cyclePhase = ((now - diveStartTime) % diveDurationMs) / diveDurationMs;
+        if (cyclePhase < lastCyclePhase) injectFromImage(now, START_SCORE_ZOOMS, false);
+        lastCyclePhase = cyclePhase;
+        const triPhase = cyclePhase < 0.5 ? cyclePhase * 2 : (1 - cyclePhase) * 2;
+        zoom = 1 + Math.pow(triPhase, diveExponent) * (settings.maxDepth - 1);
       } else {
         let arcElapsed = now - diveStartTime;
         if (arcElapsed >= diveDurationMs) {
