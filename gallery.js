@@ -365,6 +365,14 @@
   // sample of the photo.
   const MANDELBROT_CYCLE_MS = 6000;
 
+  // Shown in the fractal settings panel's bottom-right corner -- the
+  // short hash of the last commit pushed to main, updated by hand as
+  // part of each fractal-related commit (no build step on this static
+  // site to inject it automatically). One commit behind true HEAD is
+  // expected: the commit that bumps this string can't know its own hash
+  // in advance, so it always reflects the *previous* push.
+  const FRACTAL_VERSION = "v039a743";
+
   // Per-visitor settings. ogMode is read by both dive styles; every
   // other key here only affects Smooth mode (see frame() below) -- OG
   // Fractal stays deaf to all of them by design, so it keeps
@@ -601,6 +609,7 @@
       '<div class="fractal-controls-row fractal-controls-toggle-row">' +
       '<label><input type="checkbox" data-toggle="ogMode"> OG Fractal</label>' +
       "</div>" +
+      '<div class="fractal-controls-version">' + FRACTAL_VERSION + "</div>" +
       "</div>";
     document.body.appendChild(el);
 
@@ -1031,8 +1040,14 @@
     let lastFlatCheck = 0;
     // null = no escape dive in progress; else the timestamp it started,
     // used both to drive the zoom boost each frame and to know when to
-    // escalate to a full re-injection if the dive alone didn't help.
+    // escalate to a wind-down if the dive alone didn't help.
     let escapeBoostStart = null;
+    // null = no wind-down in progress; else the timestamp it started.
+    // windDownFromZoom is the natural (unboosted) zoom value at that
+    // instant, captured once so the ease-to-1 has a fixed start point
+    // to interpolate from -- see the wind-down's own comment in frame().
+    let windDownStart = null;
+    let windDownFromZoom = 1;
 
     function resize() {
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -1055,7 +1070,8 @@
       const FLAT_TOLERANCE_MS = 1500; // how long a flat reading must persist before the first response (the dive)
       const ZOOM_DIVE_RAMP_MS = 1800; // duration of the dive's smooth zoom-in bump
       const ZOOM_DIVE_BOOST_MAX = 3; // peak multiplier added on top of 1x, i.e. up to 4x zoom at the peak of the bump
-      const SKIP_TRIGGER_MS = ZOOM_DIVE_RAMP_MS + 500; // grace period after the dive to see if it resolved things, before skipping to the next cycle
+      const DIVE_GRACE_MS = ZOOM_DIVE_RAMP_MS + 500; // grace period after the dive to see if it resolved things, before winding down
+      const WIND_DOWN_MS = 1400; // duration of the ease-back-to-1x before skipping ahead to the next cycle
       let zoom;
       let maxIter = 120;
       if (fractalSettings.ogMode) {
@@ -1112,9 +1128,20 @@
       // that scored well at all, so a flat reading at this exact instant
       // usually just means we're passing through a locally smooth patch
       // at this particular zoom, not that the candidate itself is bad.
-      if (fractalSettings.avoidEmptySpaces && !fractalSettings.ogMode && escapeBoostStart !== null) {
-        const escapeT = Math.min(1, (now - escapeBoostStart) / ZOOM_DIVE_RAMP_MS);
-        zoom *= 1 + ZOOM_DIVE_BOOST_MAX * Math.sin(escapeT * Math.PI);
+      // If the dive alone doesn't clear it, a wind-down phase eases zoom
+      // smoothly back to 1x (c/center held fixed the whole time -- see
+      // the watchdog block below for why) before skipping ahead, instead
+      // of jumping straight from whatever zoom the cycle was naturally
+      // at down to 1x in a single frame.
+      if (fractalSettings.avoidEmptySpaces && !fractalSettings.ogMode) {
+        if (escapeBoostStart !== null) {
+          const escapeT = Math.min(1, (now - escapeBoostStart) / ZOOM_DIVE_RAMP_MS);
+          zoom *= 1 + ZOOM_DIVE_BOOST_MAX * Math.sin(escapeT * Math.PI);
+        } else if (windDownStart !== null) {
+          const windT = Math.min(1, (now - windDownStart) / WIND_DOWN_MS);
+          const eased = Math.sin((windT * Math.PI) / 2); // ease-out: fast start, gentle settle at 1x
+          zoom = windDownFromZoom + (1 - windDownFromZoom) * eased;
+        }
       }
       // Read live every frame (not captured once) so dragging the
       // "Fractal shape" slider takes effect immediately -- OG Fractal
@@ -1151,51 +1178,62 @@
       // a real recording showed ~12s of continuous flat/empty screen,
       // because that blend path was *also* never validated, so a longer
       // blend just meant more time possibly still transiting flat
-      // territory before landing on the new target. Two-tier response
-      // now, matching two ideas from that same feedback:
-      //   1. First, a fast zoom-DIVE on the *current* candidate ("inject
-      //      a layer lower") -- cheap and safe, since c/center never
-      //      change, so there's no new unvalidated path at all. A
-      //      fractal boundary has detail at every scale near any point
-      //      that scored well to begin with, so a flat reading at this
-      //      exact zoom usually just means this instant is a locally
-      //      smooth patch, not that the candidate itself is bad.
-      //   2. Only if the dive alone doesn't resolve it within
-      //      SKIP_TRIGGER_MS, "skip ahead to the next cycle" (user's own
-      //      framing, after that version's own follow-up complaint) --
-      //      fast-forwards startTime so the ordinary wrap-detection
-      //      right above fires on the next frame, reusing the exact
-      //      same injection/blend mechanism every normal cycle
-      //      transition already uses instead of a bespoke side-channel
-      //      injectFromImage() call. That direct call was the actual bug
-      //      the user caught: it changed c/center on its own short
-      //      timer while zoom kept climbing on its own unrelated
-      //      cycle-length timer, and since flatness tends to strike near
-      //      a wrap (zoom already low), the result often looked exactly
-      //      like the whole dive restarting from scratch -- and the new
-      //      target, drawn from the very same heuristic that produced
-      //      the flat one, could just as easily land flat again.
-      //      Advancing the shared clock keeps c/center and zoom
-      //      perfectly in sync, the same as every other transition,
-      //      rather than layering on a second, disjointed one.
+      // territory before landing on the new target. Second version
+      // fast-forwarded startTime straight to the next wrap to fix that,
+      // which fixed the *desync* between c/center and zoom but not a
+      // remaining discontinuity: zoom itself jumped instantly from
+      // whatever the cycle naturally had it at (often mid-range, not
+      // near 1) straight down to 1 in a single frame the moment the jump
+      // landed -- user feedback: still not quite right, and asked for a
+      // smooth recenter/fold instead of a snap. Three-tier response now:
+      //   1. Fast zoom-DIVE on the *current* candidate ("inject a layer
+      //      lower") -- cheap and safe, c/center never change so there's
+      //      no new unvalidated path. A fractal boundary has detail at
+      //      every scale near any point that scored well to begin with,
+      //      so a flat reading at this exact zoom usually just means
+      //      this instant is a locally smooth patch, not a bad candidate.
+      //   2. If the dive alone doesn't clear it within DIVE_GRACE_MS,
+      //      WIND DOWN: ease zoom smoothly back to 1x over WIND_DOWN_MS
+      //      (c/center held perfectly still throughout -- blending them
+      //      while still zoomed in is exactly the lateral-pan artifact
+      //      this project moved away from long ago, see the "Smooth
+      //      mode" design notes above injectFromImage; recentering must
+      //      happen at low zoom, once we actually reach it, not while
+      //      winding down to it).
+      //   3. Only once wind-down completes (zoom has actually eased down
+      //      to ~1x, not jumped there) does it fast-forward startTime so
+      //      the ordinary wrap-detection above fires on the next frame --
+      //      same mechanism/blend every normal cycle transition already
+      //      uses, and by now imperceptible since zoom is already at the
+      //      value that transition expects to start from.
       if (fractalSettings.avoidEmptySpaces && !fractalSettings.ogMode) {
         if (now - lastFlatCheck > 500) {
           lastFlatCheck = now;
           const liveScore = scoreJuliaView(cCurrent.x, cCurrent.y, centerCurrent.x, centerCurrent.y, power, [zoom], window.innerWidth / window.innerHeight);
           if (liveScore < FLAT_SCORE_THRESHOLD) {
             if (flatSince === null) flatSince = now;
-            if (escapeBoostStart === null && now - flatSince > FLAT_TOLERANCE_MS) {
+            if (windDownStart !== null) {
+              if (now - windDownStart > WIND_DOWN_MS) {
+                startTime = now;
+                windDownStart = null;
+                flatSince = null;
+              }
+            } else if (escapeBoostStart !== null) {
+              if (now - escapeBoostStart > DIVE_GRACE_MS) {
+                windDownFromZoom = zoom;
+                windDownStart = now;
+                escapeBoostStart = null;
+              }
+            } else if (now - flatSince > FLAT_TOLERANCE_MS) {
               escapeBoostStart = now;
-            } else if (escapeBoostStart !== null && now - escapeBoostStart > SKIP_TRIGGER_MS) {
-              startTime = now;
-              escapeBoostStart = null;
-              flatSince = null;
             }
           } else {
-            // Resolved -- by the dive, the natural cycle, or the initial
-            // reading never having been flat to begin with.
+            // Resolved -- by the dive, the wind-down, the natural cycle,
+            // or the initial reading never having been flat to begin
+            // with.
             flatSince = null;
             escapeBoostStart = null;
+            windDownStart = null;
           }
         }
       }
