@@ -73,14 +73,30 @@
 
   // Flattened, cross-collection photo list for the fractal's camera
   // roll -- nothing else in this file aggregates across GALLERIES
-  // (every other consumer works one collection/grid at a time).
+  // (every other consumer works one collection/grid at a time). Each
+  // photo carries both `src` (the full-resolution original -- used for
+  // the queue, the "now playing" match against currentImageSrc, and the
+  // actual GL texture once a photo is selected) and `thumbSrc` (a
+  // pre-generated small copy in a `thumbs/` subfolder next to the
+  // original, used ONLY for the camera-roll grid's own <img> tags).
+  // Source photos here run 400KB-4MB+ at up to 3400px -- decoding and
+  // laying out 30+ of those at once every time the camera roll opens
+  // was real, measurable overhead; thumbs/ are ~300px/10-20KB each
+  // (~500KB total across every collection combined, generated via
+  // `ffmpeg -vf scale=300:300:force_original_aspect_ratio=decrease`).
+  // These are real static files checked into the repo, not a runtime
+  // canvas trick -- regenerate them by hand (same ffmpeg command) if a
+  // photo in GALLERIES above is ever added, replaced, or removed.
   function getAllPhotos() {
     const groups = [];
     Object.keys(GALLERIES).forEach((gridId) => {
       const config = GALLERIES[gridId];
       groups.push({
         label: GALLERY_LABELS[gridId] || gridId,
-        photos: config.images.map((filename) => ({ src: config.folder + filename })),
+        photos: config.images.map((filename) => ({
+          src: config.folder + filename,
+          thumbSrc: config.folder + "thumbs/" + filename,
+        })),
       });
     });
     return groups;
@@ -395,7 +411,7 @@
   // site to inject it automatically). One commit behind true HEAD is
   // expected: the commit that bumps this string can't know its own hash
   // in advance, so it always reflects the *previous* push.
-  const FRACTAL_VERSION = "vdbad48c";
+  const FRACTAL_VERSION = "vca91e6f";
 
   // Per-visitor settings. ogMode is read by both dive styles; every
   // other key here only affects Smooth mode (see frame() below) -- OG
@@ -840,7 +856,7 @@
           thumb.className = "fractal-cameraroll-thumb";
           thumb.dataset.photoSrc = photo.src;
           thumb.innerHTML =
-            '<img src="' + photo.src + '" alt="" loading="lazy" decoding="async" width="200" height="200">' +
+            '<img src="' + photo.thumbSrc + '" alt="" loading="lazy" decoding="async" width="200" height="200">' +
             '<div class="fractal-cameraroll-thumb-actions">' +
             '<button type="button" class="fractal-cameraroll-action" data-action="queue" aria-label="Add to queue">+</button>' +
             '<button type="button" class="fractal-cameraroll-action" data-action="play" aria-label="Play now">&#9654;</button>' +
