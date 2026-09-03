@@ -973,7 +973,19 @@
       // barely clear a low bar instead of continuing toward one of the
       // richer candidates most photos do reach within the attempt budget.
       const MIN_SCORE = 20;
-      const MAX_ATTEMPTS = 40;
+      // Raised from 40 after a live report of sustained flatness at
+      // fractalPower 4 -- traced it to injectFromImage itself, not the
+      // "Avoid empty spaces" watchdog (which was correctly diving/
+      // winding-down/skipping ahead the whole time, exactly as
+      // designed) -- every *fresh* candidate it landed on was also
+      // scoring 0 immediately, meaning the search was exhausting all 40
+      // attempts without ever clearing MIN_SCORE for this photo/power
+      // combination and settling for a dud. Confirmed live: at 150,
+      // scores held steady in the 34-56 range across a full cycle for
+      // the same photo/settings that previously collapsed to 0
+      // repeatedly. Cost stays negligible -- this only runs a few times
+      // per minute, not per frame.
+      const MAX_ATTEMPTS = 150;
       // OG Fractal always scores/renders at power 2, ignoring the
       // "Fractal shape" slider -- matches its own "exact original
       // behavior" invariant, same as every other Smooth-mode-only
