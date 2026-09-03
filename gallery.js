@@ -371,7 +371,7 @@
   // site to inject it automatically). One commit behind true HEAD is
   // expected: the commit that bumps this string can't know its own hash
   // in advance, so it always reflects the *previous* push.
-  const FRACTAL_VERSION = "vfbca8ec";
+  const FRACTAL_VERSION = "ve08098e";
 
   // Per-visitor settings. ogMode is read by both dive styles; every
   // other key here only affects Smooth mode (see frame() below) -- OG
@@ -973,18 +973,15 @@
       // barely clear a low bar instead of continuing toward one of the
       // richer candidates most photos do reach within the attempt budget.
       const MIN_SCORE = 20;
-      // Raised from 40 after a live report of sustained flatness at
-      // fractalPower 4 -- traced it to injectFromImage itself, not the
-      // "Avoid empty spaces" watchdog (which was correctly diving/
-      // winding-down/skipping ahead the whole time, exactly as
-      // designed) -- every *fresh* candidate it landed on was also
-      // scoring 0 immediately, meaning the search was exhausting all 40
-      // attempts without ever clearing MIN_SCORE for this photo/power
-      // combination and settling for a dud. Confirmed live: at 150,
-      // scores held steady in the 34-56 range across a full cycle for
-      // the same photo/settings that previously collapsed to 0
-      // repeatedly. Cost stays negligible -- this only runs a few times
-      // per minute, not per frame.
+      // Raised from the original 40 after live reports of sustained
+      // flatness at fractalPower 4 -- the real fix for *that* turned
+      // out to be decoupling angle from the photo's hue (see above),
+      // since a photo's hue palette could make the sparse good angular
+      // windows literally unreachable no matter the attempt count. 150
+      // remains as a comfortable safety margin now that a uniformly
+      // random angle can actually reach every window -- cost stays
+      // negligible either way, this only runs a few times per minute,
+      // not per frame.
       const MAX_ATTEMPTS = 150;
       // OG Fractal always scores/renders at power 2, ignoring the
       // "Fractal shape" slider -- matches its own "exact original
@@ -998,14 +995,37 @@
       // between cycles.
       const aspectRatio = window.innerWidth / window.innerHeight;
       let best = null;
+      // Both angle and radius are uniformly random across a wide shell,
+      // no longer derived from a sampled pixel's hue/brightness. That
+      // photo-coupled version (angle from atan2(R,G), radius nudged by
+      // brightness within 0.65-0.9) was the original design and seemed
+      // reasonable, but live-instrumented testing at fractalPower 4
+      // exposed why it can fail hard: at a fixed radius, the "good"
+      // (non-flat) angles cluster in narrow ~10-15 degree windows
+      // repeating with the fractal's own N-fold rotational symmetry,
+      // separated by long dead stretches scoring exactly 0 -- and a
+      // photo's actual hue palette is often concentrated in a much
+      // narrower range than a full 360 degrees, so tying angle to hue
+      // could make those good windows literally unreachable for that
+      // photo, no matter how many attempts (this caused multi-cycle
+      // sustained flatness even after repeatedly raising MAX_ATTEMPTS
+      // alone). Radius has the same problem one level deeper: even
+      // within the old 0.65-0.9 band, direct sampling found most
+      // specific radii there score poorly at power 4 (single digits to
+      // low teens out of 60 random angles), with only a narrow real
+      // island near 0.80. That island's location isn't fixed -- it
+      // shifts with power -- so hardcoding "the power-4 island" would
+      // just move today's problem to a different power. Widening BOTH
+      // to a fully random 0.3-1.4 shell and simulating the actual
+      // "try up to MAX_ATTEMPTS, keep best" search confirmed a ~0%
+      // failure rate at fractalPower 4 (25 simulated runs) and stayed
+      // at or near 0% across every other power 2/3/5/6 too (one 5%
+      // near-miss at power 6, best score 19 vs. threshold 20) --
+      // reliably wide enough to find whichever power's island actually
+      // exists, without needing to know where it is in advance.
       for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-        const px = fractalSamplePixel(Math.random(), Math.random());
-        // The pixel's hue angle (from R/G) picks a direction in the
-        // complex plane; a shell of radius ~0.65-0.9 (nudged by
-        // brightness) tends to land nearer the Mandelbrot set's own
-        // boundary than a uniform random point would.
-        const angle = Math.atan2(px.g - 0.5, px.r - 0.5);
-        const radius = 0.65 + px.b * 0.25;
+        const angle = Math.random() * Math.PI * 2;
+        const radius = 0.3 + Math.random() * 1.1;
         const c = { x: Math.cos(angle) * radius, y: Math.sin(angle) * radius };
         // Zooming in on a fixed point (e.g. the origin) often lands on a
         // featureless stretch for an arbitrary c -- the richest boundary
@@ -1079,7 +1099,7 @@
       // its escape-boost application right after zoom is computed) for
       // how these are used together.
       const FLAT_SCORE_THRESHOLD = 15;
-      const FLAT_TOLERANCE_MS = 1500; // how long a flat reading must persist before the first response (the dive)
+      const FLAT_TOLERANCE_MS = 1000; // how long a flat reading must persist before the first response (the dive)
       const ZOOM_DIVE_RAMP_MS = 1800; // duration of the dive's smooth zoom-in bump
       const ZOOM_DIVE_BOOST_MAX = 3; // peak multiplier added on top of 1x, i.e. up to 4x zoom at the peak of the bump
       const DIVE_GRACE_MS = ZOOM_DIVE_RAMP_MS + 500; // grace period after the dive to see if it resolved things, before winding down
@@ -1100,22 +1120,48 @@
         // No static "hold" at the ceiling -- that's exactly what froze
         // for ~15s of every 20s cycle (zoom pinned at 7 *and* no
         // injection running, since the previous version only injected
-        // while entering/leaving a brief dip at the seam). The whole
-        // cycle is the morph now: zoom eases from 1 up to the depth
-        // setting and back down to 1, symmetric around the wrap
-        // (cyclePhase 0 == 1, so there's still no jump at the seam),
-        // and c/center blend continuously across nearly the entire
-        // cycle -- one injection per cycle, same principle as OG
-        // Fractal's own "blend spans (almost) the whole cycle so
-        // nothing ever sits still," just stretched across an
-        // adjustable cycle length and a symmetric zoom shape instead
-        // of a hard reset.
+        // while entering/leaving a brief dip at the seam). Zoom eases
+        // from 1 up to the depth setting and back down to 1, symmetric
+        // around the wrap (cyclePhase 0 == 1, so there's still no jump
+        // at the seam) across the WHOLE cycle -- but c/center now only
+        // blend across a short leading fraction of it (see blendMs
+        // below), not nearly the entire cycle the way OG Fractal's own
+        // blend does.
+        //
+        // That "blend spans (almost) the whole cycle" design was
+        // deliberate and worked well at fractalPower 2 -- but
+        // live-instrumented testing at fractalPower 4 found the actual
+        // reason: c/center linearly interpolate in raw coordinates
+        // between two independently-validated candidates, and neither
+        // that path nor injection-time validation (which only checks a
+        // handful of discrete zoom levels at the two endpoints) ever
+        // confirms the path *between* them stays out of flat territory.
+        // For fractalPower 2 the good region is broad/connected enough
+        // that this rarely matters. For fractalPower 4, direct
+        // measurement found the good (c) region breaks into narrow,
+        // disconnected islands -- a straight line between two random
+        // islands spent 70-90% of its length flat across repeated
+        // trials, regardless of whether the interpolation was done in
+        // Cartesian or polar coordinates (tried both; polar was only
+        // marginally better). Since blending nearly the whole cycle
+        // means nearly the whole cycle is spent on that unvalidated
+        // path, this was the actual cause of sustained flatness even
+        // with "Avoid empty spaces" on and even after widening the
+        // candidate search (widening finds a better target, but doesn't
+        // help while the view is still mid-transit toward it).
+        //
+        // Fix: blend quickly to the new (validated) target, then hold
+        // there -- zoom keeps moving throughout regardless, so the view
+        // never goes fully static, it just spends most of the cycle
+        // zoom-diving into a confirmed-detailed point instead of
+        // spending most of it crossing unconfirmed territory between
+        // two points.
         const cycleDurationMs = fractalSettings.cycleDurationSec * 1000;
         const elapsedSec = (now - startTime) / 1000;
         const pulse = computePulse(elapsedSec, waveformUrl, player);
 
         const cyclePhase = ((now - startTime) % cycleDurationMs) / cycleDurationMs;
-        if (cyclePhase < lastCyclePhase) injectFromImage(now, cycleDurationMs * 0.98);
+        if (cyclePhase < lastCyclePhase) injectFromImage(now, Math.min(cycleDurationMs * 0.3, 5000));
         lastCyclePhase = cyclePhase;
 
         const distFromWrap = Math.min(cyclePhase, 1 - cyclePhase); // 0 at the wrap, 0.5 at the cycle's midpoint (peak zoom)
@@ -1147,8 +1193,20 @@
       // at down to 1x in a single frame.
       if (fractalSettings.avoidEmptySpaces && !fractalSettings.ogMode) {
         if (escapeBoostStart !== null) {
+          // Rises fast then HOLDS at peak boost for the rest of the dive,
+          // rather than a symmetric bump that peaks once and immediately
+          // fades -- a live-instrumented test caught a validated
+          // candidate sitting flat for ~6s before the old symmetric dive
+          // happened to cross back into good territory on its way down.
+          // Spending most of the dive's duration at full boost (not just
+          // an instant) gives it far more time actually searching deeper
+          // zoom for detail instead of searching for a fraction of a
+          // second and then giving back the depth it just gained.
+          const DIVE_RISE_FRACTION = 0.3;
           const escapeT = Math.min(1, (now - escapeBoostStart) / ZOOM_DIVE_RAMP_MS);
-          zoom *= 1 + ZOOM_DIVE_BOOST_MAX * Math.sin(escapeT * Math.PI);
+          const riseT = Math.min(1, escapeT / DIVE_RISE_FRACTION);
+          const boostAmount = Math.sin((riseT * Math.PI) / 2); // ease-out rise to 1, then holds at 1
+          zoom *= 1 + ZOOM_DIVE_BOOST_MAX * boostAmount;
         } else if (windDownStart !== null) {
           const windT = Math.min(1, (now - windDownStart) / WIND_DOWN_MS);
           const eased = Math.sin((windT * Math.PI) / 2); // ease-out: fast start, gentle settle at 1x
