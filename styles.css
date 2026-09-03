@@ -889,6 +889,193 @@ body.lightbox-open {
   color: rgba(255, 255, 255, 0.6);
 }
 
+/* Camera roll: same 44x44 circle-button language as the settings gear,
+   positioned 44px + 12px gap to its right so the two sit side by side. */
+.image-fractal-cameraroll-toggle {
+  position: absolute;
+  top: 20px;
+  left: 76px;
+  z-index: 1;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.image-fractal-cameraroll-toggle:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* Same slide-up glass sheet as .fractal-controls -- a second, mutually
+   exclusive bottom sheet (see buildFractal's toggle wiring) rather than
+   a second visual language, so the two panels read as one family. */
+.fractal-cameraroll {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  max-height: 75vh;
+  overflow-y: auto;
+  background: rgba(20, 20, 20, 0.65);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 20px 20px 0 0;
+  padding: 20px 24px calc(20px + env(safe-area-inset-bottom, 0px));
+  transform: translateY(100%);
+  transition: transform 0.3s ease;
+}
+
+.fractal-cameraroll.is-open {
+  transform: translateY(0);
+}
+
+.fractal-cameraroll-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 18px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.fractal-cameraroll-shuffle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.85);
+  cursor: pointer;
+}
+
+.fractal-cameraroll-shuffle input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: #fff;
+  cursor: pointer;
+}
+
+/* "Modern, clean, but unique" -- a row of rounded pills rather than a
+   plain range slider, so the shuffle timer reads as a distinct control
+   from the sliders in the settings panel rather than one more of them. */
+.fractal-shuffle-timer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.fractal-shuffle-pill {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 0.78rem;
+  padding: 6px 14px;
+  cursor: pointer;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.fractal-shuffle-pill:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.fractal-shuffle-pill.is-active {
+  background: #fff;
+  color: #111;
+  border-color: #fff;
+}
+
+.fractal-cameraroll-section {
+  margin-bottom: 20px;
+}
+
+.fractal-cameraroll-section-label {
+  margin: 0 0 10px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.fractal-cameraroll-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+  gap: 10px;
+}
+
+.fractal-cameraroll-thumb {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 2px solid transparent;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.fractal-cameraroll-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.fractal-cameraroll-thumb.is-queued {
+  border-color: rgba(255, 255, 255, 0.6);
+}
+
+.fractal-cameraroll-thumb.is-playing {
+  border-color: #fff;
+  box-shadow: 0 0 0 1px #fff;
+}
+
+.fractal-cameraroll-thumb-actions {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  justify-content: space-between;
+  padding: 4px;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.75), rgba(0, 0, 0, 0));
+}
+
+.fractal-cameraroll-action {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.85);
+  color: #111;
+  font-size: 0.85rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.fractal-cameraroll-action:hover {
+  background: #fff;
+}
+
 /* This page is a self-contained "paged" view: the outer .slide doesn't
    scroll at all (overflow-y overridden to hidden below). Only the active
    section's own body scrolls, and accordion.js decides whether a

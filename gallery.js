@@ -62,6 +62,30 @@
     },
   };
 
+  // Display names for the fractal's camera roll (below) -- matches the
+  // titles used elsewhere (nav banners, i18n) for the same collections.
+  const GALLERY_LABELS = {
+    "gallery-wildflowers-grid": "Macro",
+    "gallery-china-bw-grid": "China",
+    "gallery-china-travels-bw-grid": "China Travels",
+    "gallery-color-travels-grid": "Travels in Color",
+  };
+
+  // Flattened, cross-collection photo list for the fractal's camera
+  // roll -- nothing else in this file aggregates across GALLERIES
+  // (every other consumer works one collection/grid at a time).
+  function getAllPhotos() {
+    const groups = [];
+    Object.keys(GALLERIES).forEach((gridId) => {
+      const config = GALLERIES[gridId];
+      groups.push({
+        label: GALLERY_LABELS[gridId] || gridId,
+        photos: config.images.map((filename) => ({ src: config.folder + filename })),
+      });
+    });
+    return groups;
+  }
+
   const BREAKPOINTS = [
     { minWidth: 900, columns: 4 },
     { minWidth: 600, columns: 3 },
@@ -371,7 +395,7 @@
   // site to inject it automatically). One commit behind true HEAD is
   // expected: the commit that bumps this string can't know its own hash
   // in advance, so it always reflects the *previous* push.
-  const FRACTAL_VERSION = "ve09f874";
+  const FRACTAL_VERSION = "v10ed43e";
 
   // Per-visitor settings. ogMode is read by both dive styles; every
   // other key here only affects Smooth mode (see frame() below) -- OG
@@ -411,8 +435,29 @@
     // for anyone who wants it (explicit user feedback: "even the effect
     // of the flashing emptiness is beautiful" to some).
     avoidEmptySpaces: true,
+    // Camera roll queue -- src strings (folder + filename, see
+    // getAllPhotos above), persisted so a visitor's curated queue
+    // survives reloads. Starts empty; openFractal auto-adds whichever
+    // photo it opened on if it isn't already present, so the queue
+    // always has at least one entry once the fractal's been opened once.
+    imageQueue: [],
+    shuffleEnabled: false,
+    shuffleTimerSec: 30,
   };
   const FRACTAL_SETTINGS_KEY = "tuckerMillsFractalSettings";
+  // Pill choices for the camera roll's shuffle timer -- deliberately not
+  // a plain range slider (see buildFractal's camera-roll panel), so a
+  // fixed short list of "modern, clean, but unique" stops instead of a
+  // continuous 10-120 range.
+  const SHUFFLE_TIMER_OPTIONS = [
+    { sec: 10, label: "10s" },
+    { sec: 20, label: "20s" },
+    { sec: 30, label: "30s" },
+    { sec: 45, label: "45s" },
+    { sec: 60, label: "1m" },
+    { sec: 90, label: "1.5m" },
+    { sec: 120, label: "2m" },
+  ];
 
   function loadFractalSettings() {
     try {
@@ -554,6 +599,24 @@
   // the new one until the next naturally-scheduled cycle wrap. Null
   // whenever the fractal view is closed, see closeFractal.
   let activeReinject = null;
+  // Same pattern as activeReinject above, for the camera roll: the
+  // active openFractal() closure's own image-switch trigger, so the
+  // camera roll panel (built once, reused across opens) and the shuffle
+  // timer (which outlives any single open) can start a live transition
+  // to a different photo. Null whenever the fractal view is closed.
+  let activeImageSwitch = null;
+  // Mirrors whichever photo the active session is currently showing --
+  // read by the camera roll panel for its "now playing" highlight and
+  // by the shuffle timer to avoid picking the same photo twice in a row.
+  let activeCurrentImageSrc = null;
+  // Camera-roll panel hooks, set once inside buildFractal (the panel is
+  // built once, lazily, on the first open -- see openFractal) so the
+  // separate openFractal/closeFractal functions can refresh the panel's
+  // queued/now-playing badges and drive the shuffle timer without
+  // reaching into buildFractal's own closure.
+  let cameraRollRefreshBadges = null;
+  let cameraRollStartShuffleTimer = null;
+  let cameraRollStopShuffleTimer = null;
 
   function compileShader(gl, type, source) {
     const shader = gl.createShader(type);
@@ -581,6 +644,22 @@
       '<line x1="4" y1="18" x2="20" y2="18"/><circle cx="11" cy="18" r="2" fill="#e3e3e3" stroke="none"/>' +
       "</svg>" +
       "</button>" +
+      '<button type="button" class="image-fractal-cameraroll-toggle" aria-label="Photo camera roll">' +
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" width="22px" height="22px" fill="#e3e3e3">' +
+      '<path d="M160-80q-33 0-56.5-23.5T80-160v-600q0-33 23.5-56.5T160-840h40v-40q0-17 11.5-28.5T240-920h160q17 0 28.5 11.5T440-880v40h40q33 0 56.5 23.5T560-760h320v600H560q0 33-23.5 56.5T480-80H160Zm0-80h320v-80h320v-440H480v-80H160v600Zm200-120h80v-80h-80v80Zm0-280h80v-80h-80v80Zm160 280h80v-80h-80v80Zm0-280h80v-80h-80v80Zm160 280h80v-80h-80v80Zm0-280h80v-80h-80v80ZM320-460Z"/>' +
+      "</svg>" +
+      "</button>" +
+      '<div class="fractal-cameraroll">' +
+      '<div class="fractal-cameraroll-header">' +
+      '<label class="fractal-cameraroll-shuffle"><input type="checkbox" data-toggle="shuffleEnabled"> Enable shuffle</label>' +
+      '<div class="fractal-shuffle-timer" data-shuffle-timer role="group" aria-label="Shuffle timer">' +
+      SHUFFLE_TIMER_OPTIONS.map(
+        (opt) => '<button type="button" class="fractal-shuffle-pill" data-shuffle-sec="' + opt.sec + '">' + opt.label + "</button>"
+      ).join("") +
+      "</div>" +
+      "</div>" +
+      '<div class="fractal-cameraroll-grid" data-cameraroll-grid></div>' +
+      "</div>" +
       '<div class="fractal-controls">' +
       '<div class="fractal-controls-row"><label>Music reactivity <span class="fractal-controls-value" data-value-for="musicReactivityPct"></span></label>' +
       '<input type="range" data-setting="musicReactivityPct" min="0" max="100" step="5"></div>' +
@@ -616,7 +695,135 @@
     fractalSettings = loadFractalSettings();
     const toggleBtn = el.querySelector(".image-fractal-settings-toggle");
     const panel = el.querySelector(".fractal-controls");
-    toggleBtn.addEventListener("click", () => panel.classList.toggle("is-open"));
+    const cameraRollToggleBtn = el.querySelector(".image-fractal-cameraroll-toggle");
+    const cameraRollPanel = el.querySelector(".fractal-cameraroll");
+    toggleBtn.addEventListener("click", () => {
+      cameraRollPanel.classList.remove("is-open");
+      panel.classList.toggle("is-open");
+    });
+    cameraRollToggleBtn.addEventListener("click", () => {
+      panel.classList.remove("is-open");
+      cameraRollPanel.classList.toggle("is-open");
+      if (cameraRollPanel.classList.contains("is-open")) populateCameraRollGrid();
+    });
+
+    // Shuffle timer lives in this (buildFractal's own) closure, built
+    // once alongside the button wiring above, since it must persist
+    // across the *panel's* lifetime rather than get torn down and
+    // rebuilt on every fractal open -- it only ever calls whatever
+    // activeImageSwitch currently points at, so it's naturally a no-op
+    // whenever the fractal itself is closed.
+    let shuffleTimerHandle = null;
+    function stopShuffleTimer() {
+      if (shuffleTimerHandle) clearInterval(shuffleTimerHandle);
+      shuffleTimerHandle = null;
+    }
+    function startShuffleTimer() {
+      stopShuffleTimer();
+      if (!fractalSettings.shuffleEnabled || fractalSettings.imageQueue.length < 2) return;
+      shuffleTimerHandle = setInterval(() => {
+        if (!activeImageSwitch) return;
+        const candidates = fractalSettings.imageQueue.filter((s) => s !== activeCurrentImageSrc);
+        if (!candidates.length) return;
+        activeImageSwitch(candidates[Math.floor(Math.random() * candidates.length)]);
+      }, fractalSettings.shuffleTimerSec * 1000);
+    }
+    cameraRollStartShuffleTimer = startShuffleTimer;
+    cameraRollStopShuffleTimer = stopShuffleTimer;
+
+    const shuffleToggle = cameraRollPanel.querySelector('[data-toggle="shuffleEnabled"]');
+    shuffleToggle.checked = fractalSettings.shuffleEnabled;
+    shuffleToggle.addEventListener("change", (e) => {
+      fractalSettings.shuffleEnabled = e.target.checked;
+      saveFractalSettings(fractalSettings);
+      startShuffleTimer();
+    });
+
+    const shuffleTimerEl = cameraRollPanel.querySelector("[data-shuffle-timer]");
+    const shufflePills = Array.prototype.slice.call(shuffleTimerEl.querySelectorAll(".fractal-shuffle-pill"));
+    function updateShufflePillStates() {
+      shufflePills.forEach((pill) => {
+        pill.classList.toggle("is-active", Number(pill.dataset.shuffleSec) === fractalSettings.shuffleTimerSec);
+      });
+    }
+    updateShufflePillStates();
+    shufflePills.forEach((pill) => {
+      pill.addEventListener("click", () => {
+        fractalSettings.shuffleTimerSec = Number(pill.dataset.shuffleSec);
+        saveFractalSettings(fractalSettings);
+        updateShufflePillStates();
+        startShuffleTimer();
+      });
+    });
+
+    // The photo grid itself is built once, lazily, the first time the
+    // camera roll panel is actually opened (see the toggle click handler
+    // above) -- mirrors fractalEl's own lazy build in openFractal --
+    // then just refreshed in place (queued/now-playing badges) on every
+    // later open, rather than rebuilding the DOM from scratch each time.
+    let cameraRollBuilt = false;
+    const cameraRollGrid = cameraRollPanel.querySelector("[data-cameraroll-grid]");
+    function updateCameraRollBadges() {
+      const thumbs = cameraRollGrid.querySelectorAll("[data-photo-src]");
+      for (let i = 0; i < thumbs.length; i++) {
+        const thumb = thumbs[i];
+        const src = thumb.dataset.photoSrc;
+        thumb.classList.toggle("is-queued", fractalSettings.imageQueue.indexOf(src) !== -1);
+        thumb.classList.toggle("is-playing", src === activeCurrentImageSrc);
+      }
+    }
+    cameraRollRefreshBadges = updateCameraRollBadges;
+    function populateCameraRollGrid() {
+      if (cameraRollBuilt) {
+        updateCameraRollBadges();
+        return;
+      }
+      cameraRollBuilt = true;
+      const groups = getAllPhotos();
+      const frag = document.createDocumentFragment();
+      groups.forEach((group) => {
+        const section = document.createElement("div");
+        section.className = "fractal-cameraroll-section";
+        const heading = document.createElement("h4");
+        heading.className = "fractal-cameraroll-section-label";
+        heading.textContent = group.label;
+        section.appendChild(heading);
+        const row = document.createElement("div");
+        row.className = "fractal-cameraroll-row";
+        group.photos.forEach((photo) => {
+          const thumb = document.createElement("div");
+          thumb.className = "fractal-cameraroll-thumb";
+          thumb.dataset.photoSrc = photo.src;
+          thumb.innerHTML =
+            '<img src="' + photo.src + '" alt="" loading="lazy">' +
+            '<div class="fractal-cameraroll-thumb-actions">' +
+            '<button type="button" class="fractal-cameraroll-action" data-action="queue" aria-label="Add to queue">+</button>' +
+            '<button type="button" class="fractal-cameraroll-action" data-action="play" aria-label="Play now">&#9654;</button>' +
+            "</div>";
+          thumb.querySelector('[data-action="queue"]').addEventListener("click", () => {
+            const idx = fractalSettings.imageQueue.indexOf(photo.src);
+            if (idx === -1) fractalSettings.imageQueue.push(photo.src);
+            else fractalSettings.imageQueue.splice(idx, 1);
+            saveFractalSettings(fractalSettings);
+            updateCameraRollBadges();
+            startShuffleTimer();
+          });
+          thumb.querySelector('[data-action="play"]').addEventListener("click", () => {
+            if (fractalSettings.imageQueue.indexOf(photo.src) === -1) {
+              fractalSettings.imageQueue.push(photo.src);
+              saveFractalSettings(fractalSettings);
+            }
+            if (activeImageSwitch) activeImageSwitch(photo.src);
+            updateCameraRollBadges();
+          });
+          row.appendChild(thumb);
+        });
+        section.appendChild(row);
+        frag.appendChild(section);
+      });
+      cameraRollGrid.appendChild(frag);
+      updateCameraRollBadges();
+    }
 
     // Sliders that OG Fractal deliberately ignores (see its own branch
     // in frame() below) -- ogMode always reproduces the original
@@ -925,6 +1132,21 @@
     const avg = fractalSamplePixel.average;
     gl.uniform3f(fractalUniforms.baseColor, avg.r * 0.55, avg.g * 0.55, avg.b * 0.55);
 
+    // getAttribute, not the .src property -- the property resolves to a
+    // full absolute URL, while fractalSettings.imageQueue (and
+    // getAllPhotos()) store the same relative "folder+filename" strings
+    // updateLightboxImage() assigns, so comparing against the resolved
+    // property would never match and the queue/badge logic below would
+    // silently never recognize the currently-open photo as already queued.
+    let currentImageSrc = lightboxImgEl.getAttribute("src");
+    if (fractalSettings.imageQueue.indexOf(currentImageSrc) === -1) {
+      fractalSettings.imageQueue.push(currentImageSrc);
+      saveFractalSettings(fractalSettings);
+    }
+    activeCurrentImageSrc = currentImageSrc;
+    if (cameraRollRefreshBadges) cameraRollRefreshBadges();
+    if (fractalSettings.shuffleEnabled && cameraRollStartShuffleTimer) cameraRollStartShuffleTimer();
+
     let cCurrent = { x: 0.3, y: 0.4 };
     let cTarget = { x: 0.3, y: 0.4 };
     let cFrom = { x: 0.3, y: 0.4 };
@@ -1119,6 +1341,37 @@
     let windDownStart = null;
     let windDownFromZoom = 1;
 
+    // Live image-switch state (camera roll "play now" / shuffle) -- see
+    // requestImageSwitch and its frame() integration below, which takes
+    // priority over the "Avoid empty spaces" watchdog above whenever a
+    // switch is pending, regardless of that watchdog's own on/off toggle
+    // or OG Fractal mode (this is a direct user/shuffle-triggered action,
+    // not a flatness fallback).
+    let switchRequested = null; // pending target src, or null
+    let switchLoadedImg = null; // the loaded <img> for switchRequested, once ready
+    let switchWindDownStart = null;
+    let switchWindDownFromZoom = 1;
+
+    // Mirrors injectFromImage's own hardcoded {0.3, 0.4}-then-blend-away
+    // trick above: preload the new photo, then reuse the exact same
+    // ease-to-1x wind-down the empty-spaces watchdog already uses so a
+    // manual image switch reads as one continuous "zoom out, swap,
+    // zoom back in" morph rather than a jarring texture pop. Every
+    // gallery photo is already preloaded site-wide (renderGallery's own
+    // preload() calls), so in practice this resolves from cache almost
+    // instantly -- but still waits on onload rather than assuming that.
+    function requestImageSwitch(newSrc) {
+      if (newSrc === currentImageSrc || newSrc === switchRequested) return;
+      switchRequested = newSrc;
+      switchLoadedImg = null;
+      const img = new Image();
+      img.onload = () => {
+        if (switchRequested === newSrc) switchLoadedImg = img;
+      };
+      img.src = newSrc;
+    }
+    activeImageSwitch = requestImageSwitch;
+
     function resize() {
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
       fractalCanvasEl.width = window.innerWidth * dpr;
@@ -1214,7 +1467,47 @@
       // the watchdog block below for why) before skipping ahead, instead
       // of jumping straight from whatever zoom the cycle was naturally
       // at down to 1x in a single frame.
-      if (fractalSettings.avoidEmptySpaces && !fractalSettings.ogMode) {
+      // A pending camera-roll image switch pre-empts the empty-spaces
+      // watchdog entirely (regardless of that toggle or OG Fractal mode
+      // -- this is a direct user/shuffle action, not a flatness
+      // fallback), reusing the exact same ease-to-1x wind-down shape.
+      if (switchRequested !== null) {
+        if (switchWindDownStart === null) {
+          switchWindDownStart = now;
+          switchWindDownFromZoom = zoom;
+        }
+        const switchT = Math.min(1, (now - switchWindDownStart) / WIND_DOWN_MS);
+        const switchEased = Math.sin((switchT * Math.PI) / 2); // ease-out: fast start, gentle settle at 1x
+        zoom = switchWindDownFromZoom + (1 - switchWindDownFromZoom) * switchEased;
+        if (switchT >= 1 && switchLoadedImg !== null) {
+          fractalSamplePixel = buildPixelSampler(switchLoadedImg);
+          gl.bindTexture(gl.TEXTURE_2D, fractalTexture);
+          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, switchLoadedImg);
+          const switchAvg = fractalSamplePixel.average;
+          gl.uniform3f(fractalUniforms.baseColor, switchAvg.r * 0.55, switchAvg.g * 0.55, switchAvg.b * 0.55);
+          currentImageSrc = switchRequested;
+          activeCurrentImageSrc = currentImageSrc;
+          if (cameraRollRefreshBadges) cameraRollRefreshBadges();
+          // Fast-forward the shared cycle clock -- same trick the
+          // empty-spaces watchdog's own skip-ahead tier already uses
+          // (see its comment above) -- so the ordinary wrap-detection
+          // fires fresh on the next frame and injects a validated
+          // c/center against the new texture.
+          startTime = now;
+          switchRequested = null;
+          switchWindDownStart = null;
+          switchLoadedImg = null;
+          // Clear the OTHER watchdog's own state too, so a flat reading
+          // from just before the switch doesn't immediately retrigger a
+          // dive/wind-down against the brand new photo.
+          flatSince = null;
+          escapeBoostStart = null;
+          windDownStart = null;
+        }
+        // else: still winding down, or wound down and waiting on the new
+        // image to finish loading -- holds at zoom 1 rather than
+        // proceeding, so there's never a swap-before-ready glitch.
+      } else if (fractalSettings.avoidEmptySpaces && !fractalSettings.ogMode) {
         if (escapeBoostStart !== null) {
           // Rises fast then HOLDS at peak boost for the rest of the dive,
           // rather than a symmetric bump that peaks once and immediately
@@ -1299,7 +1592,7 @@
       //      same mechanism/blend every normal cycle transition already
       //      uses, and by now imperceptible since zoom is already at the
       //      value that transition expects to start from.
-      if (fractalSettings.avoidEmptySpaces && !fractalSettings.ogMode) {
+      if (switchRequested === null && fractalSettings.avoidEmptySpaces && !fractalSettings.ogMode) {
         if (now - lastFlatCheck > 500) {
           lastFlatCheck = now;
           const liveScore = scoreJuliaView(cCurrent.x, cCurrent.y, centerCurrent.x, centerCurrent.y, power, [zoom], window.innerWidth / window.innerHeight);
@@ -1354,6 +1647,9 @@
     cancelAnimationFrame(fractalRAF);
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
     activeReinject = null;
+    activeImageSwitch = null;
+    activeCurrentImageSrc = null;
+    if (cameraRollStopShuffleTimer) cameraRollStopShuffleTimer();
     // Stop capturing the moment the view closes -- no stray mic indicator
     // lingering after the visitor leaves, and the panel (reused verbatim
     // on the next open, see buildFractal) shouldn't show "on" for a
