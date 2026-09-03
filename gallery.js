@@ -395,7 +395,7 @@
   // site to inject it automatically). One commit behind true HEAD is
   // expected: the commit that bumps this string can't know its own hash
   // in advance, so it always reflects the *previous* push.
-  const FRACTAL_VERSION = "v10ed43e";
+  const FRACTAL_VERSION = "vb264121";
 
   // Per-visitor settings. ogMode is read by both dive styles; every
   // other key here only affects Smooth mode (see frame() below) -- OG
@@ -487,6 +487,16 @@
     "uniform vec2 uCenter;\n" +
     "uniform vec3 uBaseColor;\n" +
     "uniform sampler2D uImage;\n" +
+    // A second photo texture + a 0-1 blend factor, sampled at the exact
+    // same iterated UV as uImage (see sampleImage below) -- lets a live
+    // image switch (see requestImageSwitch in openFractal) crossfade the
+    // two photos' colors into each other while the fractal shape itself
+    // keeps moving, instead of freezing, hard-swapping the texture, and
+    // unfreezing. uImageBlend is 0 outside of an active switch, so the
+    // extra sample costs a bit of fill rate at all times but is only
+    // visible during the brief crossfade window.
+    "uniform sampler2D uImageNext;\n" +
+    "uniform float uImageBlend;\n" +
     "uniform float uMaxIter;\n" +
     "uniform float uPower;\n" +
     "uniform float uBgSaturation;\n" +
@@ -523,6 +533,9 @@
     "  hsv.z = clamp(hsv.z * 1.4, 0.0, 1.0);\n" +
     "  return hsv2rgb(hsv);\n" +
     "}\n" +
+    "vec3 sampleImage(vec2 uv) {\n" +
+    "  return mix(texture2D(uImage, uv).rgb, texture2D(uImageNext, uv).rgb, uImageBlend);\n" +
+    "}\n" +
     // Complex z^power via repeated multiplication (no atan2/log, so no
     // branch-cut seam artifact) rather than a fixed square -- driven by
     // the "Fractal shape" slider (fractalPower in buildFractal below) so
@@ -553,7 +566,7 @@
     "    iter += 1.0;\n" +
     "  }\n" +
     "  if (iter >= uMaxIter) {\n" +
-    "    vec3 texColor = boostDetail(texture2D(uImage, fract(z * 0.5 + 0.5)).rgb);\n" +
+    "    vec3 texColor = boostDetail(sampleImage(fract(z * 0.5 + 0.5)));\n" +
     "    gl_FragColor = vec4(texColor, 1.0);\n" +
     "  } else {\n" +
     // A steeper curve than sqrt (which is pow(x, 0.5)) -- iter/uMaxIter
@@ -566,7 +579,7 @@
     // meant to touch -- this is the fix for that, boostDetail alone
     // couldn't compensate for dilution happening after it runs.
     "    float t = pow(iter / uMaxIter, 0.3);\n" +
-    "    vec3 texColor = boostDetail(texture2D(uImage, fract(z * 0.2 + 0.5)).rgb);\n" +
+    "    vec3 texColor = boostDetail(sampleImage(fract(z * 0.2 + 0.5)));\n" +
     // uBaseColor itself stays exactly the photo-average value set once
     // in openFractal -- this only scales its *saturation* (hue/value
     // untouched), live-adjustable via the "Background saturation"
@@ -587,6 +600,13 @@
   let fractalGl = null;
   let fractalUniforms = null;
   let fractalTexture = null;
+  // The "incoming" photo's texture during a live image-switch crossfade
+  // (see requestImageSwitch/frame() below) -- holds whatever was most
+  // recently faded FROM once a crossfade completes (the two GL texture
+  // objects just swap which variable calls them "current", no
+  // reallocation), so it's always a valid, already-uploaded texture even
+  // outside of an active switch, never left pointing at nothing.
+  let fractalTextureNext = null;
   let fractalRAF = null;
   let fractalSamplePixel = null; // (u, v) -> {r, g, b}, built once per photo
   let fractalSettings = null; // loaded/mutated live by the settings panel
@@ -697,13 +717,21 @@
     const panel = el.querySelector(".fractal-controls");
     const cameraRollToggleBtn = el.querySelector(".image-fractal-cameraroll-toggle");
     const cameraRollPanel = el.querySelector(".fractal-cameraroll");
+    // Read by the active session's resize()/frame() (see openFractal) to
+    // downscale canvas resolution while either bottom sheet is open --
+    // see resize()'s own comment for why that's worth doing.
+    function syncPanelOpenClass() {
+      el.classList.toggle("panel-open", panel.classList.contains("is-open") || cameraRollPanel.classList.contains("is-open"));
+    }
     toggleBtn.addEventListener("click", () => {
       cameraRollPanel.classList.remove("is-open");
       panel.classList.toggle("is-open");
+      syncPanelOpenClass();
     });
     cameraRollToggleBtn.addEventListener("click", () => {
       panel.classList.remove("is-open");
       cameraRollPanel.classList.toggle("is-open");
+      syncPanelOpenClass();
       if (cameraRollPanel.classList.contains("is-open")) populateCameraRollGrid();
     });
 
@@ -795,7 +823,7 @@
           thumb.className = "fractal-cameraroll-thumb";
           thumb.dataset.photoSrc = photo.src;
           thumb.innerHTML =
-            '<img src="' + photo.src + '" alt="" loading="lazy">' +
+            '<img src="' + photo.src + '" alt="" loading="lazy" decoding="async" width="200" height="200">' +
             '<div class="fractal-cameraroll-thumb-actions">' +
             '<button type="button" class="fractal-cameraroll-action" data-action="queue" aria-label="Add to queue">+</button>' +
             '<button type="button" class="fractal-cameraroll-action" data-action="play" aria-label="Play now">&#9654;</button>' +
@@ -975,16 +1003,23 @@
         center: gl.getUniformLocation(program, "uCenter"),
         baseColor: gl.getUniformLocation(program, "uBaseColor"),
         image: gl.getUniformLocation(program, "uImage"),
+        imageNext: gl.getUniformLocation(program, "uImageNext"),
+        imageBlend: gl.getUniformLocation(program, "uImageBlend"),
         maxIter: gl.getUniformLocation(program, "uMaxIter"),
         power: gl.getUniformLocation(program, "uPower"),
         bgSaturation: gl.getUniformLocation(program, "uBgSaturation"),
       };
 
-      fractalTexture = gl.createTexture();
-      gl.bindTexture(gl.TEXTURE_2D, fractalTexture);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      // Two identically-configured textures -- see fractalTextureNext's
+      // own comment above for why a live switch swaps between them
+      // rather than allocating a new one per switch.
+      [fractalTexture, fractalTextureNext] = [gl.createTexture(), gl.createTexture()];
+      [fractalTexture, fractalTextureNext].forEach((tex) => {
+        gl.bindTexture(gl.TEXTURE_2D, tex);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      });
     }
 
     fractalGl = gl;
@@ -1117,6 +1152,13 @@
     fractalSamplePixel = buildPixelSampler(sourceImg);
     gl.bindTexture(gl.TEXTURE_2D, fractalTexture);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, sourceImg);
+    // fractalTextureNext needs to hold *some* complete, valid image from
+    // the start (the shader always samples it, see sampleImage in
+    // FRAGMENT_SHADER) even though uImageBlend is 0 until a switch is
+    // mid-crossfade -- reuse the same photo rather than leaving it
+    // uninitialized.
+    gl.bindTexture(gl.TEXTURE_2D, fractalTextureNext);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, sourceImg);
     // The escaped region's base color (mixed with the photo near the
     // boundary) was previously a fixed purple, unrelated to whatever
     // photo was loaded -- now it's the photo's own average color,
@@ -1129,8 +1171,12 @@
     // the live "Background saturation" slider (bgSaturationPct, applied
     // in FRAGMENT_SHADER, not here) for saturation specifically -- this
     // multiplier is the value/brightness half of that same balance.
-    const avg = fractalSamplePixel.average;
-    gl.uniform3f(fractalUniforms.baseColor, avg.r * 0.55, avg.g * 0.55, avg.b * 0.55);
+    // let, not const: during a live image-switch crossfade this lerps
+    // toward nextAvg frame-by-frame (see frame() below) instead of
+    // jumping the instant the new texture is bound -- the uniform itself
+    // is now set every frame in frame(), not once here.
+    let currentAvg = fractalSamplePixel.average;
+    let nextAvg = null;
 
     // getAttribute, not the .src property -- the property resolves to a
     // full absolute URL, while fractalSettings.imageQueue (and
@@ -1342,24 +1388,27 @@
     let windDownFromZoom = 1;
 
     // Live image-switch state (camera roll "play now" / shuffle) -- see
-    // requestImageSwitch and its frame() integration below, which takes
-    // priority over the "Avoid empty spaces" watchdog above whenever a
-    // switch is pending, regardless of that watchdog's own on/off toggle
-    // or OG Fractal mode (this is a direct user/shuffle-triggered action,
-    // not a flatness fallback).
+    // requestImageSwitch and its frame() integration below.
     let switchRequested = null; // pending target src, or null
     let switchLoadedImg = null; // the loaded <img> for switchRequested, once ready
-    let switchWindDownStart = null;
-    let switchWindDownFromZoom = 1;
+    // Once switchLoadedImg is ready, the crossfade begins immediately,
+    // right on top of whatever the fractal is already doing -- no zoom
+    // freeze needed. Both textures are sampled at the exact same
+    // iterated UV (sampleImage in FRAGMENT_SHADER), so a crossfade reads
+    // as the *same* fractal shape's colors dissolving from one photo to
+    // the other while it keeps zooming/drifting, not a scene cut. An
+    // earlier version eased zoom down to 1x, hard-swapped the texture,
+    // then eased back in -- replaced because the user explicitly wanted
+    // to actually *see* the two photos' fractals blending together, not
+    // a freeze-swap-unfreeze.
+    let crossfadeStart = null;
+    const IMAGE_CROSSFADE_MS = 1600;
 
-    // Mirrors injectFromImage's own hardcoded {0.3, 0.4}-then-blend-away
-    // trick above: preload the new photo, then reuse the exact same
-    // ease-to-1x wind-down the empty-spaces watchdog already uses so a
-    // manual image switch reads as one continuous "zoom out, swap,
-    // zoom back in" morph rather than a jarring texture pop. Every
-    // gallery photo is already preloaded site-wide (renderGallery's own
-    // preload() calls), so in practice this resolves from cache almost
-    // instantly -- but still waits on onload rather than assuming that.
+    // Preload the new photo; every gallery photo is already preloaded
+    // site-wide (renderGallery's own preload() calls), so in practice
+    // this resolves from cache almost instantly -- but still waits on
+    // onload rather than assuming that. The crossfade itself only
+    // starts once frame() sees switchLoadedImg populated.
     function requestImageSwitch(newSrc) {
       if (newSrc === currentImageSrc || newSrc === switchRequested) return;
       switchRequested = newSrc;
@@ -1372,19 +1421,41 @@
     }
     activeImageSwitch = requestImageSwitch;
 
+    // Downscales the canvas's backing resolution while a settings/
+    // camera-roll panel is open. The canvas is still visible (and, for
+    // the camera roll specifically, actively crossfading -- switches
+    // are triggered from inside that panel) behind the panel's glass,
+    // but rendering at full device-pixel-ratio resolution underneath a
+    // continuously-animating full-bleed backdrop-filter blur is
+    // expensive on both counts: it's more pixels for the fractal shader
+    // itself to fill, AND more pixels for the blur to recompute every
+    // single frame (the blur operates on this same composited buffer,
+    // at its native resolution). A visitor looking at the panel isn't
+    // examining canvas sharpness through blurred glass, so this is a
+    // real perf win with no noticeable visual cost while it's active.
     function resize() {
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const panelOpen = fractalEl.classList.contains("panel-open");
+      const dpr = panelOpen ? 1 : Math.min(window.devicePixelRatio || 1, 2);
       fractalCanvasEl.width = window.innerWidth * dpr;
       fractalCanvasEl.height = window.innerHeight * dpr;
       gl.viewport(0, 0, fractalCanvasEl.width, fractalCanvasEl.height);
     }
     resize();
     window.addEventListener("resize", resize);
+    // Tracked so frame() only calls resize() on an actual open/close
+    // transition (a DOM read + GL resize every single frame would waste
+    // back the very perf this exists to save), not every frame.
+    let lastPanelOpenForResize = fractalEl.classList.contains("panel-open");
 
     function frame(now) {
       if (!isFractalOpen()) {
         window.removeEventListener("resize", resize);
         return;
+      }
+      const panelOpen = fractalEl.classList.contains("panel-open");
+      if (panelOpen !== lastPanelOpenForResize) {
+        lastPanelOpenForResize = panelOpen;
+        resize();
       }
       // "Avoid empty spaces" tuning -- see the watchdog block below (and
       // its escape-boost application right after zoom is computed) for
@@ -1467,47 +1538,50 @@
       // the watchdog block below for why) before skipping ahead, instead
       // of jumping straight from whatever zoom the cycle was naturally
       // at down to 1x in a single frame.
-      // A pending camera-roll image switch pre-empts the empty-spaces
-      // watchdog entirely (regardless of that toggle or OG Fractal mode
-      // -- this is a direct user/shuffle action, not a flatness
-      // fallback), reusing the exact same ease-to-1x wind-down shape.
+      // Live image-switch crossfade -- see requestImageSwitch above.
+      // Unlike zoom/c-center, this doesn't need to pre-empt anything:
+      // both textures sample the exact same iterated UV (sampleImage in
+      // FRAGMENT_SHADER), so the fractal's own shape/zoom/drift keeps
+      // running completely normally throughout, and only the photo
+      // colors dissolve from one to the other. imageBlend feeds the
+      // uImageBlend uniform and the baseColor lerp near the bottom of
+      // this function.
+      let imageBlend = 0;
       if (switchRequested !== null) {
-        if (switchWindDownStart === null) {
-          switchWindDownStart = now;
-          switchWindDownFromZoom = zoom;
-        }
-        const switchT = Math.min(1, (now - switchWindDownStart) / WIND_DOWN_MS);
-        const switchEased = Math.sin((switchT * Math.PI) / 2); // ease-out: fast start, gentle settle at 1x
-        zoom = switchWindDownFromZoom + (1 - switchWindDownFromZoom) * switchEased;
-        if (switchT >= 1 && switchLoadedImg !== null) {
-          fractalSamplePixel = buildPixelSampler(switchLoadedImg);
-          gl.bindTexture(gl.TEXTURE_2D, fractalTexture);
+        if (crossfadeStart === null && switchLoadedImg !== null) {
+          crossfadeStart = now;
+          nextAvg = buildPixelSampler(switchLoadedImg).average;
+          gl.bindTexture(gl.TEXTURE_2D, fractalTextureNext);
           gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, switchLoadedImg);
-          const switchAvg = fractalSamplePixel.average;
-          gl.uniform3f(fractalUniforms.baseColor, switchAvg.r * 0.55, switchAvg.g * 0.55, switchAvg.b * 0.55);
-          currentImageSrc = switchRequested;
-          activeCurrentImageSrc = currentImageSrc;
-          if (cameraRollRefreshBadges) cameraRollRefreshBadges();
-          // Fast-forward the shared cycle clock -- same trick the
-          // empty-spaces watchdog's own skip-ahead tier already uses
-          // (see its comment above) -- so the ordinary wrap-detection
-          // fires fresh on the next frame and injects a validated
-          // c/center against the new texture.
-          startTime = now;
-          switchRequested = null;
-          switchWindDownStart = null;
-          switchLoadedImg = null;
-          // Clear the OTHER watchdog's own state too, so a flat reading
-          // from just before the switch doesn't immediately retrigger a
-          // dive/wind-down against the brand new photo.
-          flatSince = null;
-          escapeBoostStart = null;
-          windDownStart = null;
         }
-        // else: still winding down, or wound down and waiting on the new
-        // image to finish loading -- holds at zoom 1 rather than
-        // proceeding, so there's never a swap-before-ready glitch.
-      } else if (fractalSettings.avoidEmptySpaces && !fractalSettings.ogMode) {
+        if (crossfadeStart !== null) {
+          const cfT = Math.min(1, (now - crossfadeStart) / IMAGE_CROSSFADE_MS);
+          imageBlend = Math.sin((cfT * Math.PI) / 2); // ease-out, matches this file's other transitions
+          if (cfT >= 1) {
+            // Crossfade complete -- swap which GL texture object is
+            // "current" (cheap: just relabels two already-uploaded
+            // textures, see fractalTextureNext's own comment) rather
+            // than re-uploading, and settle every other piece of
+            // switch-related state.
+            const swapTex = fractalTexture;
+            fractalTexture = fractalTextureNext;
+            fractalTextureNext = swapTex;
+            fractalSamplePixel = buildPixelSampler(switchLoadedImg);
+            currentAvg = nextAvg;
+            nextAvg = null;
+            currentImageSrc = switchRequested;
+            activeCurrentImageSrc = currentImageSrc;
+            if (cameraRollRefreshBadges) cameraRollRefreshBadges();
+            switchRequested = null;
+            switchLoadedImg = null;
+            crossfadeStart = null;
+            imageBlend = 0;
+          }
+        }
+        // else: still waiting on the new image to finish loading -- the
+        // crossfade starts the moment it's ready, checked again next frame.
+      }
+      if (fractalSettings.avoidEmptySpaces && !fractalSettings.ogMode) {
         if (escapeBoostStart !== null) {
           // Rises fast then HOLDS at peak boost for the rest of the dive,
           // rather than a symmetric bump that peaks once and immediately
@@ -1592,7 +1666,7 @@
       //      same mechanism/blend every normal cycle transition already
       //      uses, and by now imperceptible since zoom is already at the
       //      value that transition expects to start from.
-      if (switchRequested === null && fractalSettings.avoidEmptySpaces && !fractalSettings.ogMode) {
+      if (!panelOpen && fractalSettings.avoidEmptySpaces && !fractalSettings.ogMode) {
         if (now - lastFlatCheck > 500) {
           lastFlatCheck = now;
           const liveScore = scoreJuliaView(cCurrent.x, cCurrent.y, centerCurrent.x, centerCurrent.y, power, [zoom], window.innerWidth / window.innerHeight);
@@ -1624,16 +1698,36 @@
         }
       }
 
+      // Base color lerps toward the incoming photo's own average right
+      // alongside the texture crossfade above, at the same imageBlend --
+      // otherwise the escaped/background region would still show the
+      // outgoing photo's color for the entire crossfade and only jump to
+      // the new one at the very end, undercutting the "two photos
+      // blending together" effect everywhere except the detail itself.
+      const effAvg =
+        nextAvg === null
+          ? currentAvg
+          : {
+              r: currentAvg.r + (nextAvg.r - currentAvg.r) * imageBlend,
+              g: currentAvg.g + (nextAvg.g - currentAvg.g) * imageBlend,
+              b: currentAvg.b + (nextAvg.b - currentAvg.b) * imageBlend,
+            };
+
       gl.uniform2f(fractalUniforms.resolution, fractalCanvasEl.width, fractalCanvasEl.height);
       gl.uniform1f(fractalUniforms.zoom, zoom);
       gl.uniform2f(fractalUniforms.c, cCurrent.x, cCurrent.y);
       gl.uniform2f(fractalUniforms.center, centerCurrent.x, centerCurrent.y);
+      gl.uniform3f(fractalUniforms.baseColor, effAvg.r * 0.55, effAvg.g * 0.55, effAvg.b * 0.55);
       gl.uniform1f(fractalUniforms.maxIter, maxIter);
       gl.uniform1f(fractalUniforms.power, power);
       gl.uniform1f(fractalUniforms.bgSaturation, bgSaturation);
+      gl.uniform1f(fractalUniforms.imageBlend, imageBlend);
       gl.uniform1i(fractalUniforms.image, 0);
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, fractalTexture);
+      gl.uniform1i(fractalUniforms.imageNext, 1);
+      gl.activeTexture(gl.TEXTURE1);
+      gl.bindTexture(gl.TEXTURE_2D, fractalTextureNext);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
       fractalRAF = requestAnimationFrame(frame);

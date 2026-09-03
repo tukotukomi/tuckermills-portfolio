@@ -796,9 +796,16 @@ body.lightbox-open {
   bottom: 0;
   max-height: 75vh;
   overflow-y: auto;
-  background: rgba(20, 20, 20, 0.65);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  /* Lower blur radius + slightly higher opacity than the original
+     20px/0.65 -- backdrop-filter has to be recomputed every single
+     frame while the fractal keeps animating underneath (it can't be
+     cached the way a blur over static content can), so a smaller
+     kernel meaningfully cuts a real, continuous GPU cost; the higher
+     opacity keeps the glass reading just as legible with less blur
+     doing the work. */
+  background: rgba(20, 20, 20, 0.78);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   border-top: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 20px 20px 0 0;
   padding: 20px 24px calc(20px + env(safe-area-inset-bottom, 0px));
@@ -925,9 +932,16 @@ body.lightbox-open {
   bottom: 0;
   max-height: 75vh;
   overflow-y: auto;
-  background: rgba(20, 20, 20, 0.65);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  /* Lower blur radius + slightly higher opacity than the original
+     20px/0.65 -- backdrop-filter has to be recomputed every single
+     frame while the fractal keeps animating underneath (it can't be
+     cached the way a blur over static content can), so a smaller
+     kernel meaningfully cuts a real, continuous GPU cost; the higher
+     opacity keeps the glass reading just as legible with less blur
+     doing the work. */
+  background: rgba(20, 20, 20, 0.78);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   border-top: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 20px 20px 0 0;
   padding: 20px 24px calc(20px + env(safe-area-inset-bottom, 0px));
