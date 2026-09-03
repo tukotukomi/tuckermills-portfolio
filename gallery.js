@@ -371,7 +371,7 @@
   // site to inject it automatically). One commit behind true HEAD is
   // expected: the commit that bumps this string can't know its own hash
   // in advance, so it always reflects the *previous* push.
-  const FRACTAL_VERSION = "v58d7301";
+  const FRACTAL_VERSION = "ve09f874";
 
   // Per-visitor settings. ogMode is read by both dive styles; every
   // other key here only affects Smooth mode (see frame() below) -- OG
@@ -938,6 +938,12 @@
     // longer also reads as a slower, gentler drift rather than a snap.
     const INJECT_BLEND_MS = MANDELBROT_CYCLE_MS * 0.9;
     let injectBlendMs = INJECT_BLEND_MS;
+    // False only before the very first injection (whose "current
+    // position" is still the hardcoded, unvalidated {0.3, 0.4} default
+    // below, not a real anchor) -- see injectFromImage's own comment on
+    // why every later call anchors its search near cTarget instead of
+    // searching the whole shell from scratch.
+    let hasValidAnchor = false;
 
     // "Smooth" mode: defaults to the same proven zoom ceiling as OG
     // Fractal (7x, now adjustable via the zoom depth slider) -- going
@@ -995,37 +1001,68 @@
       // between cycles.
       const aspectRatio = window.innerWidth / window.innerHeight;
       let best = null;
-      // Both angle and radius are uniformly random across a wide shell,
-      // no longer derived from a sampled pixel's hue/brightness. That
-      // photo-coupled version (angle from atan2(R,G), radius nudged by
-      // brightness within 0.65-0.9) was the original design and seemed
-      // reasonable, but live-instrumented testing at fractalPower 4
-      // exposed why it can fail hard: at a fixed radius, the "good"
-      // (non-flat) angles cluster in narrow ~10-15 degree windows
-      // repeating with the fractal's own N-fold rotational symmetry,
-      // separated by long dead stretches scoring exactly 0 -- and a
-      // photo's actual hue palette is often concentrated in a much
-      // narrower range than a full 360 degrees, so tying angle to hue
-      // could make those good windows literally unreachable for that
-      // photo, no matter how many attempts (this caused multi-cycle
-      // sustained flatness even after repeatedly raising MAX_ATTEMPTS
-      // alone). Radius has the same problem one level deeper: even
+      // Angle and radius are random within a shell, no longer derived
+      // from a sampled pixel's hue/brightness. That photo-coupled
+      // version (angle from atan2(R,G), radius nudged by brightness
+      // within 0.65-0.9) was the original design and seemed reasonable,
+      // but live-instrumented testing at fractalPower 4 exposed why it
+      // can fail hard: at a fixed radius, the "good" (non-flat) angles
+      // cluster in narrow ~10-15 degree windows repeating with the
+      // fractal's own N-fold rotational symmetry, separated by long dead
+      // stretches scoring exactly 0 -- and a photo's actual hue palette
+      // is often concentrated in a much narrower range than a full 360
+      // degrees, so tying angle to hue could make those good windows
+      // literally unreachable for that photo, no matter how many
+      // attempts. Radius has the same problem one level deeper: even
       // within the old 0.65-0.9 band, direct sampling found most
-      // specific radii there score poorly at power 4 (single digits to
-      // low teens out of 60 random angles), with only a narrow real
-      // island near 0.80. That island's location isn't fixed -- it
-      // shifts with power -- so hardcoding "the power-4 island" would
-      // just move today's problem to a different power. Widening BOTH
-      // to a fully random 0.3-1.4 shell and simulating the actual
-      // "try up to MAX_ATTEMPTS, keep best" search confirmed a ~0%
-      // failure rate at fractalPower 4 (25 simulated runs) and stayed
-      // at or near 0% across every other power 2/3/5/6 too (one 5%
-      // near-miss at power 6, best score 19 vs. threshold 20) --
-      // reliably wide enough to find whichever power's island actually
-      // exists, without needing to know where it is in advance.
+      // specific radii there score poorly at power 4, with only a
+      // narrow real island near 0.80 that shifts with power -- so
+      // hardcoding one power's island would just move today's problem
+      // to a different power.
+      //
+      // Full-shell random search (0.3-1.4 radius, any angle) fixed
+      // *finding* a good candidate reliably, but exposed a second,
+      // deeper bug: the blend from wherever the view currently is
+      // toward a brand new, unrelated random target was flat 70-90%+ of
+      // its own length in direct measurement, because two random good
+      // islands are usually far apart with nothing but dead territory
+      // between them. Shortening the blend to avoid that path (a
+      // version that shipped briefly) fixed the flatness but read as
+      // choppy -- "moving... then zooming in only... then moving
+      // again" -- reintroducing the frozen-feeling stop-start rhythm
+      // this whole mode was designed to avoid.
+      //
+      // Fix: every injection *after* the first anchors its search near
+      // cTarget (the current or just-reached position) instead of the
+      // whole shell -- a short hop to a nearby good window rather than
+      // a teleport to a random distant one. Measured directly: a
+      // Cartesian blend between two independently-random good
+      // candidates was flat ~69% of its length on average; anchored to
+      // a +/-20 degree, +/-0.12 radius hop from a known-good point, that
+      // dropped to ~20%, while still finding a candidate within the
+      // narrow window 100% of the time (0 failures across 75 trials
+      // spanning every power 2-6). Good enough to restore a long,
+      // continuous blend (see INJECT_BLEND_MS-length blends below)
+      // without reintroducing the original sustained-flatness bug.
+      const HOP_RANGE_RAD = (20 * Math.PI) / 180;
+      const HOP_RANGE_RADIUS = 0.12;
+      let anchorAngle = null;
+      let anchorRadius = null;
+      if (hasValidAnchor) {
+        anchorAngle = Math.atan2(cTarget.y, cTarget.x);
+        anchorRadius = Math.sqrt(cTarget.x * cTarget.x + cTarget.y * cTarget.y);
+      }
       for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-        const angle = Math.random() * Math.PI * 2;
-        const radius = 0.3 + Math.random() * 1.1;
+        let angle, radius;
+        if (anchorAngle !== null) {
+          angle = anchorAngle + (Math.random() * 2 - 1) * HOP_RANGE_RAD;
+          radius = Math.max(0.3, Math.min(1.4, anchorRadius + (Math.random() * 2 - 1) * HOP_RANGE_RADIUS));
+        } else {
+          // Only the very first injection ever (see hasValidAnchor) --
+          // no real position to hop from yet, so search the whole shell.
+          angle = Math.random() * Math.PI * 2;
+          radius = 0.3 + Math.random() * 1.1;
+        }
         const c = { x: Math.cos(angle) * radius, y: Math.sin(angle) * radius };
         // Zooming in on a fixed point (e.g. the origin) often lands on a
         // featureless stretch for an arbitrary c -- the richest boundary
@@ -1043,6 +1080,7 @@
       centerTarget = best.center;
       injectStart = now;
       injectBlendMs = blendMs || INJECT_BLEND_MS;
+      hasValidAnchor = true;
     }
     activeReinject = injectFromImage;
 
@@ -1123,45 +1161,30 @@
         // while entering/leaving a brief dip at the seam). Zoom eases
         // from 1 up to the depth setting and back down to 1, symmetric
         // around the wrap (cyclePhase 0 == 1, so there's still no jump
-        // at the seam) across the WHOLE cycle -- but c/center now only
-        // blend across a short leading fraction of it (see blendMs
-        // below), not nearly the entire cycle the way OG Fractal's own
-        // blend does.
+        // at the seam), and c/center blend continuously across nearly
+        // the entire cycle -- same principle as OG Fractal's own "blend
+        // spans (almost) the whole cycle so nothing ever sits still,"
+        // just stretched across an adjustable cycle length.
         //
-        // That "blend spans (almost) the whole cycle" design was
-        // deliberate and worked well at fractalPower 2 -- but
-        // live-instrumented testing at fractalPower 4 found the actual
-        // reason: c/center linearly interpolate in raw coordinates
-        // between two independently-validated candidates, and neither
-        // that path nor injection-time validation (which only checks a
-        // handful of discrete zoom levels at the two endpoints) ever
-        // confirms the path *between* them stays out of flat territory.
-        // For fractalPower 2 the good region is broad/connected enough
-        // that this rarely matters. For fractalPower 4, direct
-        // measurement found the good (c) region breaks into narrow,
-        // disconnected islands -- a straight line between two random
-        // islands spent 70-90% of its length flat across repeated
-        // trials, regardless of whether the interpolation was done in
-        // Cartesian or polar coordinates (tried both; polar was only
-        // marginally better). Since blending nearly the whole cycle
-        // means nearly the whole cycle is spent on that unvalidated
-        // path, this was the actual cause of sustained flatness even
-        // with "Avoid empty spaces" on and even after widening the
-        // candidate search (widening finds a better target, but doesn't
-        // help while the view is still mid-transit toward it).
-        //
-        // Fix: blend quickly to the new (validated) target, then hold
-        // there -- zoom keeps moving throughout regardless, so the view
-        // never goes fully static, it just spends most of the cycle
-        // zoom-diving into a confirmed-detailed point instead of
-        // spending most of it crossing unconfirmed territory between
-        // two points.
+        // A short-blend-then-hold version of this shipped briefly (c/
+        // center blend quickly, then sit still while only zoom moved)
+        // specifically to dodge a *different* bug -- see
+        // injectFromImage's own comment on why the blend path itself
+        // needed fixing at fractalPower 4 -- but user feedback caught
+        // that the hold read as choppy: "moving... then zooming in
+        // only... then moving again," reintroducing the frozen-feeling
+        // stop-start rhythm this mode was designed to avoid in the
+        // first place. Restored the long continuous blend now that
+        // injectFromImage's anchored search (short hops to a nearby
+        // good window instead of teleporting to a random distant one)
+        // keeps the blend path itself validated enough to make a long,
+        // continuous drift viable again.
         const cycleDurationMs = fractalSettings.cycleDurationSec * 1000;
         const elapsedSec = (now - startTime) / 1000;
         const pulse = computePulse(elapsedSec, waveformUrl, player);
 
         const cyclePhase = ((now - startTime) % cycleDurationMs) / cycleDurationMs;
-        if (cyclePhase < lastCyclePhase) injectFromImage(now, Math.min(cycleDurationMs * 0.3, 5000));
+        if (cyclePhase < lastCyclePhase) injectFromImage(now, cycleDurationMs * 0.98);
         lastCyclePhase = cyclePhase;
 
         const distFromWrap = Math.min(cyclePhase, 1 - cyclePhase); // 0 at the wrap, 0.5 at the cycle's midpoint (peak zoom)
