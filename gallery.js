@@ -389,13 +389,15 @@
     // version used to fight repetitive shapes; this slider is direct
     // manual control instead, see its wiring in buildFractal below.
     fractalPower: 2,
-    // 60%, not 100% ("current behavior") -- once detail got a real
+    // 30%, not 100% ("current behavior") -- once detail got a real
     // saturation/vividness boost (boostDetail in FRAGMENT_SHADER), the
     // background started reading noticeably brighter/more saturated by
     // contrast next to it, even though its own color never changed.
-    // 60% is a deliberate starting fix for that, not a neutral default;
-    // the slider still runs 0-150% for further tuning either direction.
-    bgSaturationPct: 60,
+    // Lowered again from an initial 60% after user feedback that 60%
+    // still read "much too bright and overly saturated" vs. the source
+    // photo -- 30% is a real fix baked into the default, not a neutral
+    // starting point; the slider still runs 0-150% either direction.
+    bgSaturationPct: 30,
   };
   const FRACTAL_SETTINGS_KEY = "tuckerMillsFractalSettings";
 
@@ -841,9 +843,16 @@
   // zooms defaults to the full validated range above; the flatness
   // watchdog in frame() instead passes a single-element array (whatever
   // zoom is actually on screen right now) for a much cheaper live check.
-  function scoreJuliaView(cx, cy, centerX, centerY, power, zooms) {
+  // aspectRatio must match the shader's own uResolution.x/uResolution.y
+  // (see FRAGMENT_SHADER's "p.x *= uResolution.x / uResolution.y") --
+  // without it this grid is square regardless of the actual viewport, so
+  // on any wide monitor the real rendered frame extends well past what
+  // was ever validated, and the unchecked left/right edges are exactly
+  // where an "empty space" complaint on a widescreen would come from.
+  function scoreJuliaView(cx, cy, centerX, centerY, power, zooms, aspectRatio) {
     const GRID = 6;
     const checkZooms = zooms || SCORE_ZOOMS;
+    const aspect = aspectRatio || 1;
     let worst = Infinity;
     for (let z = 0; z < checkZooms.length; z++) {
       const sampleZoom = checkZooms[z];
@@ -851,7 +860,7 @@
       let maxIter = -Infinity;
       for (let i = 0; i < GRID; i++) {
         for (let j = 0; j < GRID; j++) {
-          const px = (i / (GRID - 1) - 0.5) / sampleZoom + centerX;
+          const px = ((i / (GRID - 1) - 0.5) * aspect) / sampleZoom + centerX;
           const py = (j / (GRID - 1) - 0.5) / sampleZoom + centerY;
           const it = juliaIterations(px, py, cx, cy, 60, power);
           if (it < minIter) minIter = it;
@@ -888,14 +897,16 @@
     // boundary) was previously a fixed purple, unrelated to whatever
     // photo was loaded -- now it's the photo's own average color,
     // darkened to keep some depth/contrast rather than a flat wash.
-    // *0.4 (was the original value) crushed this to under half the
-    // photo's brightness across most of the frame -- this base color
-    // dominates any pixel that escapes quickly, which is most of the
-    // screen away from actual boundary detail, so that dimming read as
-    // the whole fractal looking dark. *0.7 keeps a visible "in shadow"
-    // read without crushing it this hard.
+    // *0.4 (the original value) crushed this to under half the photo's
+    // brightness and read as too dark; *0.7 (a later fix) overcorrected
+    // once detail got its own saturation/brightness boost, reading as
+    // "much too bright and overly saturated" by contrast -- *0.55 is a
+    // middle point between those two complaints. Also compensated via
+    // the live "Background saturation" slider (bgSaturationPct, applied
+    // in FRAGMENT_SHADER, not here) for saturation specifically -- this
+    // multiplier is the value/brightness half of that same balance.
     const avg = fractalSamplePixel.average;
-    gl.uniform3f(fractalUniforms.baseColor, avg.r * 0.7, avg.g * 0.7, avg.b * 0.7);
+    gl.uniform3f(fractalUniforms.baseColor, avg.r * 0.55, avg.g * 0.55, avg.b * 0.55);
 
     let cCurrent = { x: 0.3, y: 0.4 };
     let cTarget = { x: 0.3, y: 0.4 };
@@ -951,6 +962,12 @@
       // behavior" invariant, same as every other Smooth-mode-only
       // setting.
       const scoringPower = fractalSettings.ogMode ? 2 : fractalSettings.fractalPower;
+      // Widescreen/ultrawide monitors render a much wider horizontal
+      // slice of the complex plane than a square viewport would (see
+      // scoreJuliaView's own comment) -- read fresh each injection
+      // rather than cached, since a visitor can resize the window
+      // between cycles.
+      const aspectRatio = window.innerWidth / window.innerHeight;
       let best = null;
       for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
         const px = fractalSamplePixel(Math.random(), Math.random());
@@ -967,7 +984,7 @@
         // orbit of the critical point z=0 after one step), so the zoom
         // target rides along with c instead of staying put.
         const center = { x: c.x * 0.5, y: c.y * 0.5 };
-        const score = scoreJuliaView(c.x, c.y, center.x, center.y, scoringPower);
+        const score = scoreJuliaView(c.x, c.y, center.x, center.y, scoringPower, null, aspectRatio);
         if (!best || score > best.score) best = { c, center, score };
         if (best.score >= MIN_SCORE) break;
       }
@@ -1100,7 +1117,7 @@
       if (!fractalSettings.ogMode) {
         if (now - lastFlatCheck > 500) {
           lastFlatCheck = now;
-          const liveScore = scoreJuliaView(cCurrent.x, cCurrent.y, centerCurrent.x, centerCurrent.y, power, [zoom]);
+          const liveScore = scoreJuliaView(cCurrent.x, cCurrent.y, centerCurrent.x, centerCurrent.y, power, [zoom], window.innerWidth / window.innerHeight);
           if (liveScore < 15) {
             if (flatSince === null) flatSince = now;
             else if (now - flatSince > 2500) {
