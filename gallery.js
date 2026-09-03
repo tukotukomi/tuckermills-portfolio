@@ -398,6 +398,11 @@
     // photo -- 30% is a real fix baked into the default, not a neutral
     // starting point; the slider still runs 0-150% either direction.
     bgSaturationPct: 30,
+    // On by default -- see the "Avoid empty spaces" watchdog in frame()
+    // below. Off gives back the old, un-mitigated flat-space behavior
+    // for anyone who wants it (explicit user feedback: "even the effect
+    // of the flashing emptiness is beautiful" to some).
+    avoidEmptySpaces: true,
   };
   const FRACTAL_SETTINGS_KEY = "tuckerMillsFractalSettings";
 
@@ -588,6 +593,9 @@
       '<div class="fractal-controls-row"><label>Cycle duration <span class="fractal-controls-value" data-value-for="cycleDurationSec"></span></label>' +
       '<input type="range" data-setting="cycleDurationSec" min="6" max="60" step="1"></div>' +
       '<div class="fractal-controls-row fractal-controls-toggle-row">' +
+      '<label><input type="checkbox" data-toggle="avoidEmptySpaces"> Avoid empty spaces</label>' +
+      "</div>" +
+      '<div class="fractal-controls-row fractal-controls-toggle-row">' +
       '<label><input type="checkbox" data-toggle="growthEnabled"> Fractal growth</label>' +
       "</div>" +
       '<div class="fractal-controls-row fractal-controls-toggle-row">' +
@@ -634,7 +642,7 @@
       if (activeReinject) activeReinject(performance.now(), 1200);
     });
 
-    ["growthEnabled", "ogMode"].forEach((key) => {
+    ["avoidEmptySpaces", "growthEnabled", "ogMode"].forEach((key) => {
       const toggle = panel.querySelector('[data-toggle="' + key + '"]');
       toggle.checked = fractalSettings[key];
       toggle.addEventListener("change", (e) => {
@@ -1013,11 +1021,15 @@
     cFrom = cTarget;
     centerFrom = centerTarget;
     let lastCyclePhase = 0;
-    // Flatness watchdog state (Smooth mode only) -- see its check in
-    // frame() below for why this exists alongside MIN_SCORE-validated
-    // injection rather than instead of it.
+    // "Avoid empty spaces" watchdog state (Smooth mode only) -- see its
+    // check in frame() below for why this exists alongside
+    // MIN_SCORE-validated injection rather than instead of it.
     let flatSince = null;
     let lastFlatCheck = 0;
+    // null = no escape dive in progress; else the timestamp it started,
+    // used both to drive the zoom boost each frame and to know when to
+    // escalate to a full re-injection if the dive alone didn't help.
+    let escapeBoostStart = null;
 
     function resize() {
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -1033,6 +1045,15 @@
         window.removeEventListener("resize", resize);
         return;
       }
+      // "Avoid empty spaces" tuning -- see the watchdog block below (and
+      // its escape-boost application right after zoom is computed) for
+      // how these are used together.
+      const FLAT_SCORE_THRESHOLD = 15;
+      const FLAT_TOLERANCE_MS = 1500; // how long a flat reading must persist before the first response (the dive)
+      const ZOOM_DIVE_RAMP_MS = 1800; // duration of the dive's smooth zoom-in bump
+      const ZOOM_DIVE_BOOST_MAX = 3; // peak multiplier added on top of 1x, i.e. up to 4x zoom at the peak of the bump
+      const FALLBACK_TRIGGER_MS = ZOOM_DIVE_RAMP_MS + 500; // grace period after the dive to see if it resolved things
+      const FALLBACK_BLEND_MS = 2500; // shorter than an earlier 5000ms version -- see the block below for why
       let zoom;
       let maxIter = 120;
       if (fractalSettings.ogMode) {
@@ -1079,6 +1100,20 @@
 
         if (fractalSettings.growthEnabled) maxIter = 100 + pulse * 50;
       }
+      // Escape-dive zoom boost, applied every frame (not just on the
+      // periodic check below) so it renders as one continuous smooth
+      // zoom-in rather than a step -- see the watchdog block below for
+      // what starts/stops escapeBoostStart. A temporary multiplicative
+      // bump on top of the cycle's own zoom, using the SAME c/center
+      // (no blend, no new unvalidated path) -- "inject a layer lower":
+      // a fractal boundary has detail at every scale near any point
+      // that scored well at all, so a flat reading at this exact instant
+      // usually just means we're passing through a locally smooth patch
+      // at this particular zoom, not that the candidate itself is bad.
+      if (fractalSettings.avoidEmptySpaces && !fractalSettings.ogMode && escapeBoostStart !== null) {
+        const escapeT = Math.min(1, (now - escapeBoostStart) / ZOOM_DIVE_RAMP_MS);
+        zoom *= 1 + ZOOM_DIVE_BOOST_MAX * Math.sin(escapeT * Math.PI);
+      }
       // Read live every frame (not captured once) so dragging the
       // "Fractal shape" slider takes effect immediately -- OG Fractal
       // always renders (and, via scoringPower in injectFromImage, always
@@ -1096,37 +1131,57 @@
         y: centerFrom.y + (centerTarget.y - centerFrom.y) * blend,
       };
 
-      // Flatness watchdog (Smooth mode only -- OG Fractal is untouched,
-      // per its verbatim invariant): a candidate is validated only *at
-      // the target* injectFromImage picked -- the straight-line blend
-      // path between two individually-good c/center values isn't itself
-      // validated, and complex parameter space isn't convex, so that
-      // path can still cut through flat/boring territory even between
-      // two good endpoints. A better-scored target (MIN_SCORE above)
-      // doesn't help while still mid-blend toward it. Checked
-      // periodically (not every frame -- real cost) against whatever's
-      // actually on screen right now, at the current zoom; if it reads
-      // flat for too long, forces an early re-injection instead of
-      // waiting out the rest of the scheduled cycle -- this is what
-      // actually bounds how long a flat/flashing stretch can last. The
-      // blend itself is deliberately slow (WATCHDOG_REINJECT_BLEND_MS,
-      // separate from the power slider's own snappy 1200ms reinject --
-      // that one wants immediate feedback for a manual drag, this one
-      // wants to read as the fractal continuing to melt into its next
-      // subject rather than visibly snapping/resetting).
-      if (!fractalSettings.ogMode) {
+      // "Avoid empty spaces" watchdog (Smooth mode only -- OG Fractal is
+      // untouched, per its verbatim invariant; also off entirely if the
+      // user unchecks the panel toggle, since some genuinely like the
+      // raw effect). A candidate is validated only *at the target*
+      // injectFromImage picked -- the path to get there (or the current
+      // cycle's own zoom sweep through it) isn't itself validated, and
+      // complex parameter space isn't convex, so even a good candidate
+      // can pass through flat/boring territory. Checked periodically
+      // (not every frame -- real cost) against whatever's actually on
+      // screen right now.
+      //
+      // First version of this watchdog just re-blended straight to a
+      // brand new c/center on any sustained flat reading, and (after
+      // user feedback that the correction itself looked "too snappy")
+      // was slowed to a 5000ms blend for smoothness -- which backfired:
+      // a real recording showed ~12s of continuous flat/empty screen,
+      // because that blend path was *also* never validated, so a longer
+      // blend just meant more time possibly still transiting flat
+      // territory before landing on the new target. Replaced with a
+      // two-tier response, matching two ideas from that same feedback:
+      //   1. First, a fast zoom-DIVE on the *current* candidate ("inject
+      //      a layer lower") -- cheap and safe, since c/center never
+      //      change, so there's no new unvalidated path at all. A
+      //      fractal boundary has detail at every scale near any point
+      //      that scored well to begin with, so a flat reading at this
+      //      exact zoom usually just means this instant is a locally
+      //      smooth patch, not that the candidate itself is bad.
+      //   2. Only if the dive alone doesn't resolve it within
+      //      FALLBACK_TRIGGER_MS, fall back to a real re-injection
+      //      ("redirect... smoothly") -- FALLBACK_BLEND_MS is
+      //      deliberately shorter than the old 5000ms, for the same
+      //      "shorter blend, less exposure to the unvalidated path"
+      //      reasoning above.
+      if (fractalSettings.avoidEmptySpaces && !fractalSettings.ogMode) {
         if (now - lastFlatCheck > 500) {
           lastFlatCheck = now;
           const liveScore = scoreJuliaView(cCurrent.x, cCurrent.y, centerCurrent.x, centerCurrent.y, power, [zoom], window.innerWidth / window.innerHeight);
-          if (liveScore < 15) {
+          if (liveScore < FLAT_SCORE_THRESHOLD) {
             if (flatSince === null) flatSince = now;
-            else if (now - flatSince > 2500) {
-              const WATCHDOG_REINJECT_BLEND_MS = 5000;
-              injectFromImage(now, WATCHDOG_REINJECT_BLEND_MS);
+            if (escapeBoostStart === null && now - flatSince > FLAT_TOLERANCE_MS) {
+              escapeBoostStart = now;
+            } else if (escapeBoostStart !== null && now - escapeBoostStart > FALLBACK_TRIGGER_MS) {
+              injectFromImage(now, FALLBACK_BLEND_MS);
+              escapeBoostStart = null;
               flatSince = null;
             }
           } else {
+            // Resolved -- by the dive, the natural cycle, or the initial
+            // reading never having been flat to begin with.
             flatSince = null;
+            escapeBoostStart = null;
           }
         }
       }
