@@ -371,7 +371,7 @@
   // site to inject it automatically). One commit behind true HEAD is
   // expected: the commit that bumps this string can't know its own hash
   // in advance, so it always reflects the *previous* push.
-  const FRACTAL_VERSION = "v039a743";
+  const FRACTAL_VERSION = "v69119df";
 
   // Per-visitor settings. ogMode is read by both dive styles; every
   // other key here only affects Smooth mode (see frame() below) -- OG
