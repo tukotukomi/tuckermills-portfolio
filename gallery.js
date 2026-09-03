@@ -1005,7 +1005,10 @@
     }
     activeReinject = injectFromImage;
 
-    const startTime = performance.now();
+    // let, not const: the "Avoid empty spaces" watchdog's fallback tier
+    // fast-forwards this to skip ahead to the next cycle rather than
+    // doing a side-channel re-injection -- see that block in frame().
+    let startTime = performance.now();
     injectFromImage(startTime);
     // The hardcoded {0.3, 0.4} default above isn't photo-derived or
     // scored -- it's just a starting point for cFrom/centerFrom to blend
@@ -1052,8 +1055,7 @@
       const FLAT_TOLERANCE_MS = 1500; // how long a flat reading must persist before the first response (the dive)
       const ZOOM_DIVE_RAMP_MS = 1800; // duration of the dive's smooth zoom-in bump
       const ZOOM_DIVE_BOOST_MAX = 3; // peak multiplier added on top of 1x, i.e. up to 4x zoom at the peak of the bump
-      const FALLBACK_TRIGGER_MS = ZOOM_DIVE_RAMP_MS + 500; // grace period after the dive to see if it resolved things
-      const FALLBACK_BLEND_MS = 2500; // shorter than an earlier 5000ms version -- see the block below for why
+      const SKIP_TRIGGER_MS = ZOOM_DIVE_RAMP_MS + 500; // grace period after the dive to see if it resolved things, before skipping to the next cycle
       let zoom;
       let maxIter = 120;
       if (fractalSettings.ogMode) {
@@ -1149,8 +1151,8 @@
       // a real recording showed ~12s of continuous flat/empty screen,
       // because that blend path was *also* never validated, so a longer
       // blend just meant more time possibly still transiting flat
-      // territory before landing on the new target. Replaced with a
-      // two-tier response, matching two ideas from that same feedback:
+      // territory before landing on the new target. Two-tier response
+      // now, matching two ideas from that same feedback:
       //   1. First, a fast zoom-DIVE on the *current* candidate ("inject
       //      a layer lower") -- cheap and safe, since c/center never
       //      change, so there's no new unvalidated path at all. A
@@ -1159,11 +1161,23 @@
       //      exact zoom usually just means this instant is a locally
       //      smooth patch, not that the candidate itself is bad.
       //   2. Only if the dive alone doesn't resolve it within
-      //      FALLBACK_TRIGGER_MS, fall back to a real re-injection
-      //      ("redirect... smoothly") -- FALLBACK_BLEND_MS is
-      //      deliberately shorter than the old 5000ms, for the same
-      //      "shorter blend, less exposure to the unvalidated path"
-      //      reasoning above.
+      //      SKIP_TRIGGER_MS, "skip ahead to the next cycle" (user's own
+      //      framing, after that version's own follow-up complaint) --
+      //      fast-forwards startTime so the ordinary wrap-detection
+      //      right above fires on the next frame, reusing the exact
+      //      same injection/blend mechanism every normal cycle
+      //      transition already uses instead of a bespoke side-channel
+      //      injectFromImage() call. That direct call was the actual bug
+      //      the user caught: it changed c/center on its own short
+      //      timer while zoom kept climbing on its own unrelated
+      //      cycle-length timer, and since flatness tends to strike near
+      //      a wrap (zoom already low), the result often looked exactly
+      //      like the whole dive restarting from scratch -- and the new
+      //      target, drawn from the very same heuristic that produced
+      //      the flat one, could just as easily land flat again.
+      //      Advancing the shared clock keeps c/center and zoom
+      //      perfectly in sync, the same as every other transition,
+      //      rather than layering on a second, disjointed one.
       if (fractalSettings.avoidEmptySpaces && !fractalSettings.ogMode) {
         if (now - lastFlatCheck > 500) {
           lastFlatCheck = now;
@@ -1172,8 +1186,8 @@
             if (flatSince === null) flatSince = now;
             if (escapeBoostStart === null && now - flatSince > FLAT_TOLERANCE_MS) {
               escapeBoostStart = now;
-            } else if (escapeBoostStart !== null && now - escapeBoostStart > FALLBACK_TRIGGER_MS) {
-              injectFromImage(now, FALLBACK_BLEND_MS);
+            } else if (escapeBoostStart !== null && now - escapeBoostStart > SKIP_TRIGGER_MS) {
+              startTime = now;
               escapeBoostStart = null;
               flatSince = null;
             }
