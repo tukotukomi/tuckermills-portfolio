@@ -169,57 +169,41 @@
   // photo, warped in time with the music. There's no way to read the
   // actual audio playing in Bandcamp's cross-origin iframe -- no exposed
   // API, and Web Audio can't analyze a media element outside its own
-  // document -- so where a track has a precomputed waveform (see
-  // PLAYLIST.waveform in music-player.js, generated offline from a
-  // legitimately owned copy), the warp intensity is driven by that
-  // track's real amplitude-over-time data; tracks without one fall back
-  // to a beat pulse timed to the hand-noted BPM. Either way this is
-  // driven from elapsed time since the visualizer opened, not the
-  // visitor's actual position in the track -- Bandcamp exposes no
-  // playback-position readout either, so there's no way to know where
-  // they actually are. The warp itself is a native SVG filter
-  // (feTurbulence + feDisplacementMap), animated by rewriting its scale
-  // each frame -- no canvas, no libraries.
+  // document -- so the warp is driven entirely by opt-in live audio
+  // input (see enableLiveAudio/computePulse below): a visitor with a
+  // loopback/virtual-cable device selected can feed their actual system/
+  // Bandcamp playback audio in, same as the fractal. No live audio means
+  // no reactivity -- this used to fall back to a precomputed waveform or
+  // a hand-noted BPM pulse, both removed in favor of "only ever reacts
+  // to audio actually being heard, nothing guessed or precomputed." The
+  // warp itself is a native SVG filter (feTurbulence + feDisplacementMap),
+  // animated by rewriting its scale each frame -- no canvas, no libraries.
   let visualizerEl = null;
   let visualizerImgEl = null;
   let visualizerDisplacementEl = null;
   let visualizerTurbulenceEl = null;
   let visualizerRAF = null;
-  const waveformCache = {};
   // How long one "descend into finer fractal detail, then reset" cycle
   // takes -- independent of and layered on top of the audio-driven pulse
-  // above, so the two rhythms don't lock to each other.
+  // below, so the two rhythms don't lock to each other. Runs regardless
+  // of whether live audio is active, so the view is never fully static.
   const FRACTAL_CYCLE_MS = 10000;
 
-  function loadWaveform(url) {
-    if (!url) return null;
-    if (!(url in waveformCache)) {
-      waveformCache[url] = null; // marks "fetch in flight" so we don't refetch
-      fetch(url)
-        .then((r) => r.json())
-        .then((data) => {
-          waveformCache[url] = data;
-        })
-        .catch(() => {
-          delete waveformCache[url];
-        });
-    }
-    return waveformCache[url] || null;
-  }
-
-  // Optional real-time alternative to the waveform/BPM pulse below --
-  // opt-in only, via a checkbox in the fractal's settings panel (see
-  // buildFractal), since it needs microphone permission. Deliberately
-  // NOT persisted to fractalSettings/localStorage: this always starts
-  // back at "off" on every fresh open of the fractal view, never a
-  // silent re-prompt. A visitor with a loopback/virtual-cable input
-  // device selected (Stereo Mix, VB-Cable, BlackHole, etc.) can feed
-  // their actual system/Bandcamp playback audio in this way -- the
-  // browser has no way to tell "real microphone" apart from "virtual
-  // cable pretending to be one," so this works with headphones plugged
-  // in without ever touching Bandcamp's stream directly. Wired into
-  // computePulse itself (below) rather than duplicated per-visualizer,
-  // so both the fractal and the noise-warp visualizer benefit.
+  // The sole source of computePulse's reactivity below -- opt-in only,
+  // via a "Live audio input" checkbox (see wireLiveAudioControls, shared
+  // by both the fractal's and the noise-warp visualizer's settings
+  // panels), since it needs microphone permission. Deliberately NOT
+  // persisted to fractalSettings/localStorage: this always starts back
+  // at "off" on every fresh open of either view, never a silent
+  // re-prompt. A visitor with a loopback/virtual-cable input device
+  // selected (Stereo Mix, VB-Cable, BlackHole, etc.) can feed their
+  // actual system/Bandcamp playback audio in this way -- the browser has
+  // no way to tell "real microphone" apart from "virtual cable
+  // pretending to be one," so this works with headphones plugged in
+  // without ever touching Bandcamp's stream directly. There is
+  // deliberately no other source of reactivity (no precomputed waveform,
+  // no BPM-timed guess) -- both visualizers sit inert/idle rather than
+  // fake a reaction to audio that was never actually heard.
   let liveAudioContext = null;
   let liveAudioAnalyser = null;
   let liveAudioDataArray = null;
@@ -273,31 +257,103 @@
     liveAudioDataArray = null;
   }
 
-  // Shared by both visualizers: a single 0-1 "how loud/energetic right
-  // now" value -- live microphone/loopback input when the visitor has
-  // opted in (readLiveAudioPulse above), otherwise the track's real
-  // waveform where one's available (see loadWaveform above), or a
-  // BPM-timed pulse as the last resort. Elapsed time since the
-  // visualizer opened, not the visitor's actual position in the track --
-  // see the file-level comment above openVisualizer.
-  function computePulse(elapsedSec, waveformUrl, player) {
-    const live = readLiveAudioPulse();
-    if (live !== null) return live;
-    const waveform = waveformUrl && loadWaveform(waveformUrl);
-    if (waveform) {
-      const index = Math.floor((elapsedSec % waveform.duration) / waveform.step);
-      const value = waveform.amplitude[Math.min(index, waveform.amplitude.length - 1)];
-      // Guards against ever feeding a bad value (a malformed/truncated
-      // waveform, an out-of-range index) into a CSS/SVG attribute
-      // downstream, which -- unlike a plain JS NaN -- the browser logs
-      // as a console error rather than silently coercing.
-      if (typeof value === "number" && !Number.isNaN(value)) return value;
+  // Wires a "Live audio input" checkbox + device <select> + status text
+  // inside `panel` (expects the same four data-hooks buildFractal's own
+  // markup uses: [data-toggle="liveAudio"], .fractal-controls-audio-
+  // device, [data-audio-device], [data-audio-status]) to enableLiveAudio/
+  // disableLiveAudio above. Shared between the fractal's settings panel
+  // and the noise-warp visualizer's own -- this is the only source of
+  // reactivity for either view now (see the comment above
+  // liveAudioContext), so both need it, and writing/fixing this device-
+  // enumeration/disconnect/mid-session-switch logic in one place beats
+  // maintaining two copies. Deliberately kept out of fractalSettings/
+  // localStorage (same comment) -- always starts unchecked, in either
+  // panel, on every fresh open.
+  function wireLiveAudioControls(panel) {
+    const liveAudioToggle = panel.querySelector('[data-toggle="liveAudio"]');
+    const audioDeviceRow = panel.querySelector(".fractal-controls-audio-device");
+    const audioDeviceSelect = panel.querySelector("[data-audio-device]");
+    const audioStatusEl = panel.querySelector("[data-audio-status]");
+
+    function populateAudioDeviceOptions() {
+      return navigator.mediaDevices.enumerateDevices().then((devices) => {
+        audioDeviceSelect.textContent = "";
+        devices
+          .filter((d) => d.kind === "audioinput")
+          .forEach((d, i) => {
+            const opt = document.createElement("option");
+            opt.value = d.deviceId;
+            opt.textContent = d.label || "Microphone " + (i + 1);
+            audioDeviceSelect.appendChild(opt);
+          });
+        // enableLiveAudio(null) (the checkbox's first-ever grant) picks
+        // whatever the browser considers its default device, which isn't
+        // necessarily this list's first entry -- read back which track
+        // actually got used and select that option to match.
+        if (liveAudioStream) {
+          const track = liveAudioStream.getAudioTracks()[0];
+          const settings = track && track.getSettings && track.getSettings();
+          if (settings && settings.deviceId) audioDeviceSelect.value = settings.deviceId;
+        }
+      });
     }
-    const bpm = (player && player.getCurrentBPM()) || 120;
-    const beatPhase = (elapsedSec % (60 / bpm)) / (60 / bpm);
-    // Squared sine: a sharper rise-and-fall per beat than a plain sine,
-    // reading more like a pulse than a slow wobble.
-    return Math.sin(beatPhase * Math.PI) ** 2;
+
+    function handleAudioDisconnect() {
+      liveAudioToggle.checked = false;
+      audioDeviceRow.hidden = true;
+      audioStatusEl.textContent = "Input device disconnected.";
+    }
+
+    const audioSupported = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+    if (!audioSupported) {
+      liveAudioToggle.disabled = true;
+      return;
+    }
+    liveAudioToggle.addEventListener("change", (e) => {
+      if (e.target.checked) {
+        audioDeviceRow.hidden = false;
+        audioStatusEl.textContent = "Requesting microphone access…";
+        enableLiveAudio(audioDeviceSelect.value || null, handleAudioDisconnect)
+          .then(populateAudioDeviceOptions)
+          .then(() => {
+            const label = audioDeviceSelect.selectedOptions[0];
+            audioStatusEl.textContent = "Listening" + (label ? " on " + label.textContent : "") + ".";
+          })
+          .catch(() => {
+            disableLiveAudio();
+            liveAudioToggle.checked = false;
+            audioDeviceRow.hidden = true;
+            audioStatusEl.textContent = "Microphone access denied or unavailable.";
+          });
+      } else {
+        disableLiveAudio();
+        audioDeviceRow.hidden = true;
+        audioStatusEl.textContent = "";
+      }
+    });
+
+    audioDeviceSelect.addEventListener("change", () => {
+      if (!liveAudioToggle.checked) return;
+      audioStatusEl.textContent = "Switching input…";
+      enableLiveAudio(audioDeviceSelect.value, handleAudioDisconnect)
+        .then(() => {
+          audioStatusEl.textContent = "Listening on " + audioDeviceSelect.selectedOptions[0].textContent + ".";
+        })
+        .catch(() => {
+          audioStatusEl.textContent = "Couldn't switch to that device.";
+        });
+    });
+  }
+
+  // Shared by both visualizers: a single 0-1 "how loud/energetic right
+  // now" value. Live audio input only (see the comment above) -- 0
+  // (no reactivity at all) whenever it isn't active, rather than
+  // guessing from a precomputed waveform or a hand-noted BPM the way
+  // this used to. Every caller already treats 0 as a sane, fully
+  // idle/baseline pulse (no zoom boost, no warp displacement, etc.), so
+  // this needed no downstream changes beyond removing the fallbacks.
+  function computePulse() {
+    return readLiveAudioPulse() || 0;
   }
 
   function buildVisualizer() {
@@ -311,9 +367,31 @@
       "</filter>" +
       "</svg>" +
       '<img class="image-visualizer-img" alt="">' +
-      '<button type="button" class="image-visualizer-close" aria-label="Close visualizer">&times;</button>';
+      '<button type="button" class="image-visualizer-close" aria-label="Close visualizer">&times;</button>' +
+      '<button type="button" class="image-visualizer-settings-toggle" aria-label="Visualizer settings">' +
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="22px" height="22px" fill="none" ' +
+      'stroke="#e3e3e3" stroke-width="2" stroke-linecap="round">' +
+      '<line x1="4" y1="6" x2="20" y2="6"/><circle cx="9" cy="6" r="2" fill="#e3e3e3" stroke="none"/>' +
+      '<line x1="4" y1="12" x2="20" y2="12"/><circle cx="16" cy="12" r="2" fill="#e3e3e3" stroke="none"/>' +
+      '<line x1="4" y1="18" x2="20" y2="18"/><circle cx="11" cy="18" r="2" fill="#e3e3e3" stroke="none"/>' +
+      "</svg>" +
+      "</button>" +
+      '<div class="visualizer-controls">' +
+      '<div class="fractal-controls-row fractal-controls-toggle-row">' +
+      '<label><input type="checkbox" data-toggle="liveAudio"> Live audio input</label>' +
+      "</div>" +
+      '<div class="fractal-controls-row fractal-controls-audio-device" hidden>' +
+      '<label>Input device</label>' +
+      '<select class="fractal-controls-select" data-audio-device></select>' +
+      '<p class="fractal-controls-audio-status" data-audio-status></p>' +
+      "</div>" +
+      "</div>";
     document.body.appendChild(el);
     el.querySelector(".image-visualizer-close").addEventListener("click", closeVisualizer);
+    const settingsToggle = el.querySelector(".image-visualizer-settings-toggle");
+    const panel = el.querySelector(".visualizer-controls");
+    settingsToggle.addEventListener("click", () => panel.classList.toggle("is-open"));
+    wireLiveAudioControls(panel);
     return el;
   }
 
@@ -331,10 +409,6 @@
     visualizerImgEl.src = lightboxItems[lightboxIndex].src;
     visualizerEl.classList.add("is-open");
     if (visualizerEl.requestFullscreen) visualizerEl.requestFullscreen().catch(() => {});
-
-    const player = window.tuckerMillsMusicPlayer;
-    const waveformUrl = player && player.getCurrentWaveformUrl();
-    if (waveformUrl) loadWaveform(waveformUrl); // kick off the fetch now, before frame() first needs it
 
     // Re-seeded on open and on every cycle reset below, so the noise
     // pattern -- and so the exact shape of the warp -- differs each time,
@@ -362,7 +436,7 @@
       visualizerTurbulenceEl.setAttribute("baseFrequency", `${freq.toFixed(4)} ${(freq * 1.5).toFixed(4)}`);
       visualizerTurbulenceEl.setAttribute("numOctaves", String(1 + Math.floor(cyclePhase * 4)));
 
-      const pulse = computePulse(elapsedSec, waveformUrl, player);
+      const pulse = computePulse();
 
       visualizerDisplacementEl.setAttribute("scale", (pulse * 45).toFixed(1));
       visualizerImgEl.style.transform = `scale(${(1 + pulse * 0.06).toFixed(3)})`;
@@ -378,6 +452,17 @@
     visualizerEl.classList.remove("is-open");
     cancelAnimationFrame(visualizerRAF);
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    // Same cleanup as closeFractal's own -- no stray mic indicator
+    // lingering after the visitor leaves, and the panel (reused verbatim
+    // on the next open) shouldn't show "on" for a stream that no longer
+    // exists.
+    disableLiveAudio();
+    const liveAudioToggle = visualizerEl.querySelector('[data-toggle="liveAudio"]');
+    if (liveAudioToggle) liveAudioToggle.checked = false;
+    const audioDeviceRow = visualizerEl.querySelector(".fractal-controls-audio-device");
+    if (audioDeviceRow) audioDeviceRow.hidden = true;
+    const audioStatusEl = visualizerEl.querySelector("[data-audio-status]");
+    if (audioStatusEl) audioStatusEl.textContent = "";
   }
 
   // Covers the case where the visitor exits fullscreen through the
@@ -411,7 +496,7 @@
   // site to inject it automatically). One commit behind true HEAD is
   // expected: the commit that bumps this string can't know its own hash
   // in advance, so it always reflects the *previous* push.
-  const FRACTAL_VERSION = "v6bb27b1";
+  const FRACTAL_VERSION = "vc9ec491";
 
   // Per-visitor settings. ogMode is read by both dive styles; every
   // other key here only affects Smooth mode (see frame() below) -- OG
@@ -1024,83 +1109,7 @@
       });
     });
 
-    // Live audio input: deliberately kept out of fractalSettings/
-    // localStorage (see the comment above enableLiveAudio) -- always
-    // starts unchecked here, wired up manually rather than through the
-    // generic toggle loop above.
-    const liveAudioToggle = panel.querySelector('[data-toggle="liveAudio"]');
-    const audioDeviceRow = panel.querySelector(".fractal-controls-audio-device");
-    const audioDeviceSelect = panel.querySelector("[data-audio-device]");
-    const audioStatusEl = panel.querySelector("[data-audio-status]");
-
-    function populateAudioDeviceOptions() {
-      return navigator.mediaDevices.enumerateDevices().then((devices) => {
-        audioDeviceSelect.textContent = "";
-        devices
-          .filter((d) => d.kind === "audioinput")
-          .forEach((d, i) => {
-            const opt = document.createElement("option");
-            opt.value = d.deviceId;
-            opt.textContent = d.label || "Microphone " + (i + 1);
-            audioDeviceSelect.appendChild(opt);
-          });
-        // enableLiveAudio(null) (the checkbox's first-ever grant) picks
-        // whatever the browser considers its default device, which isn't
-        // necessarily this list's first entry -- read back which track
-        // actually got used and select that option to match.
-        if (liveAudioStream) {
-          const track = liveAudioStream.getAudioTracks()[0];
-          const settings = track && track.getSettings && track.getSettings();
-          if (settings && settings.deviceId) audioDeviceSelect.value = settings.deviceId;
-        }
-      });
-    }
-
-    function handleAudioDisconnect() {
-      liveAudioToggle.checked = false;
-      audioDeviceRow.hidden = true;
-      audioStatusEl.textContent = "Input device disconnected.";
-    }
-
-    const audioSupported = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
-    if (!audioSupported) {
-      liveAudioToggle.disabled = true;
-    } else {
-      liveAudioToggle.addEventListener("change", (e) => {
-        if (e.target.checked) {
-          audioDeviceRow.hidden = false;
-          audioStatusEl.textContent = "Requesting microphone access…";
-          enableLiveAudio(audioDeviceSelect.value || null, handleAudioDisconnect)
-            .then(populateAudioDeviceOptions)
-            .then(() => {
-              const label = audioDeviceSelect.selectedOptions[0];
-              audioStatusEl.textContent = "Listening" + (label ? " on " + label.textContent : "") + ".";
-            })
-            .catch(() => {
-              disableLiveAudio();
-              liveAudioToggle.checked = false;
-              audioDeviceRow.hidden = true;
-              audioStatusEl.textContent = "Microphone access denied or unavailable.";
-            });
-        } else {
-          disableLiveAudio();
-          audioDeviceRow.hidden = true;
-          audioStatusEl.textContent = "";
-        }
-      });
-
-      audioDeviceSelect.addEventListener("change", () => {
-        if (!liveAudioToggle.checked) return;
-        audioStatusEl.textContent = "Switching input…";
-        enableLiveAudio(audioDeviceSelect.value, handleAudioDisconnect)
-          .then(() => {
-            audioStatusEl.textContent = "Listening on " + audioDeviceSelect.selectedOptions[0].textContent + ".";
-          })
-          .catch(() => {
-            audioStatusEl.textContent = "Couldn't switch to that device.";
-          });
-      });
-    }
+    wireLiveAudioControls(panel);
 
     el.querySelector(".image-fractal-close").addEventListener("click", closeFractal);
 
@@ -1296,9 +1305,6 @@
     }
 
     const gl = fractalGl;
-    const player = window.tuckerMillsMusicPlayer;
-    const waveformUrl = player && player.getCurrentWaveformUrl();
-    if (waveformUrl) loadWaveform(waveformUrl); // kick off the fetch now, before frame() first needs it
     const sourceImg = downscaleForTexture(lightboxImgEl, TEXTURE_MAX_DIM);
     fractalSamplePixel = buildPixelSampler(sourceImg);
     gl.bindTexture(gl.TEXTURE_2D, fractalTexture);
@@ -1687,8 +1693,7 @@
         // keeps the blend path itself validated enough to make a long,
         // continuous drift viable again.
         const cycleDurationMs = fractalSettings.cycleDurationSec * 1000;
-        const elapsedSec = (now - startTime) / 1000;
-        const pulse = computePulse(elapsedSec, waveformUrl, player);
+        const pulse = computePulse();
 
         const cyclePhase = ((now - startTime) % cycleDurationMs) / cycleDurationMs;
         if (cyclePhase < lastCyclePhase) injectFromImage(now, cycleDurationMs * 0.98);

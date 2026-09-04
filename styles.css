@@ -707,6 +707,59 @@ body.lightbox-open {
   background: rgba(255, 255, 255, 0.2);
 }
 
+/* Same 44x44 circle-button + slide-up-glass-sheet language as the
+   fractal's own settings gear/.fractal-controls (see below) -- copied
+   rather than shared, matching this file's existing convention of
+   keeping each surface's own classes separate even where the visual
+   pattern is identical. Holds just the "Live audio input" row (see
+   wireLiveAudioControls in gallery.js), reused verbatim from the
+   fractal's markup since it's the exact same control, just living in a
+   different overlay. */
+.image-visualizer-settings-toggle {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  z-index: 1;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.image-visualizer-settings-toggle:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.visualizer-controls {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  max-height: 75vh;
+  overflow-y: auto;
+  background: rgba(20, 20, 20, 0.78);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 20px 20px 0 0;
+  padding: 20px 24px calc(20px + env(safe-area-inset-bottom, 0px));
+  transform: translateY(100%);
+  transition: transform 0.3s ease;
+}
+
+.visualizer-controls.is-open {
+  transform: translateY(0);
+}
+
 /* Fullscreen WebGL "Mandelbrot zoom" view -- same shell pattern as
    .image-visualizer above (fixed, fades in/out, sits at the same
    z-index tier), but its content is a <canvas> instead of an <img>+SVG
@@ -888,6 +941,19 @@ body.lightbox-open {
   color: #fff;
   padding: 8px 10px;
   font-size: 0.85rem;
+}
+
+/* The <select>'s own closed-state text stays white (readable against
+   its own translucent-dark background above), but its dropdown list of
+   <option>s renders using the browser's native popup chrome -- almost
+   always a plain white/light background regardless of the select's own
+   styling -- so white option text was invisible until a hover state
+   (the browser's own highlight color) happened to add enough contrast.
+   Pinning both colors on the options themselves fixes this regardless
+   of the native popup's actual background. */
+.fractal-controls-select option {
+  color: #1a1a1a;
+  background: #fff;
 }
 
 .fractal-controls-audio-status {
