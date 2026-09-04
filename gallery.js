@@ -411,7 +411,7 @@
   // site to inject it automatically). One commit behind true HEAD is
   // expected: the commit that bumps this string can't know its own hash
   // in advance, so it always reflects the *previous* push.
-  const FRACTAL_VERSION = "vca91e6f";
+  const FRACTAL_VERSION = "v6bb27b1";
 
   // Per-visitor settings. ogMode is read by both dive styles; every
   // other key here only affects Smooth mode (see frame() below) -- OG
@@ -459,6 +459,13 @@
     imageQueue: [],
     shuffleEnabled: false,
     shuffleTimerSec: 30,
+    // Randomizer (Fractalize Studio's settings panel) -- periodically
+    // rerolls Fractal shape/Background saturation/Zoom depth/Cycle
+    // duration to random values within their own slider ranges. Same
+    // timer-interval pattern as the camera roll's shuffle, see
+    // startRandomizerTimer in buildFractal.
+    randomizerEnabled: false,
+    randomizerTimerSec: 30,
   };
   const FRACTAL_SETTINGS_KEY = "tuckerMillsFractalSettings";
   // Pill choices for the camera roll's shuffle timer -- deliberately not
@@ -670,6 +677,12 @@
   let cameraRollRefreshBadges = null;
   let cameraRollStartShuffleTimer = null;
   let cameraRollStopShuffleTimer = null;
+  // Same pattern as the camera-roll hooks above, for the settings
+  // panel's own Randomizer -- also built once inside buildFractal, so
+  // openFractal/closeFractal can start/stop its timer without reaching
+  // into buildFractal's closure directly.
+  let settingsPanelStartRandomizerTimer = null;
+  let settingsPanelStopRandomizerTimer = null;
 
   function compileShader(gl, type, source) {
     const shader = gl.createShader(type);
@@ -714,6 +727,15 @@
       '<div class="fractal-cameraroll-grid" data-cameraroll-grid></div>' +
       "</div>" +
       '<div class="fractal-controls">' +
+      '<div class="fractal-controls-randomizer">' +
+      '<label class="fractal-controls-randomizer-toggle"><input type="checkbox" data-toggle="randomizerEnabled"> Randomizer</label>' +
+      '<div class="fractal-controls-randomizer-timer" data-randomizer-timer role="group" aria-label="Randomizer timer">' +
+      SHUFFLE_TIMER_OPTIONS.map(
+        (opt) => '<button type="button" class="fractal-controls-randomizer-pill" data-randomizer-sec="' + opt.sec + '">' + opt.label + "</button>"
+      ).join("") +
+      '<button type="button" class="fractal-controls-randomize-now" data-randomize-now>RANDOMIZE NOW</button>' +
+      "</div>" +
+      "</div>" +
       '<div class="fractal-controls-row"><label>Music reactivity <span class="fractal-controls-value" data-value-for="musicReactivityPct"></span></label>' +
       '<input type="range" data-setting="musicReactivityPct" min="0" max="100" step="5"></div>' +
       '<div class="fractal-controls-row fractal-controls-toggle-row">' +
@@ -918,6 +940,80 @@
     panel.querySelector('[data-setting="fractalPower"]').addEventListener("input", () => {
       if (activeReinject) activeReinject(performance.now(), 1200);
     });
+
+    // Randomizer: periodically (or on demand, via RANDOMIZE NOW) rerolls
+    // the four sliders above to random values within their own existing
+    // min/max/step -- reading those straight off each <input> rather
+    // than duplicating the ranges here, so a future slider-range tweak
+    // can't silently drift out of sync with what Randomizer picks from.
+    const RANDOMIZABLE_KEYS = ["fractalPower", "bgSaturationPct", "zoomDepth", "cycleDurationSec"];
+    function randomizeFractalSettings() {
+      RANDOMIZABLE_KEYS.forEach((key) => {
+        const input = panel.querySelector('[data-setting="' + key + '"]');
+        const valueEl = panel.querySelector('[data-value-for="' + key + '"]');
+        const min = Number(input.min);
+        const max = Number(input.max);
+        const step = Number(input.step);
+        const steps = Math.round((max - min) / step);
+        const value = min + Math.round(Math.random() * steps) * step;
+        fractalSettings[key] = value;
+        input.value = value;
+        valueEl.textContent = FRACTAL_CONTROL_FORMATS[key](value);
+      });
+      saveFractalSettings(fractalSettings);
+      // fractalPower is always among the four rerolled above, and (see
+      // its own dedicated listener just above) is the one slider whose
+      // manual drag already triggers a quick re-injection -- mirror
+      // that same responsiveness here instead of leaving a stale/
+      // possibly-flat view on screen until the next scheduled wrap.
+      if (activeReinject) activeReinject(performance.now(), 1200);
+    }
+
+    // Timer lives in this (buildFractal's own) closure, same pattern as
+    // the camera roll's own shuffle timer just above -- built once,
+    // persists across fractal opens/closes, and is a no-op whenever
+    // nothing is listening to activeReinject (i.e. the fractal is
+    // closed), since randomizeFractalSettings only ever no-ops that one
+    // call in that case.
+    let randomizerTimerHandle = null;
+    function stopRandomizerTimer() {
+      if (randomizerTimerHandle) clearInterval(randomizerTimerHandle);
+      randomizerTimerHandle = null;
+    }
+    function startRandomizerTimer() {
+      stopRandomizerTimer();
+      if (!fractalSettings.randomizerEnabled) return;
+      randomizerTimerHandle = setInterval(randomizeFractalSettings, fractalSettings.randomizerTimerSec * 1000);
+    }
+    settingsPanelStartRandomizerTimer = startRandomizerTimer;
+    settingsPanelStopRandomizerTimer = stopRandomizerTimer;
+
+    const randomizerToggle = panel.querySelector('[data-toggle="randomizerEnabled"]');
+    randomizerToggle.checked = fractalSettings.randomizerEnabled;
+    randomizerToggle.addEventListener("change", (e) => {
+      fractalSettings.randomizerEnabled = e.target.checked;
+      saveFractalSettings(fractalSettings);
+      startRandomizerTimer();
+    });
+
+    const randomizerTimerEl = panel.querySelector("[data-randomizer-timer]");
+    const randomizerPills = Array.prototype.slice.call(randomizerTimerEl.querySelectorAll(".fractal-controls-randomizer-pill"));
+    function updateRandomizerPillStates() {
+      randomizerPills.forEach((pill) => {
+        pill.classList.toggle("is-active", Number(pill.dataset.randomizerSec) === fractalSettings.randomizerTimerSec);
+      });
+    }
+    updateRandomizerPillStates();
+    randomizerPills.forEach((pill) => {
+      pill.addEventListener("click", () => {
+        fractalSettings.randomizerTimerSec = Number(pill.dataset.randomizerSec);
+        saveFractalSettings(fractalSettings);
+        updateRandomizerPillStates();
+        startRandomizerTimer();
+      });
+    });
+
+    panel.querySelector("[data-randomize-now]").addEventListener("click", randomizeFractalSettings);
 
     ["avoidEmptySpaces", "growthEnabled", "ogMode"].forEach((key) => {
       const toggle = panel.querySelector('[data-toggle="' + key + '"]');
@@ -1247,6 +1343,7 @@
     activeCurrentImageSrc = currentImageSrc;
     if (cameraRollRefreshBadges) cameraRollRefreshBadges();
     if (fractalSettings.shuffleEnabled && cameraRollStartShuffleTimer) cameraRollStartShuffleTimer();
+    if (fractalSettings.randomizerEnabled && settingsPanelStartRandomizerTimer) settingsPanelStartRandomizerTimer();
 
     let cCurrent = { x: 0.3, y: 0.4 };
     let cTarget = { x: 0.3, y: 0.4 };
@@ -1837,6 +1934,7 @@
     activeImageSwitch = null;
     activeCurrentImageSrc = null;
     if (cameraRollStopShuffleTimer) cameraRollStopShuffleTimer();
+    if (settingsPanelStopRandomizerTimer) settingsPanelStopRandomizerTimer();
     // Stop capturing the moment the view closes -- no stray mic indicator
     // lingering after the visitor leaves, and the panel (reused verbatim
     // on the next open, see buildFractal) shouldn't show "on" for a

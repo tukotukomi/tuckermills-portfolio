@@ -1012,6 +1012,96 @@ body.lightbox-open {
   border-color: #fff;
 }
 
+/* Randomizer (settings panel): exact same checkbox+timer-row style as
+   the camera roll's "Enable shuffle" above, including the border-bottom
+   separator -- copied rather than shared, matching this file's existing
+   convention of keeping each panel's own classes separate even where
+   the visual pattern is identical (see .fractal-controls-* vs.
+   .fractal-cameraroll-* throughout). */
+.fractal-controls-randomizer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 18px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.fractal-controls-randomizer-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.85);
+  cursor: pointer;
+}
+
+.fractal-controls-randomizer-toggle input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: #fff;
+  cursor: pointer;
+}
+
+.fractal-controls-randomizer-timer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.fractal-controls-randomizer-pill {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 0.78rem;
+  padding: 6px 14px;
+  cursor: pointer;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.fractal-controls-randomizer-pill:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.fractal-controls-randomizer-pill.is-active {
+  background: #fff;
+  color: #111;
+  border-color: #fff;
+}
+
+/* Deliberately NOT another pill -- always-filled and bold rather than
+   outline-until-selected, so it reads as an action to take rather than
+   one more interval choice among the pills it sits beside. */
+.fractal-controls-randomize-now {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  border: 1px solid #fff;
+  border-radius: 999px;
+  background: #fff;
+  color: #111;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 7px 16px;
+  cursor: pointer;
+  transition: background-color 0.2s ease, transform 0.1s ease;
+}
+
+.fractal-controls-randomize-now:hover {
+  background: rgba(255, 255, 255, 0.85);
+}
+
+.fractal-controls-randomize-now:active {
+  transform: scale(0.96);
+}
+
 .fractal-cameraroll-section {
   margin-bottom: 20px;
 }
