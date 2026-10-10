@@ -25,11 +25,40 @@ $mimeMap = @{
     ".jpeg" = "image/jpeg"; ".png" = "image/png"; ".ico" = "image/x-icon"
 }
 
+# Dev stand-in for the weather site's OPERA relay (weather/tools/opera-relay/
+# worker.js): /opera-relay/<key> forwards to EUMETNET's public radar bucket,
+# passing Range requests through. Same allow-list as the real Worker.
+Add-Type -AssemblyName System.Net.Http
+$http = New-Object System.Net.Http.HttpClient
+$operaBucket = "https://s3.waw3-1.cloudferro.com/openradar-24h/"
+$operaKey = '^\d{4}/\d{2}/\d{2}/OPERA/COMP/OPERA@\d{8}T\d{4}@0@DBZH\.tiff$'
+
 while ($listener.IsListening) {
     $context = $listener.GetContext()
     $req = $context.Request
     $res = $context.Response
     $path = $req.Url.LocalPath
+
+    if ($path.StartsWith("/opera-relay/")) {
+        $res.AddHeader("Access-Control-Allow-Origin", "*")
+        $key = [Uri]::UnescapeDataString($path.Substring(13))
+        if ($key -notmatch $operaKey) { $res.StatusCode = 404; $res.Close(); continue }
+        try {
+            $msg = New-Object System.Net.Http.HttpRequestMessage ([System.Net.Http.HttpMethod]::new($req.HttpMethod)), ($operaBucket + $key)
+            if ($req.Headers["Range"]) { [void]$msg.Headers.TryAddWithoutValidation("Range", $req.Headers["Range"]) }
+            $up = $http.SendAsync($msg).Result
+            $res.StatusCode = [int]$up.StatusCode
+            $res.AddHeader("Accept-Ranges", "bytes")
+            if ($up.Content.Headers.ContentRange) { $res.AddHeader("Content-Range", $up.Content.Headers.ContentRange.ToString()) }
+            $res.ContentType = "image/tiff"
+            $body = $up.Content.ReadAsByteArrayAsync().Result
+            if ($req.HttpMethod -eq "HEAD") { $res.ContentLength64 = 0 }
+            else { $res.ContentLength64 = $body.Length; $res.OutputStream.Write($body, 0, $body.Length) }
+        } catch { $res.StatusCode = 502 }
+        $res.OutputStream.Close()
+        continue
+    }
+
     if ($path -eq "/") { $path = "/index.html" }
     $rel = $path.TrimStart("/") -replace "/", "\"
     $filePath = Join-Path $root $rel
