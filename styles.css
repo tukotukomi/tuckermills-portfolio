@@ -269,6 +269,12 @@ body {
   flex-shrink: 1;
 }
 
+/* A preview image wrapped in a link takes the image's place in the row. */
+.side-project-content > a {
+  display: block;
+  flex: 0 1 480px;
+}
+
 .side-project-description {
   flex: 1 1 260px;
   min-width: 0;

@@ -32,6 +32,18 @@ while ($listener.IsListening) {
     $rel = $path.TrimStart("/") -replace "/", "\"
     $filePath = Join-Path $root $rel
 
+    # Folders with their own index.html (e.g. /weather/) are standalone
+    # sub-sites, like on GitHub Pages: redirect /weather -> /weather/ so
+    # relative asset paths resolve, then serve that folder's index.html.
+    if ((Test-Path $filePath -PathType Container) -and (Test-Path (Join-Path $filePath "index.html"))) {
+        if (-not $path.EndsWith("/")) {
+            $res.Redirect($path + "/")
+            $res.Close()
+            continue
+        }
+        $filePath = Join-Path $filePath "index.html"
+    }
+
     # SPA fallback: any path that isn't a real file (e.g. /professional)
     # serves index.html, matching router.js's client-side routing.
     if (-not (Test-Path $filePath) -or (Get-Item $filePath).PSIsContainer) {

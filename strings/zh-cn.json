@@ -18,6 +18,8 @@
   "gallery.colorsLights.title": "色彩与光影",
   "sideProjects.sharkwork.title": "Sharkwork Submarine",
   "sideProjects.sharkwork.description": "<p>Sharkwork Submarine 的灵感来自 Sharkwork 的最新专辑 <a href=\"https://sharkwork.bandcamp.com/album/aquazen\" target=\"_blank\" rel=\"noopener noreferrer\">AQUAZEN</a>。</p><p>我正在用 Unity 开发这款游戏，与我的其他工具和这个网站不同，我在开发过程中尽量减少使用 AI，目的是更深入地了解这个平台，并练习动手编程能力。</p><p>所有素材均购买自 Unity Store 或类似平台。</p><p>游戏中启发每个关卡的音乐由 Sharkwork 使用即兴现场循环（live loops）手工制作而成。想要支持他们，欢迎购买 <a href=\"https://sharkwork.bandcamp.com/album/aquazen\" target=\"_blank\" rel=\"noopener noreferrer\">AQUAZEN</a> 及其在 <a href=\"https://sharkwork.bandcamp.com/\" target=\"_blank\" rel=\"noopener noreferrer\">Bandcamp</a> 上的其他音乐，或在 <a href=\"https://open.spotify.com/artist/58Qvc4xDrmDAD7V8rKqWRW\" target=\"_blank\" rel=\"noopener noreferrer\">Spotify</a> 上收听！</p>",
+  "sideProjects.forecast.title": "Forecast Channel",
+  "sideProjects.forecast.description": "<p>Wii“天气预报频道”的现代重制版。<a href=\"/weather/\">点此体验</a>！</p><p>和原版一样，它以 NASA“蓝色弹珠”影像构成的旋转地球为核心，如今还加入了实时昼夜变化、城市灯光和卫星降水图层。当前天气、今日、明日、五日预报、区域地图、紫外线指数、洗衣指数和花粉等页面也悉数回归。</p><p>预报数据全部来自免费公开资源：NOAA 的 GFS 天气模型、美国国家气象局官方预警、NASA 影像以及哥白尼计划的花粉数据。背景音乐是在浏览器中实时合成的原创循环曲。</p>",
   "professional.summary.title": "个人简介",
   "professional.summary.body": "全球本地化专家、游戏制作人及项目经理，拥有丰富的国际化经验，曾带领多元文化团队顺利完成多个制作周期。擅长优化流程、落实最佳实践、主动识别风险并排除障碍，以打造成功的产品与体验，同时营造重视问责与诚信的工作氛围。\n\n精通中文（普通话），擅长与多元化的跨国团队合作，作为国际合作伙伴与IP相关方之间值得信赖的联络人，在保持清晰沟通、问责制、项目推进力与文化尊重的同时推动合作。",
   "professional.skills.title": "技能",
