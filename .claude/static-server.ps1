@@ -5,7 +5,9 @@
 # (the project root), so it works regardless of where the repo is
 # checked out.
 $root = Split-Path -Parent $PSScriptRoot
-$port = 5500
+# Port: $env:PORT when the launcher assigns one (Windows sometimes reserves
+# 5500), otherwise 5500.
+$port = if ($env:PORT) { [int]$env:PORT } else { 5500 }
 
 $listener = New-Object System.Net.HttpListener
 $listener.Prefixes.Add("http://127.0.0.1:$port/")
@@ -19,7 +21,7 @@ Write-Output "Serving '$root' at http://127.0.0.1:$port/"
 
 $mimeMap = @{
     ".html" = "text/html"; ".js" = "application/javascript"; ".css" = "text/css"
-    ".json" = "application/json"; ".svg" = "image/svg+xml"; ".jpg" = "image/jpeg"
+    ".json" = "application/json"; ".webmanifest" = "application/manifest+json"; ".webp" = "image/webp"; ".svg" = "image/svg+xml"; ".jpg" = "image/jpeg"
     ".jpeg" = "image/jpeg"; ".png" = "image/png"; ".ico" = "image/x-icon"
 }
 
