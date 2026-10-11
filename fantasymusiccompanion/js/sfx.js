@@ -285,7 +285,22 @@ export const Sound = {
   /** Browsers only let audio start after a click or key press: call this from one. */
   unlock() {
     const ctx = this._context();
-    if (ctx && ctx.state === 'suspended') ctx.resume();
+    // 'interrupted' is Safari's word for a context a phone call or lock screen stopped.
+    if (ctx && ctx.state !== 'running' && ctx.state !== 'closed') {
+      try { const p = ctx.resume(); if (p && p.catch) p.catch(() => { }); } catch (e) { /* not allowed yet */ }
+    }
+  },
+
+  /** 'running' when effects can be heard; otherwise why not ('suspended' until the page has been clicked, 'none' if unsupported). */
+  get state() { return this._ctx ? this._ctx.state : 'none'; },
+
+  /** True when effects can play right now. A blocked context is nudged awake so the next effect, after any user gesture, is heard. */
+  _ready() {
+    const ctx = this._context();
+    if (!ctx) return false;
+    if (ctx.state === 'running') return true;
+    this.unlock();
+    return false;
   },
 
   /** The output node effects go to, so the page can add a main-volume stage if it wants. */
@@ -328,8 +343,7 @@ export const Sound = {
   /** Plays a sound once. Repeats of the same sound within 30 ms are dropped. */
   play(name, gain) {
     if (this._volume <= 0) return;
-    const ctx = this._context();
-    if (!ctx || ctx.state !== 'running') return;
+    if (!this._ready()) return;
     const now = performance.now();
     if (now - (this._lastPlayed[name] || 0) < 30) return;
     this._lastPlayed[name] = now;
@@ -340,8 +354,8 @@ export const Sound = {
   /** One blip of dialogue "speech". */
   blip(hz, gain, soft) {
     if (this._volume <= 0) return;
-    const ctx = this._context();
-    if (!ctx || ctx.state !== 'running') return;
+    if (!this._ready()) return;
+    const ctx = this._ctx;
     hz = Math.max(60, Math.min(1800, Math.trunc(hz / 10) * 10));
     const key = hz + (soft ? 's' : 'q');
     let b = this._blips[key];

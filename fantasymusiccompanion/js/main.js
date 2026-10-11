@@ -432,7 +432,24 @@ async function main() {
       const s = prompt('Paste a progress string:');
       if (s) { scene.loadState(s.trim()); store.set('save', scene.saveState()); }
     } else if (act === 'restart') restartAdventure();
-    else if (act === 'about') $('about').showModal();
+    else if (act === 'about') { updateSoundState(); $('about').showModal(); }
+  });
+
+  // Sound effects: any gesture on the page wakes the engine (some browsers only honour a resume() made during one), and the
+  // About box can say what state it is in and play a test sound, to tell "blocked by the browser" from "muted".
+  for (const ev of ['pointerdown', 'pointerup', 'click', 'keydown', 'touchend'])
+    window.addEventListener(ev, () => { if (Sound.state !== 'running') Sound.unlock(); }, { capture: true, passive: true });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) Sound.unlock(); });
+  function updateSoundState() {
+    const s = Sound.state;
+    $('soundState').textContent = s === 'running' ? 'on (volume ' + Math.round(Sound.volume) + '%)'
+      : s === 'none' ? 'not supported by this browser'
+      : 'waiting for a click or key press (' + s + ')';
+  }
+  $('soundTest').addEventListener('click', () => {
+    Sound.unlock();
+    setTimeout(() => { Sound.play('CoinPickup'); updateSoundState(); }, 150);
+    setTimeout(updateSoundState, 600);
   });
 
   function restartAdventure() {
