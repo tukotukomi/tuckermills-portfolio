@@ -9,12 +9,12 @@ import { css } from './util.js';
 
 export const ZOOMED_SCALE = 5;
 const BLURB = {
-  mithrathief: 'Quick, quiet and always one step ahead.',
+  thief: 'Quick, quiet and always one step ahead.',
   warrior: 'A stalwart front-liner who never backs down.',
-  whitemage: 'Keeps the whole party hale and humming.',
-  blackmage: 'Fire, frost and a flair for the dramatic.',
-  moogle: 'Kupo! A lucky charm who never tires.',
-  chocobo: 'Fast, loyal and always out front.',
+  lightmage: 'Keeps the whole party hale and humming.',
+  firemage: 'A short fuse and a flair for the dramatic.',
+  fae: 'A glimmering lucky charm who never tires.',
+  paca: 'Fast, loyal and always out front.',
 };
 const FONT = '"Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif';
 const PT = 96 / 72;   // points to CSS pixels

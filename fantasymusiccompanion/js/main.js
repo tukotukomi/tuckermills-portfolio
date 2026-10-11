@@ -453,7 +453,7 @@ async function main() {
   });
 
   function restartAdventure() {
-    const typed = prompt('This resets your adventure: your party goes back to just the Chocobo, levels, gold and the compendium are cleared, and the day and season start over.\n\nType RESTART to confirm.');
+    const typed = prompt('This resets your adventure: your party goes back to just the Paca, levels, gold and the compendium are cleared, and the day and season start over.\n\nType RESTART to confirm.');
     if (typed === 'RESTART') { scene.resetProgress(); store.set('save', scene.saveState()); }
   }
 

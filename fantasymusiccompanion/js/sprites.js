@@ -2,8 +2,8 @@
 
 import { flipImage, brightenImage } from './util.js';
 
-export const PARTY = ['chocobo', 'mithrathief', 'warrior', 'whitemage', 'blackmage', 'moogle'];
-export const PARTY_NAMES = { chocobo: 'Chocobo', mithrathief: 'Mithra Thief', warrior: 'Warrior', whitemage: 'White Mage', blackmage: 'Black Mage', moogle: 'Moogle' };
+export const PARTY = ['paca', 'thief', 'warrior', 'lightmage', 'firemage', 'fae'];
+export const PARTY_NAMES = { paca: 'Paca', thief: 'Thief', warrior: 'Warrior', lightmage: 'Light Mage', firemage: 'Fire Mage', fae: 'Fae' };
 
 function load(src) {
   return new Promise((resolve, reject) => {

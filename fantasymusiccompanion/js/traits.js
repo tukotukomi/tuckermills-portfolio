@@ -5,8 +5,8 @@ import { C, CA, withAlpha, rnd } from './util.js';
 import { Sprites } from './sprites.js';
 import { Sound } from './sfx.js';
 
-export const TRAIT_OF = { chocobo: 'ItemStorage', whitemage: 'Heal', blackmage: 'Fireball', mithrathief: 'LuckyCoins', warrior: 'Huzzah', moogle: 'StarHat' };
-export const TRAIT_OWNER = { ItemStorage: 'chocobo', Heal: 'whitemage', Fireball: 'blackmage', LuckyCoins: 'mithrathief', Huzzah: 'warrior', StarHat: 'moogle' };
+export const TRAIT_OF = { paca: 'ItemStorage', lightmage: 'Heal', firemage: 'Fireball', thief: 'LuckyCoins', warrior: 'Huzzah', fae: 'StarHat' };
+export const TRAIT_OWNER = { ItemStorage: 'paca', Heal: 'lightmage', Fireball: 'firemage', LuckyCoins: 'thief', Huzzah: 'warrior', StarHat: 'fae' };
 
 export function storageSlots(level) { return 1; }
 export function healInterval(level) { return 10; }
@@ -65,7 +65,7 @@ export function installTraits(P) {
   };
 
   Object.defineProperties(m, {
-    itemStorage: { get() { return this.party.indexOf('chocobo') >= 0 ? storageSlots(this.levelOf('chocobo')) : 0; } },
+    itemStorage: { get() { return this.party.indexOf('paca') >= 0 ? storageSlots(this.levelOf('paca')) : 0; } },
     partyInspired: { get() { return this.inspireLeft > 0; } },
     starHatsOn: { get() { return this.hatLeft > 0; } },
   });
@@ -101,12 +101,12 @@ export function installTraits(P) {
         const target = this._weakestMember();
         const amount = healAmount(level);
         this._applyHeal(target, amount);
-        this.heals.push({ from: 'whitemage', to: target, amount: amount, age: 0 });
+        this.heals.push({ from: 'lightmage', to: target, amount: amount, age: 0 });
         Sound.play('Heal');
         break;
       }
       case 'Fireball': {
-        const r = this._rectOf('blackmage');
+        const r = this._rectOf('firemage');
         this.fireballs.push({ x: r.x + r.w - 2, y: r.y + 5, age: 0 });
         this.castFlash = 0.35;
         Sound.play('FireCast');
@@ -163,7 +163,7 @@ export function installTraits(P) {
       }
       f.y += Math.max(-dt * rate, Math.min(dt * rate, goalY - f.y));
       if (target !== null && f.x >= target.x + 1) {
-        this._damageEnemy(target, this._withHuzzah(fireballDamage(this.levelOf('blackmage'))), true, f.x, f.y);
+        this._damageEnemy(target, this._withHuzzah(fireballDamage(this.levelOf('firemage'))), true, f.x, f.y);
         this.fireballs.splice(i, 1);
         continue;
       }
@@ -255,8 +255,8 @@ export function installTraits(P) {
   };
 
   m._drawCastFlash = function (g) {
-    if (this.castFlash <= 0 || this.party.indexOf('blackmage') < 0) return;
-    const r = this._rectOf('blackmage');
+    if (this.castFlash <= 0 || this.party.indexOf('firemage') < 0) return;
+    const r = this._rectOf('firemage');
     const u = 1 - this.castFlash / 0.35;
     const rad = 2 + Math.trunc(7 * u);
     const cx = r.x + r.w - 1, cy = r.y + 5;
@@ -281,8 +281,8 @@ export function installTraits(P) {
   };
 
   m._drawLuckyFlash = function (g) {
-    if (this.luckyFlash <= 0 || this.party.indexOf('mithrathief') < 0) return;
-    const r = this._rectOf('mithrathief');
+    if (this.luckyFlash <= 0 || this.party.indexOf('thief') < 0) return;
+    const r = this._rectOf('thief');
     const u = 1 - this.luckyFlash / 1.2;
     for (let k = 0; k < 3; k++) {
       const v = u * 1.3 - k * 0.18;

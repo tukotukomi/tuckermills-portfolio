@@ -380,8 +380,10 @@ export function installStory(P) {
 
 function px(g, c, x, y) { g.rect(Math.round(x), Math.round(y), 1, 1, c); }
 
-export const ENUM = { chocobo: 'Chocobo', mithrathief: 'MithraThief', warrior: 'Warrior', whitemage: 'WhiteMage', blackmage: 'BlackMage', moogle: 'Moogle' };
+export const ENUM = { paca: 'Paca', thief: 'Thief', warrior: 'Warrior', lightmage: 'LightMage', firemage: 'FireMage', fae: 'Fae' };
 export const FROM_ENUM = {};
 for (const k of Object.keys(ENUM)) FROM_ENUM[ENUM[k]] = k;
-const NAMES = { chocobo: 'Chocobo', mithrathief: 'Mithra Thief', warrior: 'Warrior', whitemage: 'White Mage', blackmage: 'Black Mage', moogle: 'Moogle' };
+// Saves written before the art rework used the old names; they still load.
+Object.assign(FROM_ENUM, { Chocobo: 'paca', MithraThief: 'thief', WhiteMage: 'lightmage', BlackMage: 'firemage', Moogle: 'fae' });
+const NAMES = { paca: 'Paca', thief: 'Thief', warrior: 'Warrior', lightmage: 'Light Mage', firemage: 'Fire Mage', fae: 'Fae' };
 export function displayName(kind) { return NAMES[kind] || kind; }

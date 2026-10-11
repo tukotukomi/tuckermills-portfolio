@@ -110,7 +110,7 @@ export class PixelScene {
     this.mr = 1; this.mg = 1; this.mb = 1; this.gray = 0; this.shade = C(255, 255, 255);
 
     // party and tavern
-    this.party = ['chocobo'];
+    this.party = ['paca'];
     this.enc = 'None';
     this.arrived = false; this.tavernVisible = false; this.doorOffset = 0; this.tavernWorldX = 0;
     this.offer = null; this.joinT = 0; this.move = 1; this.groupLeft = NaN; this.saveTimer = 0;
@@ -956,7 +956,7 @@ export class PixelScene {
     if (this.party.length >= 6) { this._startOldMan(); return; }
     this.enc = 'Waiting';
     if (this.offer === null) {
-      const pool = PARTY.filter(k => k !== 'chocobo' && this.party.indexOf(k) < 0);
+      const pool = PARTY.filter(k => k !== 'paca' && this.party.indexOf(k) < 0);
       if (pool.length === 0) { this.enc = 'None'; return; }
       const picks = [];
       while (picks.length < Math.min(2, pool.length)) { const k = pool[rnd(pool.length)]; if (picks.indexOf(k) < 0) picks.push(k); }
@@ -976,7 +976,7 @@ export class PixelScene {
   }
 
   resetProgress() {
-    this.party = ['chocobo'];
+    this.party = ['paca'];
     this.offer = null;
     this.enc = 'None';
     this.arrived = false; this.tavernVisible = false; this.joinT = 0; this.move = 1; this.groupLeft = NaN;
@@ -1000,10 +1000,10 @@ export class PixelScene {
     try {
       const p = state.split('|');
       if (p.length < 4 || (p[0] !== '1' && p[0] !== '2' && p[0] !== '3')) return;
-      const party = ['chocobo'];
+      const party = ['paca'];
       for (const name of p[1].split(',').filter(s => s)) {
         const k = KIND_FROM_ENUM[name];
-        if (k && k !== 'chocobo' && party.indexOf(k) < 0) party.push(k);
+        if (k && k !== 'paca' && party.indexOf(k) < 0) party.push(k);
       }
       this.party = party;
       this.groupLeft = NaN;
@@ -1023,7 +1023,7 @@ export class PixelScene {
         const offer = [];
         for (const name of p[4].split(',').filter(s => s)) {
           const k = KIND_FROM_ENUM[name];
-          if (k && k !== 'chocobo' && this.party.indexOf(k) < 0 && offer.indexOf(k) < 0) offer.push(k);
+          if (k && k !== 'paca' && this.party.indexOf(k) < 0 && offer.indexOf(k) < 0) offer.push(k);
         }
         if (offer.length === Math.min(2, 6 - this.party.length)) this.offer = offer;
       }
@@ -1104,9 +1104,11 @@ export class PixelScene {
 }
 
 // The exe's save strings name companions with C# enum names.
-export const PARTY_ENUM = { chocobo: 'Chocobo', mithrathief: 'MithraThief', warrior: 'Warrior', whitemage: 'WhiteMage', blackmage: 'BlackMage', moogle: 'Moogle' };
+export const PARTY_ENUM = { paca: 'Paca', thief: 'Thief', warrior: 'Warrior', lightmage: 'LightMage', firemage: 'FireMage', fae: 'Fae' };
 export const KIND_FROM_ENUM = {};
 for (const k of Object.keys(PARTY_ENUM)) KIND_FROM_ENUM[PARTY_ENUM[k]] = k;
+// Saves written before the art rework used the old names; they still load.
+Object.assign(KIND_FROM_ENUM, { Chocobo: 'paca', MithraThief: 'thief', WhiteMage: 'lightmage', BlackMage: 'firemage', Moogle: 'fae' });
 
 import { installCoins } from './coins.js';
 import { installStory } from './story.js';

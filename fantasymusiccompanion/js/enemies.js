@@ -1,6 +1,6 @@
 // Enemies and the monster compendium's data. A port of src\PixelEnemies.cs and the definitions in src\EnemySprites.cs.
 // One enemy at a time walks in from the right, closes the gap while the party keeps walking, stops in front of the first member and
-// attacks it (for now only as an animation); the Chocobo pecks and the Black Mage's fireballs fly into it.
+// attacks it (for now only as an animation); the Paca pecks and the Fire Mage's fireballs fly into it.
 
 import { C, CA, withAlpha, rnd } from './util.js';
 import { Sprites } from './sprites.js';
@@ -74,7 +74,7 @@ export function installEnemies(P) {
     Sound.play(ROAR[kind]);   // a warning as it comes into view
   };
 
-  /** Enemy logic in adventuring time: the walk-in, the attack timer, the Chocobo's pecks. */
+  /** Enemy logic in adventuring time: the walk-in, the attack timer, the Paca's pecks. */
   m._advanceEnemies = function (dt, paused) {
     if (paused) return;
     if (this.enemy === null) {
@@ -106,8 +106,8 @@ export function installEnemies(P) {
       Sound.play(attackFx(e.kind, e.attackPose, false));   // the wind-up
     }
 
-    if (this.party.indexOf('chocobo') >= 0) {
-      const level = this.levelOf('chocobo');
+    if (this.party.indexOf('paca') >= 0) {
+      const level = this.levelOf('paca');
       e.peckTimer -= dt;
       if (e.peckTimer <= 0) {
         e.peckTimer += peckInterval(level);
