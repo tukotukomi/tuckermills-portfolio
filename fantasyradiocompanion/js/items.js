@@ -13,10 +13,10 @@ export const HOT_SLOT_COUNT = 4;
 /** Name, blurb and price (0 = the Merchant doesn't sell it). `heal` is the HP an item restores to the member it is used on. The red and blue
  *  potions are placeholders to prove the item UI; the green one is the Healing Potion I (its id stays PotionGreen so saved bags keep working). */
 export const ITEM_DEFS = {
-  SynergyElixir: { name: 'Synergy Elixir', price: 20, blurb: "Resets every party member's skills so they all fire together within a second, Huzzah! first so the damage skills get its full benefit." },
+  SynergyElixir: { name: 'Synergy Elixir', price: 20, start: 0, blurb: "Resets every party member's skills so they all fire together within a second, Huzzah! first so the damage skills get its full benefit." },
   PotionRed: { name: 'Red Potion', price: 0, blurb: 'A placeholder potion. It does nothing yet.' },
   PotionBlue: { name: 'Blue Potion', price: 0, blurb: 'A placeholder potion. It does nothing yet.' },
-  PotionGreen: { name: 'Healing Potion I', price: 0, heal: 10, blurb: 'Heals one party member for 10 HP. After using it, tap the member to heal.' },
+  PotionGreen: { name: 'Healing Potion I', price: 5, heal: 10, blurb: 'Heals one party member for 10 HP. After using it, tap the member to heal.' },
 };
 
 const TIMED_TRAITS = ['Heal', 'Fireball', 'Huzzah', 'StarHat'];
@@ -47,7 +47,7 @@ export function installItems(P) {
 
   m._giveStarterItems = function () {
     this.items = {};
-    for (const id of ITEM_IDS) if (ITEM_DEFS[id].price <= 0) this.items[id] = 5;   // the placeholder potions start in the bag
+    for (const id of ITEM_IDS) { const n = ITEM_DEFS[id].start === undefined ? 5 : ITEM_DEFS[id].start; if (n > 0) this.items[id] = n; }   // the starter potions
   };
 
   // ---- What the page can read ------------------------------------------------------------------------------
