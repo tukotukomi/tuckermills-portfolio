@@ -372,7 +372,7 @@ async function main() {
   function openTuner() {
     Sound.unlock(); player.unlock();
     closePopups();
-    setTunerTab('radio');   // it always opens on the Radio Stations tab
+    setTunerTab(player.mode === 'local' ? 'local' : 'radio');   // the tab for whatever is playing; Radio Stations (the first tab) otherwise
     renderTunerLocalState();
     showPopup('tuner');
     tunerList.refresh(); tunerStations.refresh();
