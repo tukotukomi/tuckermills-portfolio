@@ -103,6 +103,27 @@ export function installHealth(P) {
     }
   };
 
+  // ---- A simple bar above the head of anyone who isn't at full health ----------------------------------------------
+
+  m._drawHpBars = function (g) {
+    let riders = 0;
+    for (const k of this._lineOrder()) {
+      const r = this.memberRects[k];
+      if (!r) continue;
+      const hp = this.hpOf(k), max = this.maxHpOf(k);
+      if (hp >= max || max <= 0) continue;
+      const rider = hp <= 0;   // in the cart: a narrower bar, every other one a little higher so neighbours don't overlap
+      const w = rider ? 10 : 14;
+      const x = r.x + Math.trunc((r.w - w) / 2);
+      const y = r.y - 5 - (this.hatLeft > 0 && !rider ? 6 : 0) - (rider && (riders++ % 2) === 1 ? 4 : 0);
+      const f = hp / max;
+      const fill = f > 0.5 ? C(92, 214, 104) : f > 0.25 ? C(250, 212, 76) : C(232, 70, 70);
+      g.rect(x - 1, y - 1, w + 2, 4, C(30, 22, 40));
+      g.rect(x, y, w, 2, C(78, 56, 70));
+      if (hp > 0) g.rect(x, y, Math.max(1, Math.ceil(w * f)), 2, fill);
+    }
+  };
+
   // ---- Text: HP above each member while a healing item waits for its target ------------------------------------
 
   m._appendHpText = function (list) {
@@ -113,7 +134,7 @@ export function installHealth(P) {
       if (!r) continue;
       const hp = this.hpOf(k), max = this.maxHpOf(k), f = max > 0 ? hp / max : 1;
       // Above the head; in a short view that would run into the HUD pills, so it goes across the member instead.
-      let y = this.lastTop + (r.y - 5) * this.lastScale;
+      let y = this.lastTop + (r.y - (hp < max ? 12 : 5)) * this.lastScale;   // clear of the bar a hurt member wears
       if (y < 48) y = this.lastTop + (r.y + r.h * 0.62) * this.lastScale;
       if (hp <= 0 && (riders++ % 2) === 1) y += 13;   // riders sit close together: stagger their labels
       list.push({

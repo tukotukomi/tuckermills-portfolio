@@ -232,6 +232,7 @@ export class PixelScene {
     this._drawCampfireGlow(g, lw);
     this._drawCrystalLayer(g, lw);
     if (this.targetItem !== null) this._drawTargetOverlay(g, lw);
+    this._drawHpBars(g);   // on top of everything, so a night tint or the dimmed overlay doesn't hide it
     return this.canvas;
   }
 

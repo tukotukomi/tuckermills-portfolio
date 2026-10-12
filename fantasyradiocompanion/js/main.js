@@ -279,17 +279,67 @@ async function main() {
       applyFilter();
     });
   }
-  $('addPlaylist').addEventListener('click', () => $('playlistFile').click());
-  $('playlistFile').addEventListener('change', async e => {
-    const f = e.target.files[0];
-    if (!f) return;
-    const found = parsePlaylist(await f.text(), f.name);
+  /** Keeps stations (from a file or a link) in this browser and shows them in the lists. */
+  function addUserStations(found) {
     let user = [];
     try { user = JSON.parse(store.get('stations', '[]')); } catch (x) { /* */ }
     for (const s of found) if (!user.some(u => u.url === s.url)) user.push(s);
     store.set('stations', JSON.stringify(user));
     loadUserStations(); refreshStationLists();
+  }
+
+  $('addPlaylist').addEventListener('click', () => $('playlistFile').click());
+  $('playlistFile').addEventListener('change', async e => {
+    const f = e.target.files[0];
+    if (!f) return;
+    addUserStations(parsePlaylist(await f.text(), f.name));
     e.target.value = '';
+  });
+
+  // Add by link: a .pls / .m3u / .m3u8 address is read and its stations kept; anything else is taken to be the stream itself.
+  // (A site that doesn't allow other pages to read its playlist can't be fetched; its stream address can still be pasted.)
+  $('addLink').addEventListener('click', () => {
+    const row = $('linkRow');
+    row.hidden = !row.hidden;
+    if (!row.hidden) $('linkUrl').focus();
+  });
+  async function stationsFromLink(raw) {
+    let url;
+    raw = raw.trim();
+    if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(raw)) raw = 'https://' + raw;   // a pasted address without its https:// still works
+    try { url = new URL(raw); } catch (x) { throw new Error('address'); }
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') throw new Error('address');
+    if (/\.(pls|m3u8?)$/i.test(url.pathname)) {
+      if (location.protocol === 'https:') url.protocol = 'https:';   // a secure page can't read a plain http address
+      const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 10000);
+      let text;
+      try {
+        const r = await fetch(url.href, { signal: ctl.signal });
+        if (!r.ok) throw new Error('unreadable');
+        text = await r.text();
+      } catch (x) { throw new Error('unreadable'); } finally { clearTimeout(timer); }
+      const found = parsePlaylist(text, url.hostname);
+      if (found.length === 0) throw new Error('empty');
+      return found;
+    }
+    return [{ name: url.hostname, url: url.href.replace(/^http:/i, 'https:'), cors: 'unknown', source: url.hostname }];
+  }
+  $('linkRow').addEventListener('submit', async e => {
+    e.preventDefault();
+    const msg = $('linkMsg'), input = $('linkUrl'), raw = input.value.trim();
+    if (!raw) return;
+    msg.textContent = t('Reading the link…');
+    $('linkAdd').disabled = true;
+    try {
+      const found = await stationsFromLink(raw);
+      addUserStations(found);
+      msg.textContent = t('Added {n} station(s): {name}', { n: found.length, name: found[0].name });
+      input.value = '';
+    } catch (err) {
+      msg.textContent = err.message === 'address' ? t("That doesn't look like a web address.")
+        : err.message === 'empty' ? t('No stations found in that playlist.')
+        : t("Couldn't read that playlist (the site may be offline or may not allow it). Download the file and use Add playlist…, or paste the station's stream address.");
+    } finally { $('linkAdd').disabled = false; }
   });
 
   function renderTunerLocalState() {

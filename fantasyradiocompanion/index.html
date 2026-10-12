@@ -48,8 +48,14 @@
       <div class="paneBar">
         <button id="addPlaylist" class="primary">Add playlist&hellip;</button>
         <input id="playlistFile" type="file" accept=".m3u,.m3u8,.pls" hidden>
-        <span id="radioHint" class="muted">Stations from .m3u / .m3u8 / .pls files are kept in this browser.</span>
+        <button id="addLink">Add link&hellip;</button>
+        <span id="radioHint" class="muted">Stations from .m3u / .m3u8 / .pls files or links are kept in this browser.</span>
       </div>
+      <form id="linkRow" class="paneBar" hidden novalidate>
+        <input id="linkUrl" type="url" inputmode="url" placeholder="Paste a station or .pls / .m3u link" autocomplete="off" autocapitalize="off" spellcheck="false">
+        <button id="linkAdd" class="primary" type="submit">Add</button>
+        <span id="linkMsg" class="muted" role="status"></span>
+      </form>
       <div id="radioList" class="vlist"></div>
     </section>
   </main>
