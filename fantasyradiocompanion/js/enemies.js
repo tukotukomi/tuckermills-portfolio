@@ -220,7 +220,7 @@ export function installEnemies(P) {
         if (s.x <= hitX) {
           this.bursts.push({ x: hitX, y: s.y, kind: 'feather', age: 0 });
           Sound.play('GargogryphShardHit');
-          if (s.damage > 0) this.damageMember(this._frontKind(), s.damage);
+          if (s.damage > 0) this.damageMember(this._frontKind(), s.damage * this.monsterDamageMultiplier);
           this.flinch = 0.14;
           this.shots.splice(i, 1);
         }
@@ -237,7 +237,7 @@ export function installEnemies(P) {
           const mr = this._rectOf(k);
           this.bursts.push({ x: mr.x + mr.w / 2.0, y: mr.y + mr.h * 0.45, kind: 'blood', age: 0 });
         }
-        for (const k of this.party.slice()) this.damageMember(k, this.bloodMoonDamage || 5);   // the wave of red light hurts everyone
+        for (const k of this.party.slice()) this.damageMember(k, (this.bloodMoonDamage || 5) * this.monsterDamageMultiplier);   // the wave of red light hurts everyone
         this.flinch = 0.6;
       }
       if (this.bloodMoonT >= 1) this.bloodMoonT = -1;
@@ -268,7 +268,7 @@ export function installEnemies(P) {
         } else {
           this.bursts.push({ x: r.x + r.w * 0.72, y: r.y + r.h * 0.45, kind: effect, age: 0 });
           this.flinch = 0.18;
-          this.damageMember(this._frontKind(), enemyDamage(e.kind));
+          this.damageMember(this._frontKind(), enemyDamage(e.kind) * this.monsterDamageMultiplier);
         }
       }
       if (e.attackAnim >= 1) e.attackAnim = -1;

@@ -190,6 +190,7 @@ async function main() {
     openCompendium: () => openCompendium(),
     toggleFullscreen: () => toggleFullscreen(),
     restartRequested: () => restartAdventure(),
+    startOver: () => { scene.resetProgress(); store.set('save', scene.saveState()); },   // from the game-over card: no confirmation
   });
   vis.start();
 

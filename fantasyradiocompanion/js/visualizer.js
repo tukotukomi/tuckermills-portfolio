@@ -157,12 +157,15 @@ export class Visualizer {
     this._drawDayCounter(ctx);
     this._drawGoldCounter(ctx);
     this._drawStorageChip(ctx);
+    this._drawBerserkChip(ctx);
     this._drawNowPlaying(ctx);
     this._drawTunerButton(ctx);
     this._drawCompendiumButton(ctx);
     this._drawHotButton(ctx);
+    this._drawMultiplierPicker(ctx);
     this._drawDisc(ctx);
     this._drawSettingsMenu(ctx);
+    this._drawGameOver(ctx);
     ctx.restore();
     this._drawShop(ctx);
   }
@@ -209,10 +212,11 @@ export class Visualizer {
       return r;
     };
     const day = this._dayWidth(ctx);
-    const L = { day: Object.assign(place(day.w), { leftW: day.leftW, seasonW: day.seasonW }), gold: null, storage: null, np: null };
+    const L = { day: Object.assign(place(day.w), { leftW: day.leftW, seasonW: day.seasonW }), gold: null, storage: null, berserk: null, np: null };
     const goldW = Math.max(62, Math.round(36 + this._measure(ctx, this.scene.gold.toLocaleString('en-US'), 10.5 * PT) + 10));
     L.gold = place(goldW);
     if (this.scene.itemStorage > 0) L.storage = place(Math.round(8 + 16 + 6 + this._measure(ctx, '+' + this.scene.itemStorage, 9.5 * PT) + 10));
+    if (this.scene.berserkLeft > 0) L.berserk = place(Math.round(this._measure(ctx, this._berserkText(), 9.5 * PT) + 22));
     const n = this._np();
     if (n) {
       const px = 9.5 * PT;
@@ -226,6 +230,61 @@ export class Visualizer {
     return L;
   }
 
+  _berserkText() {
+    const s = Math.ceil(this.scene.berserkLeft);
+    return t('Monsters x{n}', { n: this.scene.monsterDamageMultiplier }) + '  ' + Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+  }
+
+  /** A pill with the Monster Berserker's multiplier and the time it has left. */
+  _drawBerserkChip(ctx) {
+    const r = this._hudLayout(ctx).berserk;
+    if (!r) return;
+    this._pill(ctx, r.x, r.y, r.w, r.h, r.h / 2, 'rgba(72,26,16,0.88)', 'rgba(255,150,60,0.92)', 1.4);
+    this._text(ctx, this._berserkText(), r.x + r.w / 2, r.y + r.h / 2 + 0.5, { px: 9.5 * PT, color: 'rgb(255,226,190)', align: 'center' });
+  }
+
+  // ---- The Monster Berserker's 1X to 5X ----------------------------------------------------------------------
+
+  /** Five round buttons in a row, in the room to the right of the cancel button and below the HUD. */
+  _multiplierRects() {
+    const r = this._hotRect, L = this._hudLayout(this.ctx);
+    let bottom = 0;
+    for (const p of [L.day, L.gold, L.storage, L.berserk, L.np]) if (p) bottom = Math.max(bottom, p.y + p.h);
+    const gap = 8, left = r.x + r.w + 12, avail = Math.max(120, this.vw - left - 12);
+    const d = Math.max(28, Math.min(52, Math.min(Math.trunc((avail - 4 * gap) / 5), Math.trunc(this.vh / 2) - 8)));
+    const total = 5 * d + 4 * gap, x0 = left + Math.max(0, Math.trunc((avail - total) / 2));
+    const cy = Math.min(Math.max(bottom + 8 + Math.trunc(d / 2), Math.trunc(this.vh / 2)), this.vh - Math.trunc(d / 2) - 6);
+    const rects = [];
+    for (let i = 0; i < 5; i++) rects.push({ x: x0 + i * (d + gap), y: cy - Math.trunc(d / 2), w: d, h: d });
+    return rects;
+  }
+
+  _multiplierAt(h) {
+    const rects = this._multiplierRects();
+    for (let i = 0; i < rects.length; i++) {
+      const dx = h.x - (rects[i].x + rects[i].w / 2), dy = h.y - (rects[i].y + rects[i].h / 2), rr = rects[i].w / 2 + 3;
+      if (dx * dx + dy * dy <= rr * rr) return i;
+    }
+    return -1;
+  }
+
+  _drawMultiplierPicker(ctx) {
+    if (!this.scene.isPicking) return;
+    const rects = this._multiplierRects();
+    const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 1000 * 4.5), current = this.scene.monsterDamageMultiplier;
+    for (let i = 0; i < rects.length; i++) {
+      const r = rects[i], hot = i === this._mulHover, cx = r.x + r.w / 2, cy = r.y + r.h / 2, rad = r.w / 2;
+      for (let k = 3; k >= 1; k--) {   // the glow
+        ctx.beginPath(); ctx.arc(cx, cy, rad + k * 3 + pulse * 2, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(255,150,50,' + ((hot ? 0.18 : 0.12) * (1.1 - k * 0.22)).toFixed(3) + ')'; ctx.fill();
+      }
+      ctx.beginPath(); ctx.arc(cx, cy, rad - 0.5, 0, Math.PI * 2);
+      ctx.fillStyle = hot ? 'rgba(104,50,18,0.94)' : 'rgba(54,26,14,0.92)'; ctx.fill();
+      ctx.strokeStyle = hot ? 'rgb(255,238,170)' : 'rgba(255,176,70,0.92)'; ctx.lineWidth = (i + 1 === current && current > 1) ? 3 : 2; ctx.stroke();
+      this._text(ctx, (i + 1) + 'X', cx, cy + 0.5, { px: Math.max(8, r.w * 0.28) * 0.75 * (96 / 72), color: 'white', align: 'center', weight: 700 });
+    }
+  }
+
   _dayPillRect(ctx) { return this._hudLayout(ctx).day; }
   _goldRect(ctx) { return this._hudLayout(ctx).gold; }
   _storageRect(ctx) { return this._hudLayout(ctx).storage; }
@@ -234,7 +293,7 @@ export class Visualizer {
   _hudRightPx(ctx) {
     const L = this._hudLayout(ctx);
     let right = L.day.x + L.day.w;
-    for (const r of [L.gold, L.storage, L.np]) if (r && r.y === 8) right = Math.max(right, r.x + r.w);
+    for (const r of [L.gold, L.storage, L.berserk, L.np]) if (r && r.y === 8) right = Math.max(right, r.x + r.w);
     return Math.trunc((right + 10) * this.hud);
   }
   // ---- The now-playing pill (full screen only: the page already shows these in its own controls) ---------------
@@ -485,13 +544,13 @@ export class Visualizer {
     // A short strip: a smaller button just under the HUD pills, at the left edge (the full-size one would sit over the calendar).
     const size = 32, L = this._hudLayout(this.ctx);
     let bottom = 0;
-    for (const r of [L.day, L.gold, L.storage, L.np]) if (r) bottom = Math.max(bottom, r.y + r.h);
+    for (const r of [L.day, L.gold, L.storage, L.berserk, L.np]) if (r) bottom = Math.max(bottom, r.y + r.h);
     let y = bottom + 6;
     if (y + size + 6 > this.vh) y = Math.max(0, this.vh - size - 6);
     return { x: 6, y: y, w: size, h: size };
   }
   // The item button belongs to every view the party is shown in, not only the enlarged one.
-  get _hotVisible() { return !this.scene.isShopping; }
+  get _hotVisible() { return !this.scene.isShopping && !this.scene.isGameOver; }
   get _discCenter() { return { x: 8 + 46 + 22 + 6, y: this._hotRect.y + 22 }; }   // the disc opens inward; its edge keeps the button's 8 px margin
 
   /** In a short view (the party strip under the Radio and Local Music tabs) the four-way disc would not fit, so the slots open as a row. */
@@ -528,7 +587,7 @@ export class Visualizer {
 
   /** Closes the disc menu or the shop if one is up (for Escape). True if something was closed. */
   dismissOverlay() {
-    if (this.scene.isTargeting) { this.scene.cancelTargeting(); return true; }
+    if (this.scene.isWaiting) { this.scene.cancelTargeting(); return true; }
     if (this._settingsOpen) { this._settingsOpen = false; return true; }
     if (this._discOpen) { this._discOpen = false; this._hotDown = false; return true; }
     if (this.scene.isShopping) { if (this._shopInfoId) this._shopInfoId = null; else this.scene.leaveShop(); return true; }
@@ -570,12 +629,12 @@ export class Visualizer {
   }
 
   _drawCountBadge(ctx, n, right, bottom) {
-    const s = n > 99 ? '99+' : String(n);
+    const s = n < 0 ? '\u221e' : n > 99 ? '99+' : String(n);   // a negative count is "never runs out"
     const px = 8.5 * PT;
     const tw = this._measure(ctx, s, px);
     const w = Math.round(tw + 8), x = right - w, y = bottom - 14;
     this._pill(ctx, x, y, w, 14, 6, 'rgba(22,18,52,0.92)', 'rgba(255,214,120,0.86)', 1);
-    this._text(ctx, s, x + w / 2, y + 7.5, { px: px, color: n > 0 ? 'white' : 'rgb(255,150,140)', align: 'center' });
+    this._text(ctx, s, x + w / 2, y + 7.5, { px: px, color: n !== 0 ? 'white' : 'rgb(255,150,140)', align: 'center' });
   }
 
   /** While a healing item waits for its target the item button turns into a cancel button, with a prompt beside it. */
@@ -589,21 +648,71 @@ export class Visualizer {
     ctx.strokeStyle = 'white'; ctx.lineWidth = 2.4; ctx.lineCap = 'round';
     ctx.beginPath(); ctx.moveTo(cx - d, cy - d); ctx.lineTo(cx + d, cy + d); ctx.moveTo(cx - d, cy + d); ctx.lineTo(cx + d, cy - d); ctx.stroke();
     ctx.lineCap = 'butt';
-    const label = t('Choose who to heal'), px = 8.5 * PT, w = Math.round(this._measure(ctx, label, px) + 20), x = r.x + r.w + 8, y = r.y + (r.h - 24) / 2;
+    if (this.scene.isPicking && this.vh < 180) return;   // a short view has no room for the words beside the buttons
+    const label = t(this.scene.isPicking ? 'Monster damage multiplier' : 'Choose who to heal'), px = 8.5 * PT, w = Math.round(this._measure(ctx, label, px) + 20);
+    let x = r.x + r.w + 8, y = r.y + (r.h - 24) / 2;
+    if (this.scene.isPicking) {   // over the middle of the buttons rather than beside the cross, where it would run into them
+      const mr = this._multiplierRects(), mid = Math.trunc((mr[0].x + mr[4].x + mr[4].w) / 2);
+      x = Math.max(6, mid - Math.trunc(w / 2)); y = Math.max(2, mr[0].y - 32);
+    }
     this._pill(ctx, x, y, w, 24, 6, 'rgba(22,18,52,0.88)', 'rgba(150,255,190,0.9)', 1.2);
     this._text(ctx, label, x + w / 2, y + 12.5, { px: px, color: 'white', align: 'center' });
   }
 
+  // ---- Game over: the score and a Start Over button ----------------------------------------------------------
+
+  get _compactGameOver() { return this.vh < 180; }
+
+  /** The panel: a card in the middle of a tall view, a slim banner under the HUD pills in a short one. */
+  _gameOverPanel() {
+    if (this._compactGameOver) {
+      const w = Math.min(this.vw - 16, 420), h = 54;
+      return { x: Math.trunc((this.vw - w) / 2), y: Math.max(40, this.vh - h - 8), w: w, h: h };
+    }
+    const cw = Math.min(this.vw - 24, 340), ch = 138;
+    return { x: Math.trunc((this.vw - cw) / 2), y: Math.max(44, Math.trunc((this.vh - ch) / 2)), w: cw, h: ch };
+  }
+
+  _startOverRect() {
+    const p = this._gameOverPanel();
+    if (this._compactGameOver) return { x: p.x + p.w - 12 - 112, y: p.y + Math.trunc((p.h - 32) / 2), w: 112, h: 32 };
+    return { x: p.x + Math.trunc((p.w - 150) / 2), y: p.y + p.h - 16 - 36, w: 150, h: 36 };
+  }
+
+  _survivedText() {
+    const y = this.scene.survivedYears, d = this.scene.survivedDays;
+    const years = t(y === 1 ? '{n} year' : '{n} years', { n: y }), days = t(d === 1 ? '{n} day' : '{n} days', { n: d });
+    return t('Survived: {s}', { s: years + ', ' + days });
+  }
+
+  _drawGameOver(ctx) {
+    if (!this.scene.isGameOver) return;
+    const p = this._gameOverPanel(), b = this._startOverRect(), compact = this._compactGameOver;
+    this._pill(ctx, p.x, p.y, p.w, p.h, 10, 'rgba(18,14,40,0.93)', 'rgba(255,214,120,0.94)', 1.8);
+    if (compact) {
+      this._text(ctx, t('The party has fallen'), p.x + 12, p.y + 17, { px: 10 * PT, color: 'rgb(255,214,120)', weight: 700 });
+      this._text(ctx, this._survivedText(), p.x + 12, p.y + 39, { px: 9 * PT, color: 'white', weight: 400 });
+    } else {
+      this._text(ctx, t('The party has fallen'), p.x + p.w / 2, p.y + 30, { px: 13 * PT, color: 'rgb(255,214,120)', align: 'center', weight: 700 });
+      this._text(ctx, this._survivedText(), p.x + p.w / 2, p.y + 62, { px: 11 * PT, color: 'white', align: 'center', weight: 400 });
+    }
+    const g = ctx.createLinearGradient(0, b.y, 0, b.y + b.h);
+    g.addColorStop(0, this._overStartOver ? 'rgb(255,232,130)' : 'rgb(255,206,80)');
+    g.addColorStop(1, this._overStartOver ? 'rgb(236,160,40)' : 'rgb(220,130,24)');
+    this._pill(ctx, b.x, b.y, b.w, b.h, 8, g, 'rgb(255,244,190)', 1.6);
+    this._text(ctx, t('Start Over'), b.x + b.w / 2, b.y + b.h / 2 + 0.5, { px: 10.5 * PT, color: 'rgb(70,36,8)', align: 'center', weight: 700 });
+  }
+
   _drawHotButton(ctx) {
     if (!this._hotVisible) return;
-    if (this.scene.isTargeting) { this._drawTargetUi(ctx); return; }
+    if (this.scene.isWaiting) { this._drawTargetUi(ctx); return; }
     const r = this._hotRect, hot = this._overHot || this._hotDown;
     const s = this.scene, id = s.hotItem, n = s.itemCount(id);
     ctx.beginPath(); ctx.arc(r.x + r.w / 2, r.y + r.h / 2, (r.w - 1) / 2, 0, Math.PI * 2);
     ctx.fillStyle = rgba(12, 16, 44, hot ? 0.75 : 0.47); ctx.fill();
     ctx.strokeStyle = hot ? 'rgb(255,214,120)' : rgba(210, 224, 255, 0.75); ctx.lineWidth = 1.6; ctx.stroke();
     this._drawItemIcon(ctx, id, r.x + r.w / 2, r.y + r.h / 2, this._compactDisc ? 1 : 2, n <= 0);
-    this._drawCountBadge(ctx, n, r.x + r.w + 2, r.y + r.h + 2);
+    this._drawCountBadge(ctx, s.isInfinite(id) ? -1 : n, r.x + r.w + 2, r.y + r.h + 2);
     if (this._overHot && !this._discOpen) this._tip(ctx, t('Tap: use   Hold: switch'), r.x + r.w + 10, r.y + r.h / 2, true);
   }
 
@@ -626,7 +735,7 @@ export class Visualizer {
       ctx.strokeStyle = selected ? 'rgb(255,214,120)' : hover ? 'white' : 'rgba(170,186,240,0.67)'; ctx.lineWidth = selected ? 2.4 : 1.4; ctx.stroke();
       const n = s.itemCount(hot[i]);
       this._drawItemIcon(ctx, hot[i], sc.x, sc.y, compact ? 1 : 2, n <= 0);
-      this._drawCountBadge(ctx, n, sc.x + this._slotR + 3, sc.y + this._slotR + 3);
+      this._drawCountBadge(ctx, s.isInfinite(hot[i]) ? -1 : n, sc.x + this._slotR + 3, sc.y + this._slotR + 3);
     }
     // The hub shows what is selected, with a name above the disc.
     const cur = s.hotItem;
@@ -980,6 +1089,16 @@ export class Visualizer {
     const p = this._point(e);
     const h = { x: p.x / this.hud, y: p.y / this.hud };
     const s = this.scene;
+    if (s.isGameOver) {
+      this._overStartOver = this._inRect(h, this._startOverRect());
+      if (this._overStartOver) { this.canvas.style.cursor = 'pointer'; return; }
+    }
+    if (s.isPicking) {
+      const overCancel = this._inHot(h), mi = overCancel ? -1 : this._multiplierAt(h);
+      this._mulHover = mi; this._overHot = overCancel;
+      this.canvas.style.cursor = overCancel || mi >= 0 ? 'pointer' : 'default';
+      return;
+    }
     if (s.isTargeting) {
       const overCancel = this._inHot(h), member = overCancel ? null : s.memberAt(p.x, p.y);
       s.targetHover = member;
@@ -1021,6 +1140,17 @@ export class Visualizer {
     const p = this._point(e);
     const h = { x: p.x / this.hud, y: p.y / this.hud };
     const s = this.scene;
+    if (s.isGameOver && this._inRect(h, this._startOverRect())) {
+      this._overStartOver = false;
+      this.host.startOver && this.host.startOver();   // no confirmation: the adventure is already over
+      return;
+    }
+    if (s.isPicking) {   // tap 1X to 5X; the cross, or a tap anywhere else, puts it back
+      const mi = this._inHot(h) ? -1 : this._multiplierAt(h);
+      if (mi >= 0) s.chooseMultiplier(mi + 1); else s.cancelTargeting();
+      this._overHot = false; this._hotDown = false; this._mulHover = -1;
+      return;
+    }
     if (s.isTargeting) {   // tap a member to use the item on them; the cross, or a tap anywhere else, puts it back
       const who = this._inHot(h) ? null : s.memberAt(p.x, p.y);
       if (who) s.chooseTarget(who); else s.cancelTargeting();

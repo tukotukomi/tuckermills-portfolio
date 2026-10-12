@@ -112,6 +112,7 @@ export function installTraits(P) {
       if (left <= 0) { this._fireTrait(trait, level); left = traitInterval(trait, level); }
       this.traitTimer[trait] = left;
     }
+    if (this.berserkLeft > 0) this.berserkLeft = Math.max(0, this.berserkLeft - dt);   // the Monster Berserker runs in adventuring time too
     if (this.inspireLeft > 0) this.inspireLeft = Math.max(0, this.inspireLeft - dt);
     if (this.hatLeft > 0) this.hatLeft = Math.max(0, this.hatLeft - dt);
   };

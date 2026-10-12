@@ -138,6 +138,13 @@ export class PixelScene {
 
   advance(dt, level) {
     if (this.targetItem !== null) { this.targetT += dt; return; }   // a healing item is waiting for its target: everything stands still
+    if (this.isGameOver) {
+      // Everyone is down in the cart: no more time passes and the monsters wander off, but the music plays on.
+      this.time += dt;
+      if (this.enemy !== null || this.shots.length > 0 || this.bloodMoonT >= 0) this._resetEnemies();
+      this._advanceParty(dt);
+      return;
+    }
     this.time += dt;
     this._updateAudio(dt, level);
     this._advanceParty(dt);   // real time, so the party settles and the newcomer walks out even with the music paused
@@ -231,7 +238,7 @@ export class PixelScene {
     this._drawGlowSpots(g);
     this._drawCampfireGlow(g, lw);
     this._drawCrystalLayer(g, lw);
-    if (this.targetItem !== null) this._drawTargetOverlay(g, lw);
+    if (this.targetItem !== null || this.isGameOver) this._drawTargetOverlay(g, lw);
     this._drawHpBars(g);   // on top of everything, so a night tint or the dimmed overlay doesn't hide it
     return this.canvas;
   }
@@ -1001,7 +1008,7 @@ export class PixelScene {
   saveState() {
     const f5 = this.dayPhase.toFixed(5);
     return ['3', this.party.map(k => PARTY_ENUM[k]).join(','), f5, String(this.daysCompleted), this.offer ? this.offer.map(k => PARTY_ENUM[k]).join(',') : '',
-      this._saveStoryFields(), String(this.gold), this._saveTraitFields(), this._saveBestiaryFields()].concat(this._saveItemFields(), [this._saveHpFields()]).join('|');
+      this._saveStoryFields(), String(this.gold), this._saveTraitFields(), this._saveBestiaryFields()].concat(this._saveItemFields(), [this._saveHpFields(), this._saveBerserkFields()]).join('|');
   }
 
   loadState(state) {
@@ -1043,6 +1050,7 @@ export class PixelScene {
       this._loadTraitFields(p.length > 10 ? p[10] : null);
       this._loadBestiaryFields(p.length > 11 ? p[11] : null);
       this._loadItemFields(p.length > 12 ? p[12] : null, p.length > 13 ? p[13] : null, p.length > 14 ? p[14] : null);   // the bag, the hot slots, the Merchant's last day
+      this._loadBerserkFields(p.length > 16 ? p[16] : null);   // the Monster Berserker's multiplier and time left (absent in older saves)
       this._loadHpFields(p.length > 15 ? p[15] : null);   // members below full health (absent in older saves: everyone is at full)
     } catch (e) { /* a bad save just starts a fresh party */ }
   }

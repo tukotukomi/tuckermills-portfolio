@@ -51,6 +51,13 @@ export function installHealth(P) {
   /** True for a party member with no HP left: out cold in the cart. */
   m.isFainted = function (kind) { return this.party.indexOf(kind) >= 0 && this.hpOf(kind) <= 0; };
 
+  /** True once every member of the party has fainted into the cart: the adventure is over and the score is shown. */
+  Object.defineProperty(m, 'isGameOver', { get() { return this.party.length > 0 && this.party.every(k => this.hpOf(k) <= 0); } });
+
+  /** The whole years and the days beyond them that the party survived (a year is four seasons of five days). */
+  Object.defineProperty(m, 'survivedYears', { get() { return Math.floor(this.daysCompleted / 20); } });
+  Object.defineProperty(m, 'survivedDays', { get() { return this.daysCompleted % 20; } });
+
   /** In the party and on their feet: the only members whose traits and attacks fire. */
   m._active = function (kind) { return this.party.indexOf(kind) >= 0 && this.hpOf(kind) > 0; };
 

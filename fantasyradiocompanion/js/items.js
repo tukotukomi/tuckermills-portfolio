@@ -9,12 +9,13 @@ import { t } from './i18n.js';
 
 export const ITEM_IDS = ['SynergyElixir', 'PotionRed', 'PotionBlue', 'PotionGreen'];
 export const HOT_SLOT_COUNT = 4;
+export const BERSERK_SECONDS = 120;
 
 /** Name, blurb and price (0 = the Merchant doesn't sell it). `heal` is the HP an item restores to the member it is used on. The red and blue
  *  potions are placeholders to prove the item UI; the green one is the Healing Potion I (its id stays PotionGreen so saved bags keep working). */
 export const ITEM_DEFS = {
   SynergyElixir: { name: 'Synergy Elixir', price: 20, start: 0, blurb: "Resets every party member's skills so they all fire together within a second, Huzzah! first so the damage skills get its full benefit." },
-  PotionRed: { name: 'Red Potion', price: 0, blurb: 'A placeholder potion. It does nothing yet.' },
+  PotionRed: { name: 'Monster Berserker', price: 0, infinite: true, picks: true, blurb: 'A dev tool: multiplies the damage monsters deal, from 1X to 5X, for 2 minutes. Pick the multiplier after using it; a new use replaces the old one. Never runs out.' },
   PotionBlue: { name: 'Blue Potion', price: 0, blurb: 'A placeholder potion. It does nothing yet.' },
   PotionGreen: { name: 'Healing Potion I', price: 5, heal: 10, blurb: 'Heals one party member for 10 HP. After using it, tap the member to heal.' },
 };
@@ -38,6 +39,8 @@ export function installItems(P) {
     this.itemTexts = [];
     this.synergyFlash = 0;
     this.buyFlash = 0;
+    this.berserkMult = 1;             // the Monster Berserker's multiplier on monster damage...
+    this.berserkLeft = 0;             // ...and the adventuring seconds it has left
     this.targetItem = null;           // a healing item waiting for the player to pick who it is used on (the game is paused meanwhile)
     this.targetT = 0;
     this.targetHover = null;
@@ -55,11 +58,18 @@ export function installItems(P) {
   Object.defineProperties(m, {
     isShopping: { get() { return this.enc === 'Shop'; } },
     /** True while a healing item is waiting for its target: the adventure is paused and the page asks for a tap on a member. */
-    isTargeting: { get() { return this.targetItem !== null; } },
+    isTargeting: { get() { return this.targetItem !== null && ITEM_DEFS[this.targetItem].heal > 0; } },
+    /** True while the Monster Berserker waits for its multiplier: the game is paused and the page shows 1X to 5X. */
+    isPicking: { get() { return this.targetItem !== null && !!ITEM_DEFS[this.targetItem].picks; } },
+    /** Either kind of wait: something was used and needs a choice (or a cancel) before the game goes on. */
+    isWaiting: { get() { return this.targetItem !== null; } },
+    /** What monster damage is multiplied by right now (1 when no Berserker is running). */
+    monsterDamageMultiplier: { get() { return this.berserkLeft > 0 ? this.berserkMult : 1; } },
     hotSelected: { get() { return this.hotSel; } },
     hotItem: { get() { return this.hot[this.hotSel]; } },
   });
-  m.itemCount = function (id) { return this.items[id] || 0; };
+  m.itemCount = function (id) { return ITEM_DEFS[id].infinite ? 99 : (this.items[id] || 0); };
+  m.isInfinite = function (id) { return !!ITEM_DEFS[id].infinite; };
   m.hotItems = function () { return this.hot.slice(); };
 
   /** The Merchant comes on the second and fourth day of each season. */
@@ -100,7 +110,12 @@ export function installItems(P) {
   /** Uses the item in the selected hot slot. False when there is none left. */
   m.useHotItem = function () {
     const id = this.hot[this.hotSel];
-    if (this.itemCount(id) <= 0 || this.isShopping || this.isTargeting) return false;
+    if (this.itemCount(id) <= 0 || this.isShopping || this.isWaiting || this.isGameOver) return false;
+    if (ITEM_DEFS[id].picks) {
+      this.targetItem = id; this.targetT = 0; this.targetHover = null;   // nothing is spent: the game pauses and 1X to 5X are offered
+      Sound.play('DiscClick');
+      return true;
+    }
     if (ITEM_DEFS[id].heal > 0 && this.party.length > 0) {
       // Nothing is spent yet: the game pauses and the player taps who to heal (or cancels).
       this.targetItem = id; this.targetT = 0; this.targetHover = null;
@@ -122,7 +137,7 @@ export function installItems(P) {
 
   /** Uses the waiting healing item on `who`. False when nothing is waiting or the member isn't in the party. */
   m.chooseTarget = function (who) {
-    if (this.targetItem === null || this.party.indexOf(who) < 0) return false;
+    if (!this.isTargeting || this.party.indexOf(who) < 0) return false;
     const id = this.targetItem;
     if (this.itemCount(id) <= 0) { this.targetItem = null; this.targetHover = null; return false; }
     if (this.hpOf(who) >= this.maxHpOf(who)) {
@@ -139,6 +154,33 @@ export function installItems(P) {
     Sound.play('Heal');
     this.raiseProgress();
     return true;
+  };
+
+  /** Applies the chosen multiplier (1 to 5) for two minutes, replacing any Berserker already running, and resumes the game. */
+  m.chooseMultiplier = function (multiplier) {
+    if (!this.isPicking) return false;
+    this.berserkMult = Math.max(1, Math.min(5, multiplier));
+    this.berserkLeft = BERSERK_SECONDS;
+    this.targetItem = null; this.targetHover = null;
+    Sound.play('PotionUse');
+    const r = this._rectOf(this._frontKind());
+    this._addItemText(t('Monsters x{n} for 2 minutes', { n: this.berserkMult }), r.x + r.w / 2.0, r.y - 6, C(255, 170, 90));
+    this.raiseProgress();
+    return true;
+  };
+
+  // ---- Saved: "3:95.2" (multiplier : seconds left), empty when no Berserker is running ---------------------------
+
+  m._saveBerserkFields = function () {
+    return this.berserkLeft > 0 ? this.berserkMult + ':' + this.berserkLeft.toFixed(1) : '';
+  };
+
+  m._loadBerserkFields = function (field) {
+    this.berserkMult = 1; this.berserkLeft = 0;
+    if (!field) return;
+    const p = field.split(':');
+    const mult = parseInt(p[0], 10), left = parseFloat(p[1]);
+    if (p.length === 2 && mult >= 1 && mult <= 5 && left > 0 && left <= BERSERK_SECONDS) { this.berserkMult = mult; this.berserkLeft = left; }
   };
 
   /** Puts the waiting item back (nothing was spent) and resumes the game. */
@@ -165,6 +207,7 @@ export function installItems(P) {
   /** While a healing item waits for its target: most of the scene goes dark, and the members glow so they read as the thing to tap. */
   m._drawTargetOverlay = function (g, lw) {
     g.rect(0, 0, lw, this.lh, CA(170, 0, 0, 0));
+    if (!this.isTargeting) return;   // picking a multiplier: just the dark, the page draws the buttons
     const pulse = 0.5 + 0.5 * Math.sin(this.targetT * 5);
     if (!this._glowCache) this._glowCache = new WeakMap();
     for (const kind of this.party) {
@@ -260,12 +303,13 @@ export function installItems(P) {
     this.itemTexts.length = 0;
     this.synergyFlash = 0; this.buyFlash = 0;
     this.targetItem = null; this.targetHover = null;
+    this.berserkMult = 1; this.berserkLeft = 0;
   };
 
   // ---- Saved: "SynergyElixir=1;PotionRed=5" | "SynergyElixir,PotionRed,PotionBlue,PotionGreen,0" | merchant day ----------------
 
   m._saveItemFields = function () {
-    const bag = ITEM_IDS.filter(i => this.itemCount(i) > 0).map(i => i + '=' + this.itemCount(i)).join(';');
+    const bag = ITEM_IDS.filter(i => (this.items[i] || 0) > 0).map(i => i + '=' + this.items[i]).join(';');
     const hot = this.hot.join(',') + ',' + this.hotSel;
     // If he is on the road unmet (or the shop is open) the visit isn't counted, so he is there again after a reload.
     const day = (this.merchantActive && !this.merchantMet) || this.isShopping ? -1 : this.merchantDay;
