@@ -122,7 +122,7 @@ export class PixelScene {
 
     this.onProgress = null;   // callback: the saved progress changed
 
-    this._initCoins(); this._initStory(); this._initTraits(); this._initEnemies(); this._initItems();
+    this._initCoins(); this._initStory(); this._initTraits(); this._initEnemies(); this._initHealth(); this._initItems();
   }
 
   get marching() { return this._marching && !this.suspended; }
@@ -918,7 +918,7 @@ export class PixelScene {
   _leaderX() {
     return isNaN(this.groupLeft) ? this._groupLeftTarget() + (this.party.length - 1) * SPACING : this.groupLeft + (this.party.length - 1) * SPACING;
   }
-  _leaderCenterX() { return this._leaderX() + Sprites.party[this.party[0]].w / 2.0; }
+  _leaderCenterX() { return this._leaderX() + Sprites.party[this._frontKind()].w / 2.0; }
   _tavernDoorScreenX() { return this.tavernWorldX - this.scroll + Sprites.tavernDoorX; }
   _groupLeftTarget() {
     const settled = this.party.length - (this.enc === 'Joining' ? 1 : 0);
@@ -1000,7 +1000,7 @@ export class PixelScene {
   saveState() {
     const f5 = this.dayPhase.toFixed(5);
     return ['3', this.party.map(k => PARTY_ENUM[k]).join(','), f5, String(this.daysCompleted), this.offer ? this.offer.map(k => PARTY_ENUM[k]).join(',') : '',
-      this._saveStoryFields(), String(this.gold), this._saveTraitFields(), this._saveBestiaryFields()].concat(this._saveItemFields()).join('|');
+      this._saveStoryFields(), String(this.gold), this._saveTraitFields(), this._saveBestiaryFields()].concat(this._saveItemFields(), [this._saveHpFields()]).join('|');
   }
 
   loadState(state) {
@@ -1042,6 +1042,7 @@ export class PixelScene {
       this._loadTraitFields(p.length > 10 ? p[10] : null);
       this._loadBestiaryFields(p.length > 11 ? p[11] : null);
       this._loadItemFields(p.length > 12 ? p[12] : null, p.length > 13 ? p[13] : null, p.length > 14 ? p[14] : null);   // the bag, the hot slots, the Merchant's last day
+      this._loadHpFields(p.length > 15 ? p[15] : null);   // members below full health (absent in older saves: everyone is at full)
     } catch (e) { /* a bad save just starts a fresh party */ }
   }
 
@@ -1064,11 +1065,15 @@ export class PixelScene {
     const walking = this.marching && this.move > 0.05;
     const stepB = walking && (this.clock.beatIndex % 2 === 1);
     const leaderX = this._leaderX();
+    const order = this._lineOrder();   // the members on their feet, then the fainted, who ride in the cart behind them
+    const awake = this.party.filter(k => this.hpOf(k) > 0).length;
+    const asleep = [];
 
     for (let i = n - 1; i >= 0; i--) {
-      const kind = this.party[i];
+      const kind = order[i];
+      if (i >= awake) { asleep.unshift(kind); continue; }
       const sprite = Sprites.party[kind];
-      const newcomer = this.enc === 'Joining' && i === n - 1;
+      const newcomer = this.enc === 'Joining' && kind === this.party[n - 1];
       const slotX = leaderX - i * SPACING;
       let xD = slotX;
       let legsB = stepB;
@@ -1109,8 +1114,10 @@ export class PixelScene {
       g.image(frame, x, y, false, undefined, sprite.w, sprite.h + breath);
       this._noteMemberRect(kind, x, y, sprite.w, sprite.h + breath);
       this.memberFrames[kind] = frame;
+      delete this.memberClip[kind];
       if (this.hatLeft > 0 && !newcomer) this._drawStarHat(g, frame, x, y);
     }
+    if (asleep.length > 0) this._drawCart(g, asleep, leaderX - awake * SPACING);
   }
 }
 
@@ -1126,6 +1133,9 @@ import { installStory } from './story.js';
 import { installTraits } from './traits.js';
 import { installEnemies } from './enemies.js';
 import { installItems } from './items.js';
+import { installHealth, setKindNames } from './health.js';
+setKindNames(k => PARTY_ENUM[k], n => KIND_FROM_ENUM[n]);
+installHealth(PixelScene);
 installCoins(PixelScene);
 installStory(PixelScene);
 installTraits(PixelScene);

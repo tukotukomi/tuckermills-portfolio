@@ -124,10 +124,16 @@ export function installItems(P) {
   m.chooseTarget = function (who) {
     if (this.targetItem === null || this.party.indexOf(who) < 0) return false;
     const id = this.targetItem;
+    if (this.itemCount(id) <= 0) { this.targetItem = null; this.targetHover = null; return false; }
+    if (this.hpOf(who) >= this.maxHpOf(who)) {
+      // A potion isn't wasted on someone in full health: say so and keep waiting for another choice (or a cancel).
+      const r = this._rectOf(who);
+      this._addItemText(t('HP full'), r.x + r.w / 2.0, r.y - 4, C(200, 226, 255));
+      return false;
+    }
     this.targetItem = null; this.targetHover = null;
-    if (this.itemCount(id) <= 0) return false;
     this._addItem(id, -1);
-    const amount = ITEM_DEFS[id].heal;
+    const amount = Math.min(ITEM_DEFS[id].heal, this.maxHpOf(who) - this.hpOf(who));   // what it actually restores
     this._applyHeal(who, amount);
     this.heals.push({ from: who, to: who, amount: amount, age: 0 });
     Sound.play('Heal');
@@ -174,8 +180,14 @@ export function installItems(P) {
       let sil = this._glowCache.get(frame);
       if (!sil) { sil = silhouetteImage(frame, C(200, 255, 220)); this._glowCache.set(frame, sil); }
       for (const d of [[-1, 0], [1, 0], [0, -1], [0, 1]]) g.image(sil, r.x + d[0], r.y + d[1], false, k, r.w, r.h);   // and a bright outline
+      const clip = this.memberClip[kind];   // a member in the cart: only the part above the board
+      if (clip !== undefined) {
+        g.ctx.save();
+        g.ctx.beginPath(); g.ctx.rect(r.x - 3, r.y - 4, r.w + 6, clip - (r.y - 4)); g.ctx.clip();
+      }
       g.image(frame, r.x, r.y, false, undefined, r.w, r.h);
-      if (this.hatLeft > 0) this._drawStarHat(g, frame, r.x, r.y);
+      if (this.hatLeft > 0 && clip === undefined) this._drawStarHat(g, frame, r.x, r.y);
+      if (clip !== undefined) g.ctx.restore();
     }
   };
 
@@ -219,7 +231,7 @@ export function installItems(P) {
       }
       return;
     }
-    const front = this._rectOf(this.party[0]);
+    const front = this._rectOf(this._frontKind());
     if (!this.merchantMet && this.enc === 'None' && this._merchantScreenX() <= front.x + front.w + 6) {
       this.merchantMet = true;
       this.enc = 'Shop';

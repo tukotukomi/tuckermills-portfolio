@@ -96,15 +96,15 @@ export function installTraits(P) {
     return this.partyInspired ? damage * huzzahDamageMultiplier(this.levelOf('warrior')) : damage;
   };
 
-  m._applyHeal = function (who, hp) { /* HP isn't tracked yet */ };
-  m._healthFraction = function (who) { return 1.0; };
+  m._applyHeal = function (who, hp) { this._restoreHp(who, hp); };
+  m._healthFraction = function (who) { const max = this.maxHpOf(who); return max > 0 ? this.hpOf(who) / max : 1.0; };
 
   /** Counts the timed traits down in adventuring time and fires them. */
   m._advanceTraits = function (dt, paused) {
     if (paused) return;
     for (const trait of TIMED_TRAITS) {
       const owner = TRAIT_OWNER[trait];
-      if (this.party.indexOf(owner) < 0) { delete this.traitTimer[trait]; continue; }
+      if (!this._active(owner)) { delete this.traitTimer[trait]; continue; }   // out cold in the cart: no skills
       const level = this.levelOf(owner);
       let left = this.traitTimer[trait];
       if (left === undefined) left = traitInterval(trait, level);
@@ -146,16 +146,18 @@ export function installTraits(P) {
   };
 
   m._weakestMember = function () {
+    let cands = this.party.filter(k => this.hpOf(k) > 0);   // the fainted are past the Light Mage's reach: only a potion wakes them
+    if (cands.length === 0) cands = this.party.slice();
     let lowest = Infinity;
-    for (const k of this.party) lowest = Math.min(lowest, this._healthFraction(k));
-    const pool = this.party.filter(k => this._healthFraction(k) <= lowest + 1e-9);
+    for (const k of cands) lowest = Math.min(lowest, this._healthFraction(k));
+    const pool = cands.filter(k => this._healthFraction(k) <= lowest + 1e-9);
     return pool[rnd(pool.length)];
   };
 
   m._rectOf = function (kind) {
     const r = this.memberRects[kind];
     if (r) return r;
-    const i = this.party.indexOf(kind);
+    const i = this._lineIndexOf(kind);
     const s = Sprites.party[kind];
     return { x: Math.trunc(this._leaderX()) - Math.max(0, i) * 25, y: this.groundY + 1 - s.h, w: s.w, h: s.h };
   };
@@ -231,6 +233,7 @@ export function installTraits(P) {
   m._resetTraits = function () {
     this.traitTimer = {};
     this.fireballs.length = 0; this.axes.length = 0; this.heals.length = 0;
+    this.hp = {}; this.memberClip = {};
     this.inspireLeft = 0; this.hatLeft = 0; this.shoutAge = -1; this.castFlash = 0; this.luckyFlash = 0;
     this._resetEnemies();
   };
@@ -269,6 +272,7 @@ export function installTraits(P) {
     }
     this._appendEnemyText(list);
     this._appendItemText(list);
+    this._appendHpText(list);
     return list;
   };
 

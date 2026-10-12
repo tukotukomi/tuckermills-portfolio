@@ -249,7 +249,7 @@ export function installStory(P) {
 
   // ---- Drawing: the Old Man ------------------------------------------------------------------------------
 
-  m._oldManStandX = function () { return this._leaderX() + Sprites.party[this.party[0]].w + 16; };
+  m._oldManStandX = function () { return this._leaderX() + Sprites.party[this._frontKind()].w + 16; };
   m._oldManDoorLeft = function () { return this.tavernWorldX - this.scroll + Sprites.tavernDoorX - Sprites.oldMan.w / 2.0; };
 
   m._drawOldMan = function (g) {
@@ -311,8 +311,8 @@ export function installStory(P) {
       case 'LevelFx': {
         if (this.storyT > 0.7 || this.fxMember < 0) return null;
         const u = ease(this.storyT / 0.7);
-        const sp = Sprites.party[this.party[this.fxMember]];
-        const tx = this._leaderX() - this.fxMember * SPACING + sp.w / 2.0, ty = this.groundY + 1 - sp.h / 2.0;
+        const fr = this._rectOf(this.party[this.fxMember]);   // where they stand now, in the line or in the cart
+        const tx = fr.x + fr.w / 2.0, ty = fr.y + fr.h / 2.0;
         return { x: hoverX + (tx - hoverX) * u, y: hoverY + (ty - hoverY) * u };
       }
     }
@@ -367,7 +367,8 @@ export function installStory(P) {
     if (!(this.enc === 'Story' && this.story === 'LevelFx') || this.fxMember < 0 || this.fxMember >= this.party.length || this.storyT < 0.6) return;
     const t = (this.storyT - 0.6) / (LEVEL_FX_SECONDS - 0.6);
     const sp = Sprites.party[this.party[this.fxMember]];
-    const cx = this._leaderX() - this.fxMember * SPACING + sp.w / 2.0, baseY = this.groundY + 1;
+    const fr = this._rectOf(this.party[this.fxMember]);
+    const cx = fr.x + fr.w / 2.0, baseY = fr.y + fr.h;
     g.ellipse(cx - sp.w, baseY - sp.h - 4, sp.w * 2, sp.h + 8, CA(Math.trunc(120 * (1 - t)), 190, 225, 255));
     for (let i = 0; i < 18; i++) {
       const ph = (t * 1.6 + i / 18.0) % 1.0;

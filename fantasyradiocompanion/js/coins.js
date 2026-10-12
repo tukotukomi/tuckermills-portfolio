@@ -30,7 +30,7 @@ export function installCoins(P) {
         const phase = Math.random() * 6;
         this.coins.push({ worldX: this.scroll + this.lastLw + 8, phase: phase });
         // The Thief's trait: now and then the coin comes with a twin (more, as it levels), hopping along side by side.
-        if (this.party.indexOf('thief') >= 0 && Math.random() < luckyCoinChance(this.levelOf('thief'))) {
+        if (this._active('thief') && Math.random() < luckyCoinChance(this.levelOf('thief'))) {
           for (let extra = 1; extra < luckyCoinCount(this.levelOf('thief')); extra++)
             this.coins.push({ worldX: this.scroll + this.lastLw + 8 + extra * 10, phase: phase });
           this.luckyFlash = 1.2;

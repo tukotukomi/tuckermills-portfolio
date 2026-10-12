@@ -94,7 +94,7 @@ export function installEnemies(P) {
     }
     const e = this.enemy;
     if (e.deathT >= 0) return;
-    const front = this._rectOf(this.party[0]);
+    const front = this._rectOf(this._frontKind());
     // Ranged enemies keep their distance, as far as there is room for them on screen.
     const room = Math.max(0, this.lastLw - (front.x + front.w + 1) - Sprites.enemy[e.kind].w - 2);
     let stopX = front.x + front.w + 1 + Math.min(DEFS[e.kind].standoff || 0, room);
@@ -127,7 +127,7 @@ export function installEnemies(P) {
       Sound.play(attackFx(e.kind, e.attackPose, false));   // the wind-up
     }
 
-    if (this.party.indexOf('paca') >= 0) {
+    if (this._active('paca')) {
       const level = this.levelOf('paca');
       e.peckTimer -= dt;
       if (e.peckTimer <= 0) {
@@ -139,7 +139,7 @@ export function installEnemies(P) {
     }
 
     // The Warrior throws an axe every few seconds while there is a fight.
-    if (this.party.indexOf('warrior') >= 0 && e.deathT < 0) {
+    if (this._active('warrior') && e.deathT < 0) {
       const level = this.levelOf('warrior');
       e.axeTimer -= dt;
       if (e.axeTimer <= 0) {
@@ -187,7 +187,7 @@ export function installEnemies(P) {
 
     // Feathers in flight, from the Gargogryph's wings to the front of the party.
     if (this.shots.length > 0) {
-      const fr = this._rectOf(this.party[0]);
+      const fr = this._rectOf(this._frontKind());
       const hitX = fr.x + fr.w * 0.8;
       for (let i = this.shots.length - 1; i >= 0; i--) {
         const s = this.shots[i];
@@ -234,7 +234,7 @@ export function installEnemies(P) {
       if (!e.struck && e.attackAnim >= 0.5) {
         e.struck = true;
         Sound.play(attackFx(e.kind, e.attackPose, true));   // the blow lands
-        const r = this._rectOf(this.party[0]);
+        const r = this._rectOf(this._frontKind());
         const effect = strikeEffect(e.kind, e.attackPose);
         if (effect === 'feathers') {
           // A ranged attack: the wingbeat throws a volley of feathers that arrive one after another.
