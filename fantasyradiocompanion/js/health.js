@@ -71,11 +71,11 @@ export function installHealth(P) {
   m.damageMember = function (kind, amount) {
     if (this.party.indexOf(kind) < 0 || amount <= 0) return;
     const before = this.hpOf(kind);
+    if (before <= 0) return;   // already out cold
     this.hp[kind] = Math.max(0, before - amount);
-    if (before > 0 && this.hp[kind] === 0) {
-      const r = this._rectOf(kind);
-      this._addItemText(t('Fainted!'), r.x + r.w / 2.0, r.y - 4, C(255, 170, 160));
-    }
+    const r = this._rectOf(kind);
+    if (this.hp[kind] === 0) this._addItemText(t('Fainted!'), r.x + r.w / 2.0, r.y - 4, C(255, 170, 160));
+    else this._addItemText('-' + (before - this.hp[kind]), r.x + r.w / 2.0, r.y - 4, C(255, 150, 150));
     this.raiseProgress();
   };
 

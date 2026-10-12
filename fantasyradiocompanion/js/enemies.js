@@ -12,6 +12,9 @@ export const ENEMY_KINDS = ['sheller', 'orc', 'nightmare', 'gargogryph'];
 export const ENEMY_ENUM = { sheller: 'Sheller', orc: 'Orc', nightmare: 'Nightmare', gargogryph: 'Gargogryph' };
 const ENEMY_FROM_ENUM = { Sheller: 'sheller', Orc: 'orc', Nightmare: 'nightmare', Gargogryph: 'gargogryph' };
 
+/** HP an attack takes off the member it lands on: 1 for everyone for now, 2 for the Gargogryph (a whole volley of feathers counts as one attack). */
+const enemyDamage = kind => (kind === 'gargogryph' ? 2 : 1);
+
 const DEFS = {
   sheller: { name: 'Sheller', hp: 10, attackInterval: 2.0, walkSpeed: 20, nightOnly: false, headOffset: 0, habitat: 'Roams by day', note: 'A grumpy shell-back. Punches first, claws second.' },
   orc: { name: 'Orc', hp: 18, attackInterval: 3.0, walkSpeed: 15, nightOnly: false, headOffset: 7, habitat: 'Roams day and night', note: 'Fond of shiny earrings and swinging big sticks.' },
@@ -24,6 +27,7 @@ export function enemyDef(kind) { return DEFS[kind]; }
 const ROAR = { sheller: 'ShellerRoar', orc: 'OrcRoar', nightmare: 'NightmareRoar', gargogryph: 'GargogryphRoar' };
 const DEATH = { sheller: 'ShellerDeath', orc: 'OrcDeath', nightmare: 'NightmareDeath', gargogryph: 'GargogryphDeath' };
 const BLOOD_MOON_SECONDS = 3.2;
+const BLOOD_MOON_DAMAGE = 5;          // HP the Blood Moon takes off every member of the party when it breaks
 const BLOOD_MOON_HP_FRACTION = 0.55;   // it is called down once, when the Gargogryph is hurt this badly
 function attackFx(kind, pose, hit) {
   if (kind === 'gargogryph') return hit ? 'GargogryphShot' : 'GargogryphFlap';
@@ -198,6 +202,7 @@ export function installEnemies(P) {
         if (s.x <= hitX) {
           this.bursts.push({ x: hitX, y: s.y, kind: 'feather', age: 0 });
           Sound.play('GargogryphShardHit');
+          if (s.damage > 0) this.damageMember(this._frontKind(), s.damage);
           this.flinch = 0.14;
           this.shots.splice(i, 1);
         }
@@ -214,6 +219,7 @@ export function installEnemies(P) {
           const mr = this._rectOf(k);
           this.bursts.push({ x: mr.x + mr.w / 2.0, y: mr.y + mr.h * 0.45, kind: 'blood', age: 0 });
         }
+        for (const k of this.party.slice()) this.damageMember(k, BLOOD_MOON_DAMAGE);   // the wave of red light hurts everyone
         this.flinch = 0.6;
       }
       if (this.bloodMoonT >= 1) this.bloodMoonT = -1;
@@ -240,10 +246,11 @@ export function installEnemies(P) {
           // A ranged attack: the wingbeat throws a volley of feathers that arrive one after another.
           const er = this._enemyRect(e);
           for (let i = 0; i < 3; i++)
-            this.shots.push({ x: er.x + 6, y: er.y + er.h * (0.35 + 0.12 * i), targetY: r.y + r.h * (0.3 + 0.18 * ((i + e.attackPose) % 3)), delay: 0.1 + i * 0.16, age: 0 });
+            this.shots.push({ x: er.x + 6, y: er.y + er.h * (0.35 + 0.12 * i), targetY: r.y + r.h * (0.3 + 0.18 * ((i + e.attackPose) % 3)), delay: 0.1 + i * 0.16, age: 0, damage: i === 0 ? enemyDamage(e.kind) : 0 });
         } else {
           this.bursts.push({ x: r.x + r.w * 0.72, y: r.y + r.h * 0.45, kind: effect, age: 0 });
           this.flinch = 0.18;
+          this.damageMember(this._frontKind(), enemyDamage(e.kind));
         }
       }
       if (e.attackAnim >= 1) e.attackAnim = -1;
