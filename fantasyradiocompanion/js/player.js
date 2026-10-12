@@ -50,15 +50,18 @@ export function parsePlaylist(text, fileName) {
   return out;
 }
 
+/** iPhone / iPad Safari (including the Home Screen app). It ignores HTMLMediaElement.volume and has to be given a gain stage. */
+const IOS = typeof navigator !== 'undefined' &&
+  (/iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1));
+
 export class Player {
   constructor() {
     this.ctx = null;
     this.analyser = null;
-    this.analysed = new Audio();
-    this.analysed.preload = 'auto';
+    this.analysed = null;        // made by _newAnalysed(): a fresh element for every file or station
+    this._srcNode = null;
     this.plain = new Audio();
     this.plain.preload = 'none';
-    this.active = this.analysed;
     this.mode = 'none';          // 'none' | 'local' | 'radio'
     this.canAnalyse = false;     // the current source is being analysed
     this.station = null;
@@ -66,6 +69,9 @@ export class Player {
     this.onStatus = null;        // () => void: something about the state changed
     this.onEnded = null;         // () => void: a local track finished
     this._volume = 1;
+    this.routing = 'unknown';     // radio: 'graph' (the stream goes through Web Audio, so the volume works) | 'outside' | 'unknown'
+    this.onRouting = null;        // () => void: the stream turned out to play outside Web Audio
+    this._routeTimer = 0;
     this._bands = new Float32Array(0);
     this._peaks = { bass: 0.002, mid: 0.002, treble: 0.002 };
     this._lastSpec = { live: false, bass: 0, mid: 0, treble: 0, loud: 0 };
@@ -73,12 +79,85 @@ export class Player {
     this.songTitle = '';          // radio: what the station says is playing, when it publishes that (else '')
     this._metaTimer = 0;
 
-    for (const a of [this.analysed, this.plain]) {
-      a.addEventListener('playing', () => { if (a === this.active) { this._setStatus('Playing'); } });
-      a.addEventListener('waiting', () => { if (a === this.active && this.mode === 'radio') this._setStatus('Buffering...'); });
-      a.addEventListener('ended', () => { if (a === this.active && this.mode === 'local' && this.onEnded) this.onEnded(); });
-      a.addEventListener('pause', () => { if (a === this.active && this.onStatus) this.onStatus(); });
-    }
+    this._wire(this.plain);
+    this.analysed = this._newAnalysed();
+    this.active = this.analysed;
+  }
+
+  _wire(a) {
+    a.addEventListener('playing', () => {
+      if (a !== this.active) return;
+      this._setStatus('Playing');
+      if (a === this.analysed && this.canAnalyse && this.mode === 'radio') this._checkRouting(a);
+    });
+    a.addEventListener('waiting', () => { if (a === this.active && this.mode === 'radio') this._setStatus('Buffering...'); });
+    a.addEventListener('ended', () => { if (a === this.active && this.mode === 'local' && this.onEnded) this.onEnded(); });
+    a.addEventListener('pause', () => { if (a === this.active && this.onStatus) this.onStatus(); });
+  }
+
+  /** A new element (and Web Audio source node) for every file or station. Safari can stop routing an element through Web Audio
+   *  once its source has been replaced, which left the music slider with no effect on the second and later things played. */
+  _newAnalysed() {
+    const old = this.analysed;
+    if (old) { try { old.pause(); old.removeAttribute('src'); old.load(); } catch (e) { /* */ } }
+    if (this._srcNode) { try { this._srcNode.disconnect(); } catch (e) { /* */ } this._srcNode = null; }
+    const a = new Audio();
+    a.preload = 'auto';
+    a.crossOrigin = 'anonymous';   // from the start, before the element is connected (local files are blob: URLs, same-origin anyway)
+    this._wire(a);
+    this.analysed = a;
+    this._attach(a);
+    this._applyMute();
+    this.routing = 'unknown';
+    return a;
+  }
+
+  /** Connects an element to the music gain stage and the analyser, once the graph exists. */
+  _attach(a) {
+    if (!this.ctx || !this._music) { a.volume = this._volume; return; }
+    try {
+      const src = this.ctx.createMediaElementSource(a);
+      src.connect(this._music);     // what is heard
+      src.connect(this.analyser);   // what the scene reacts to (before the volume)
+      this._srcNode = src;
+      a.volume = 1;
+    } catch (e) { this._srcNode = null; a.volume = this._volume; }
+  }
+
+  /** A few seconds into a stream: is audio actually flowing through the Web Audio graph? Some browsers play a live stream natively
+   *  and bypass it, in which case neither the analysis nor the music volume can reach it. */
+  _checkRouting(a) {
+    clearTimeout(this._routeTimer);
+    this.routing = 'unknown';
+    this._routeTimer = setTimeout(() => {
+      if (a !== this.active || a.paused || a.muted || !this.analyser || !this.ctx || this.ctx.state !== 'running') return;
+      const td = new Uint8Array(this.analyser.fftSize);
+      let peak = 0, n = 0;
+      const iv = setInterval(() => {
+        this.analyser.getByteTimeDomainData(td);
+        for (const v of td) peak = Math.max(peak, Math.abs(v - 128));
+        if (++n >= 6 || peak > 1) {
+          clearInterval(iv);
+          if (a !== this.active) return;
+          this.routing = peak > 1 ? 'graph' : 'outside';
+          if (this.routing === 'outside' && this.onRouting) this.onRouting();
+          if (this.onStatus) this.onStatus();
+        }
+      }, 150);
+    }, 2500);
+  }
+
+  /** How the music volume reaches what is playing now: 'graph' | 'element' | 'mute' (the slider only mutes) | 'device' (not at all). */
+  get volumePath() {
+    if (this.mode === 'radio' && !this.canAnalyse) return IOS ? 'mute' : 'element';
+    if (this.routing === 'outside') return IOS ? 'device' : 'element';
+    return this._music ? 'graph' : 'element';
+  }
+
+  _applyMute() {
+    this.plain.muted = this._volume <= 0;
+    // iOS ignores the element volume but honours muting, so a zero volume is silent even for a stream the graph does not carry.
+    if (this.analysed) this.analysed.muted = IOS && this._volume <= 0;
   }
 
   _setStatus(s) { this.status = s; if (this.onStatus) this.onStatus(); }
@@ -120,7 +199,6 @@ export class Player {
       try {
         const AC = window.AudioContext || window.webkitAudioContext;
         this.ctx = new AC();
-        const src = this.ctx.createMediaElementSource(this.analysed);
         this.analyser = this.ctx.createAnalyser();
         this.analyser.fftSize = 1024;
         this.analyser.smoothingTimeConstant = 0.55;
@@ -129,17 +207,15 @@ export class Player {
         // before the gain, so a silent music volume still lets the scene follow a playing station.
         this._music = this.ctx.createGain();
         this._music.gain.value = this._volume;
-        src.connect(this._music);
         this._music.connect(this.ctx.destination);
-        src.connect(this.analyser);
         this._tap = this.ctx.createGain();   // keeps the analyser pulled by the graph without making a sound
         this._tap.gain.value = 0;
         this.analyser.connect(this._tap);
         this._tap.connect(this.ctx.destination);
-        this.analysed.volume = 1;
+        this._attach(this.analysed);
         this._bands = new Uint8Array(this.analyser.frequencyBinCount);
         this._time = new Uint8Array(this.analyser.fftSize);
-      } catch (e) { this.ctx = null; this.analyser = null; }
+      } catch (e) { this.ctx = null; this.analyser = null; this._music = null; }
     }
     if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume();
   }
@@ -151,8 +227,7 @@ export class Player {
     // Through the graph once it exists (works on iOS); the element's own volume before that and for streams that can't be analysed.
     if (this._music) this._music.gain.value = this._volume; else this.analysed.volume = this._volume;
     this.plain.volume = this._volume;
-    // iOS ignores the element volume, but honours muting: at least a zero volume is silent for the streams outside the graph.
-    this.plain.muted = this._volume <= 0;
+    this._applyMute();
   }
 
   get playing() { return !this.active.paused && !this.active.ended && this.mode !== 'none'; }
@@ -180,9 +255,9 @@ export class Player {
     this._currentUrl = URL.createObjectURL(file);
     this.mode = 'local'; this.station = null; this.status = '';
     this._stopMeta();
+    this._newAnalysed();
     this.active = this.analysed;
     this.canAnalyse = !!this.analyser;
-    this.analysed.removeAttribute('crossorigin');
     this.analysed.src = this._currentUrl;
     this.analysed.play().catch(() => { });
     if (this.onStatus) this.onStatus();
@@ -203,9 +278,9 @@ export class Player {
       this.plain.play().catch(e => this._setStatus('Error: ' + (e && e.message ? e.message : 'could not play')));
     };
     if (station.cors === false || !this.analyser) { tryPlain(); return; }
+    this._newAnalysed();
     this.active = this.analysed;
     this.canAnalyse = true;
-    this.analysed.crossOrigin = 'anonymous';
     this.analysed.src = station.url;
     let fellBack = false;
     const onError = () => {

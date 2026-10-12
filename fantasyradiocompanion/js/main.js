@@ -476,7 +476,22 @@ async function main() {
     if (IS_MOBILE && hiddenAt && wasProgressing && Date.now() - hiddenAt > 1500) showTip(t('Progress paused while game was minimized.'));
     hiddenAt = 0;
   });
+  // Where the music volume reaches: normally the slider just works. On iPhone and iPad Safari a live stream can play outside Web Audio,
+  // where only muting is possible; say so instead of leaving a slider that seems broken.
+  function updateVolumePath() {
+    const p = player.volumePath;
+    $('pathState').textContent = (p === 'graph' || p === 'element') ? t('the slider sets the level')
+      : p === 'mute' ? t('this station plays outside the page: the slider only mutes it, the device volume buttons set the level')
+      : t('this stream plays outside the page: the slider only mutes it, the device volume buttons set the level');
+  }
+  let routingTipShown = false;
+  player.onRouting = () => {
+    if (routingTipShown || player.volumePath !== 'device' || parseInt($('volMain').value, 10) <= 0) return;
+    routingTipShown = true;
+    showTip(t('This stream plays outside the page, so the Music slider can only mute it. Use the device volume buttons.'));
+  };
   function updateSoundState() {
+    updateVolumePath();
     const s = Sound.state;
     $('soundState').textContent = s === 'running' ? t('on (volume {n}%)', { n: Math.round(Sound.volume) })
       : s === 'none' ? t('not supported by this browser')
