@@ -496,8 +496,17 @@ async function main() {
   }
   if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(() => { });
 
-  // For the automated checks.
-  window.fmc = { scene, player, vis, library, Sound, setTab, openTuner, openCompendium, closePopups };
+  // Press-and-hold must not select the page or open a context menu (the item disc is opened with one); text boxes are left alone.
+  document.addEventListener('selectstart', e => {
+    const el = e.target && (e.target.nodeType === 3 ? e.target.parentElement : e.target);
+    if (!(el && el.closest && el.closest('input, textarea'))) e.preventDefault();
+  });
+  document.addEventListener('contextmenu', e => {
+    const el = e.target;
+    if (!(el && el.closest && el.closest('input, textarea'))) e.preventDefault();
+  });
+
+  // For the automated checks.  window.fmc = { scene, player, vis, library, Sound, setTab, openTuner, openCompendium, closePopups };
 }
 
 main().catch(e => { console.error(e); document.body.insertAdjacentHTML('afterbegin', '<pre style="color:#f88;padding:12px">' + String(e && e.stack || e) + '</pre>'); });

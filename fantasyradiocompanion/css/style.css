@@ -10,7 +10,13 @@
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
-html, body { height: 100%; margin: 0; background: var(--bg); color: var(--text); font: 15px/1.35 "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif; overscroll-behavior: none; }
+/* A long press (the item disc, a long tap anywhere) must not select the page or raise iOS's magnifier and callout. */
+html, body {
+  -webkit-user-select: none; user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+input, textarea { -webkit-user-select: text; user-select: text; }html, body { height: 100%; margin: 0; background: var(--bg); color: var(--text); font: 15px/1.35 "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif; overscroll-behavior: none; }
 button { font: inherit; color: var(--text); background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 7px 12px; cursor: pointer; }
 button:hover { border-color: var(--gold); }
 button:active { transform: translateY(1px); }
