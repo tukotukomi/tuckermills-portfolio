@@ -481,10 +481,22 @@ export class Visualizer {
   // ---- Items: the hot item button, its disc menu, and the Merchant's shop --------------------------------------------
 
   get _hotRect() { return { x: 8, y: Math.trunc(this.vh / 2) - 22, w: 44, h: 44 }; }   // middle of the left edge
-  get _hotVisible() { return this.zoomed && !this.scene.isShopping; }
+  // The item button belongs to every view the party is shown in, not only the enlarged one.
+  get _hotVisible() { return !this.scene.isShopping; }
   get _discCenter() { return { x: 6 + 44 + 19, y: this._hotRect.y + 22 }; }   // the disc opens inward, to the right of the button
 
+  /** In a short view (the party strip under the Radio and Local Music tabs) the four-way disc would not fit, so the slots open as a row. */
+  get _compactDisc() { return this.vh < 2 * (44 + 19 + 6) + 16; }
+  get _compactBounds() {
+    const r = this._hotRect, w = HOT_SLOT_COUNT * (19 * 2 + 8) + 8;
+    return { x: r.x + r.w + 8, y: r.y + 22 - 19 - 6, w: w, h: 19 * 2 + 12 };
+  }
+
   _discSlotCenter(i) {
+    if (this._compactDisc) {
+      const b = this._compactBounds;
+      return { x: b.x + 8 + 19 + i * (19 * 2 + 8), y: b.y + b.h / 2 };
+    }
     const c = this._discCenter;
     return [{ x: c.x, y: c.y - 44 }, { x: c.x + 44, y: c.y }, { x: c.x, y: c.y + 44 }, { x: c.x - 44, y: c.y }][i];
   }
@@ -565,11 +577,16 @@ export class Visualizer {
 
   _drawDisc(ctx) {
     if (!this._discOpen || !this._hotVisible) return;
-    const c = this._discCenter, outer = 44 + 19 + 6;
+    const c = this._discCenter, outer = 44 + 19 + 6, compact = this._compactDisc;
     const s = this.scene, hot = s.hotItems();
-    ctx.beginPath(); ctx.arc(c.x, c.y, outer, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(14,16,46,0.84)'; ctx.fill();
-    ctx.strokeStyle = 'rgba(255,214,120,0.9)'; ctx.lineWidth = 1.8; ctx.stroke();
+    if (compact) {
+      const b = this._compactBounds;
+      this._pill(ctx, b.x, b.y, b.w, b.h, b.h / 2, 'rgba(14,16,46,0.88)', 'rgba(255,214,120,0.9)', 1.8);
+    } else {
+      ctx.beginPath(); ctx.arc(c.x, c.y, outer, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(14,16,46,0.84)'; ctx.fill();
+      ctx.strokeStyle = 'rgba(255,214,120,0.9)'; ctx.lineWidth = 1.8; ctx.stroke();
+    }
     for (let i = 0; i < HOT_SLOT_COUNT; i++) {
       const sc = this._discSlotCenter(i), selected = i === s.hotSelected, hover = i === this._discHover;
       ctx.beginPath(); ctx.arc(sc.x, sc.y, 19, 0, Math.PI * 2);
@@ -581,13 +598,16 @@ export class Visualizer {
     }
     // The hub shows what is selected, with a name above the disc.
     const cur = s.hotItem;
-    ctx.beginPath(); ctx.arc(c.x, c.y, 14, 0, Math.PI * 2); ctx.fillStyle = 'rgba(22,18,52,0.86)'; ctx.fill();
-    this._drawItemIcon(ctx, cur, c.x, c.y, 1, s.itemCount(cur) <= 0);
+    if (!compact) {
+      ctx.beginPath(); ctx.arc(c.x, c.y, 14, 0, Math.PI * 2); ctx.fillStyle = 'rgba(22,18,52,0.86)'; ctx.fill();
+      this._drawItemIcon(ctx, cur, c.x, c.y, 1, s.itemCount(cur) <= 0);
+    }
     const label = t(ITEM_DEFS[this._discHover >= 0 ? hot[this._discHover] : cur].name);
     const px = 8.5 * PT, w = Math.round(this._measure(ctx, label, px) + 20);
-    const lx = Math.max(6, c.x - w / 2);
-    this._pill(ctx, lx, c.y - outer - 30, w, 24, 6, 'rgba(22,18,52,0.88)', 'rgba(255,214,120,0.9)', 1.2);
-    this._text(ctx, label, lx + w / 2, c.y - outer - 30 + 12.5, { px: px, color: 'white', align: 'center' });
+    const lx = compact ? Math.max(6, this._compactBounds.x) : Math.max(6, c.x - w / 2);
+    const ly = compact ? Math.max(2, this._compactBounds.y - 28) : c.y - outer - 30;
+    this._pill(ctx, lx, ly, w, 24, 6, 'rgba(22,18,52,0.88)', 'rgba(255,214,120,0.9)', 1.2);
+    this._text(ctx, label, lx + w / 2, ly + 12.5, { px: px, color: 'white', align: 'center' });
   }
 
   // The shop panel (screen pixels, like the tavern's cards). One row per item for sale: icon, name, how many are in the bag, an (i)
