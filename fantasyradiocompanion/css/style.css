@@ -59,7 +59,8 @@ body.view-list #stage { flex: 0 0 132px; }
 .vlist .row .s { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .vlist .row.disabled { opacity: 0.5; cursor: default; }
 .vlist .row.hasSupport { padding-right: 104px; }
-.vlist .row .support { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); height: 26px; padding: 0 12px; border-radius: 13px;
+.vlist .row .support { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); height: 26px; line-height: 23px; padding: 0 12px; border-radius: 13px;
+  box-sizing: border-box; text-decoration: none; text-align: center;
   border: 1.5px solid var(--gold); background: rgba(90,62,16,0.55); color: var(--gold); font: inherit; font-size: 11px; font-weight: 700; letter-spacing: 0.06em;
   cursor: pointer; white-space: nowrap; }
 .vlist .row .support:hover { background: rgba(120,86,24,0.85); color: #fff; }

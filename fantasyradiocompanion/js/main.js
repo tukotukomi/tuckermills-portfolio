@@ -250,10 +250,14 @@ async function main() {
     const url = SUPPORT[s.name];
     if (url) {
       row.classList.add('hasSupport');
-      const b = el('button', 'support', t('SUPPORT'));
-      b.type = 'button';
+      // A real link that opens in a new tab / window, so the game keeps running behind it (an installed iPhone app would otherwise be
+      // navigated away, which is what window.open does in some browsers). The click must not also tune the row in.
+      const b = el('a', 'support', t('SUPPORT'));
+      b.href = url;
+      b.target = '_blank';
+      b.rel = 'noopener noreferrer';
       b.title = url;
-      b.addEventListener('click', ev => { ev.stopPropagation(); window.open(url, '_blank', 'noopener'); });
+      b.addEventListener('click', ev => ev.stopPropagation());
       row.append(b);
     }
   };
