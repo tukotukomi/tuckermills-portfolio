@@ -58,7 +58,7 @@ export class Visualizer {
     this.last = 0;
     this._frame = this._frame.bind(this);
     this._hotDown = false; this._discOpen = false; this._discByPress = false; this._hotDownAt = 0;   // the hot item button and its disc
-    this._discHover = -1; this._overHot = false; this._overBuy = false; this._overLeave = false;
+    this._discHover = -1; this._overHot = false; this._shopHover = null; this._shopInfoId = null;
     this._settingsOpen = false;   // the cog's menu
     document.addEventListener('visibilitychange', () => { this.last = performance.now(); });
 
@@ -507,7 +507,7 @@ export class Visualizer {
   dismissOverlay() {
     if (this._settingsOpen) { this._settingsOpen = false; return true; }
     if (this._discOpen) { this._discOpen = false; this._hotDown = false; return true; }
-    if (this.scene.isShopping) { this.scene.leaveShop(); return true; }
+    if (this.scene.isShopping) { if (this._shopInfoId) this._shopInfoId = null; else this.scene.leaveShop(); return true; }
     return false;
   }
 
@@ -590,59 +590,123 @@ export class Visualizer {
     this._text(ctx, label, lx + w / 2, c.y - outer - 30 + 12.5, { px: px, color: 'white', align: 'center' });
   }
 
-  // The shop panel (screen pixels, like the tavern's cards).
+  // The shop panel (screen pixels, like the tavern's cards). One row per item for sale: icon, name, how many are in the bag, an (i)
+  // button and the price button. The description is a small card opened by the icon or the (i), so the panel stays compact at any
+  // window size or language.
 
-  _shopScale() { return Math.min(Math.max(1.0, Math.min(2.0, this.height / 300.0)), (this.width - 24.0) / 400.0); }
-
-  _shopRect() {
-    const k = this._shopScale(), w = Math.trunc(400 * k), h = Math.trunc(200 * k);
-    return { x: Math.trunc((this.width - w) / 2), y: Math.trunc((this.height - h) / 2), w: w, h: h, k: k };
+  _shopLayout() {
+    const stock = Object.keys(ITEM_DEFS).filter(id => ITEM_DEFS[id].price > 0);
+    const PW = 340, HEAD = 40, ROW = 60, FOOT = 48, units = HEAD + stock.length * ROW + FOOT;
+    let k = Math.max(1.0, Math.min(2.0, this.height / 300.0));
+    k = Math.max(0.5, Math.min(k, (this.width - 24) / PW, (this.height - 16) / units));
+    const w = Math.trunc(PW * k), h = Math.trunc(units * k);
+    const p = { x: Math.trunc((this.width - w) / 2), y: Math.trunc((this.height - h) / 2), w: w, h: h };
+    const rows = stock.map((id, i) => {
+      const y = p.y + Math.trunc((HEAD + i * ROW) * k), rh = Math.trunc(ROW * k), pad = Math.trunc(14 * k);
+      const bw = Math.trunc(92 * k), bh = Math.trunc(34 * k), iw = Math.trunc(28 * k), isz = Math.trunc(48 * k);
+      const buy = { x: p.x + p.w - pad - bw, y: y + Math.trunc((rh - bh) / 2), w: bw, h: bh };
+      const info = { x: buy.x - Math.trunc(10 * k) - iw, y: y + Math.trunc((rh - iw) / 2), w: iw, h: iw };
+      const icon = { x: p.x + pad - Math.trunc(2 * k), y: y + Math.trunc((rh - isz) / 2), w: isz, h: isz };
+      const nx = icon.x + icon.w + Math.trunc(8 * k);
+      return { id: id, y: y, rh: rh, buy: buy, info: info, icon: icon, nameX: nx, nameW: Math.max(10, info.x - Math.trunc(8 * k) - nx) };
+    });
+    const lw = Math.trunc(84 * k), lh = Math.trunc(32 * k);
+    return { k: k, p: p, rows: rows, leave: { x: p.x + p.w - Math.trunc(14 * k) - lw, y: p.y + p.h - Math.trunc(8 * k) - lh, w: lw, h: lh } };
   }
 
-  _shopButtons() {
-    const r = this._shopRect(), k = r.k;
-    const bw = Math.trunc(84 * k), bh = Math.trunc(34 * k), x = r.x + r.w - bw - Math.trunc(14 * k);
-    return { buy: { x: x, y: r.y + Math.trunc(88 * k), w: bw, h: bh }, leave: { x: x, y: r.y + r.h - bh - Math.trunc(10 * k), w: bw, h: bh } };
+  /** What is under the point: { kind: 0 nothing | 1 buy | 2 icon or (i) | 3 leave, row }. */
+  _shopHit(pt) {
+    const L = this._shopLayout();
+    for (let i = 0; i < L.rows.length; i++) {
+      const r = L.rows[i];
+      if (this._inRect(pt, r.buy)) return { kind: 1, row: i };
+      if (this._inRect(pt, r.info) || this._inRect(pt, r.icon)) return { kind: 2, row: i };
+    }
+    if (this._inRect(pt, L.leave)) return { kind: 3, row: -1 };
+    return { kind: 0, row: -1 };
   }
 
-  _drawShopButton(ctx, b, text, px, enabled, hot) {
+  _drawShopButton(ctx, b, enabled, hot) {
     this._pill(ctx, b.x, b.y, b.w, b.h, b.h / 2,
       enabled ? (hot ? 'rgba(120,86,24,0.94)' : 'rgba(90,62,16,0.9)') : 'rgba(40,40,56,0.8)',
       enabled ? 'rgb(255,214,120)' : 'rgba(120,120,150,0.63)', 1.6);
-    this._text(ctx, text, b.x + b.w / 2, b.y + b.h / 2 + 0.5, { px: px, color: enabled ? 'white' : 'rgb(170,170,190)', align: 'center' });
   }
 
   _drawShop(ctx) {
     const s = this.scene;
-    if (!s.isShopping) return;
-    const r = this._shopRect(), k = r.k, id = 'SynergyElixir', def = ITEM_DEFS[id];
+    if (!s.isShopping) { this._shopInfoId = null; return; }
+    const L = this._shopLayout(), k = L.k, r = L.p;
+    const hover = this._shopInfoId ? { kind: 0, row: -1 } : (this._shopHover || { kind: 0, row: -1 });
     ctx.fillStyle = 'rgba(0,0,0,0.47)'; ctx.fillRect(0, 0, this.width, this.height);
     this._pill(ctx, r.x, r.y, r.w, r.h, 10 * k, 'rgba(24,20,58,0.94)', 'rgb(255,214,120)', 2.2);
     const nameFont = 10.5 * PT * k, small = 8.5 * PT * k;
     this._text(ctx, t('Merchant'), r.x + 14 * k, r.y + 21 * k, { px: 12 * PT * k, color: 'rgb(255,226,150)' });
     // the gold in hand
+    const coin = Sprites.coin, cs = Math.max(1, Math.round(1.5 * k));
     const gold = s.gold.toLocaleString('en-US');
     const gw = this._measure(ctx, gold, nameFont);
     this._text(ctx, gold, r.x + r.w - 14 * k - gw, r.y + 21 * k, { px: nameFont, color: 'white' });
-    const coin = Sprites.coin, cs = Math.max(1, Math.round(1.5 * k));
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(coin, Math.round(r.x + r.w - 14 * k - gw - 6 - coin.width * cs), Math.round(r.y + 21 * k - coin.height * cs / 2), coin.width * cs, coin.height * cs);
     ctx.strokeStyle = 'rgba(170,186,240,0.47)'; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(r.x + 12 * k, r.y + 40 * k + 0.5); ctx.lineTo(r.x + r.w - 12 * k, r.y + 40 * k + 0.5); ctx.stroke();
 
-    // the one thing he sells
-    const rowY = r.y + 52 * k;
-    this._drawItemIcon(ctx, id, r.x + 38 * k, rowY + 30 * k, Math.max(2, Math.round(3 * k)), false);
-    const tx = r.x + 76 * k, tw = r.x + r.w - tx - 110 * k;
-    this._text(ctx, t(def.name), tx, rowY + 11 * k, { px: nameFont, color: 'white' });
-    this._wrap(ctx, t(def.blurb), tx, rowY + 26 * k, tw, small, 'rgb(200,210,245)', 400, 4);
-    this._text(ctx, t('In bag: {n}', { n: s.itemCount(id) }), tx, rowY + 90 * k, { px: small, color: 'rgb(255,214,120)', weight: 400 });
+    L.rows.forEach((row, i) => {
+      const def = ITEM_DEFS[row.id], hotIcon = hover.kind === 2 && hover.row === i;
+      this._drawItemIcon(ctx, row.id, row.icon.x + row.icon.w / 2, row.icon.y + row.icon.h / 2, Math.max(2, Math.round(3 * k)), false);
+      if (hotIcon) { ctx.strokeStyle = 'rgba(255,214,120,0.6)'; ctx.lineWidth = 1.4; ctx.strokeRect(row.icon.x + 0.5, row.icon.y + 0.5, row.icon.w, row.icon.h); }
+      this._fitText(ctx, t(def.name), row.nameX, row.y + row.rh / 2 - 10 * k, row.nameW, { px: nameFont, color: 'white' });
+      this._fitText(ctx, t('In bag: {n}', { n: s.itemCount(row.id) }), row.nameX, row.y + row.rh / 2 + 11 * k, row.nameW, { px: small, color: 'rgb(255,214,120)', weight: 400 });
 
-    // Buy and Leave
-    const b = this._shopButtons(), afford = s.gold >= def.price;
-    this._text(ctx, t('{n} Gold', { n: def.price }), b.buy.x + b.buy.w / 2, b.buy.y - 14 * k, { px: nameFont, color: afford ? 'rgb(255,226,150)' : 'rgb(255,150,140)', align: 'center' });
-    this._drawShopButton(ctx, b.buy, afford ? t('Buy') : t('Need {n}', { n: def.price }), nameFont, afford, this._overBuy && afford);
-    this._drawShopButton(ctx, b.leave, t('Leave'), nameFont, true, this._overLeave);
+      // (i): the description
+      const ib = row.info, cx = ib.x + ib.w / 2, cy = ib.y + ib.h / 2;
+      ctx.beginPath(); ctx.arc(cx, cy, ib.w / 2 - 0.5, 0, Math.PI * 2);
+      ctx.fillStyle = hotIcon ? 'rgba(70,80,140,0.92)' : 'rgba(44,50,98,0.86)'; ctx.fill();
+      ctx.strokeStyle = 'rgba(170,186,240,0.86)'; ctx.lineWidth = 1.4; ctx.stroke();
+      this._text(ctx, 'i', cx, cy + 0.5, { px: nameFont, color: 'white', align: 'center' });
+
+      // the price is the button; dim, with the number in red, while there isn't enough gold
+      const afford = s.gold >= def.price, hotBuy = hover.kind === 1 && hover.row === i && afford;
+      this._drawShopButton(ctx, row.buy, afford, hotBuy);
+      const ptxt = String(def.price), pw = this._measure(ctx, ptxt, nameFont), gap = 5 * k, cw = coin.width * cs;
+      const x0 = row.buy.x + (row.buy.w - (cw + gap + pw)) / 2;
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(coin, Math.round(x0), Math.round(row.buy.y + (row.buy.h - coin.height * cs) / 2), cw, coin.height * cs);
+      this._text(ctx, ptxt, x0 + cw + gap, row.buy.y + row.buy.h / 2 + 0.5, { px: nameFont, color: afford ? 'white' : 'rgb(255,150,140)' });
+    });
+    this._drawShopButton(ctx, L.leave, true, hover.kind === 3);
+    this._text(ctx, t('Leave'), L.leave.x + L.leave.w / 2, L.leave.y + L.leave.h / 2 + 0.5, { px: nameFont, color: 'white', align: 'center' });
+
+    if (this._shopInfoId) this._drawShopInfo(ctx, L);
+  }
+
+  /** The item's description as a small card over the shop; any tap (or Esc) closes it. */
+  _drawShopInfo(ctx, L) {
+    const k = L.k, id = this._shopInfoId, def = ITEM_DEFS[id];
+    ctx.fillStyle = 'rgba(0,0,0,0.43)'; ctx.fillRect(0, 0, this.width, this.height);
+    const cw = Math.min(Math.trunc(300 * k), this.width - 24), pad = Math.trunc(14 * k), innerW = cw - 2 * pad;
+    const small = 8.5 * PT * k, headH = Math.trunc(48 * k), hintH = Math.trunc(22 * k);
+    const lines = this._wrapLines(ctx, t(def.blurb), innerW, small, 400);
+    const lh = small * 1.25;
+    const ch = Math.min(this.height - 16, pad + headH + Math.trunc(6 * k) + lines.length * lh + Math.trunc(8 * k) + hintH + Math.trunc(pad / 2));
+    const x = Math.trunc((this.width - cw) / 2), y = Math.max(8, Math.trunc((this.height - ch) / 2));
+    this._pill(ctx, x, y, cw, ch, 10 * k, 'rgba(28,24,66,0.97)', 'rgb(255,214,120)', 2);
+    this._drawItemIcon(ctx, id, x + pad + 22 * k, y + pad + headH / 2, Math.max(2, Math.round(3 * k)), false);
+    this._fitText(ctx, t(def.name), x + pad + 52 * k, y + pad + headH / 2, innerW - 52 * k, { px: 12 * PT * k, color: 'rgb(255,226,150)' });
+    const ty = y + pad + headH + 6 * k;
+    this._wrap(ctx, t(def.blurb), x + pad, ty, innerW, small, 'rgb(214,222,250)', 400, 40);
+    this._text(ctx, t('Tap anywhere to close'), x + cw - pad, y + ch - pad / 2 - hintH / 2, { px: small, color: 'rgb(160,172,220)', weight: 400, align: 'right' });
+  }
+
+  /** Single-line text that is cut with an ellipsis when it would pass maxW. */
+  _fitText(ctx, str, x, y, maxW, o) {
+    let s = str;
+    if (this._measure(ctx, s, o.px, o.weight) > maxW) {
+      const chars = Array.from(s);
+      while (chars.length > 1 && this._measure(ctx, chars.join('') + '...', o.px, o.weight) > maxW) chars.pop();
+      s = chars.join('') + '...';
+    }
+    this._text(ctx, s, x, y, o);
   }
 
   // ---- Story UI: tavern cards, dialogue, level-up ----------------------------------------------------------------
@@ -734,8 +798,7 @@ export class Visualizer {
     }
   }
 
-  /** Draws wrapped text (up to maxLines) and returns the y below it. */
-  _wrap(ctx, text, x, y, maxW, px, color, weight, maxLines, style) {
+  _wrapLines(ctx, text, maxW, px, weight, style) {
     ctx.font = (style || '') + weight + ' ' + px + 'px ' + FONT;
     const cjk = isCjk();
     const words = cjk ? Array.from(text) : text.split(' ');
@@ -747,6 +810,13 @@ export class Visualizer {
       if (ctx.measureText(test).width > maxW && cur) { lines.push(cur); cur = w; } else cur = test;
     }
     if (cur) lines.push(cur);
+    return lines;
+  }
+
+  /** Draws wrapped text (up to maxLines) and returns the y below it. */
+  _wrap(ctx, text, x, y, maxW, px, color, weight, maxLines, style) {
+    const cjk = isCjk();
+    const lines = this._wrapLines(ctx, text, maxW, px, weight, style);
     ctx.fillStyle = color; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
     const lh = px * 1.25;
     for (let i = 0; i < lines.length && i < maxLines; i++) {
@@ -868,9 +938,8 @@ export class Visualizer {
     this._overHot = this._inHot(h);
     this._discHover = this._discOpen ? this._discSlotAt(h) : -1;
     if (s.isShopping) {
-      const b = this._shopButtons();
-      this._overBuy = this._inRect(p, b.buy); this._overLeave = this._inRect(p, b.leave);
-      this.canvas.style.cursor = this._overBuy || this._overLeave ? 'pointer' : 'default';
+      this._shopHover = this._shopHit(p);
+      this.canvas.style.cursor = this._shopHover.kind || this._shopInfoId ? 'pointer' : 'default';
       return;
     }
     const cards = this._cardRects();
@@ -893,9 +962,11 @@ export class Visualizer {
     const h = { x: p.x / this.hud, y: p.y / this.hud };
     const s = this.scene;
     if (s.isShopping) {   // the shop is modal
-      const b = this._shopButtons();
-      if (this._inRect(p, b.buy)) s.buyItem('SynergyElixir');
-      else if (this._inRect(p, b.leave)) { this._overBuy = false; this._overLeave = false; s.leaveShop(); }
+      if (this._shopInfoId) { this._shopInfoId = null; return; }   // any tap closes the description
+      const hit = this._shopHit(p), L = this._shopLayout();
+      if (hit.kind === 1) s.buyItem(L.rows[hit.row].id);
+      else if (hit.kind === 2) this._shopInfoId = L.rows[hit.row].id;
+      else if (hit.kind === 3) { this._shopHover = null; s.leaveShop(); }
       return;
     }
     if (this._settingsOpen) {

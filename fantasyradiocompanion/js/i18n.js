@@ -1,4 +1,4 @@
-// Languages. English text is the key: t('Buy') returns the string for the current language, or the English itself when a
+// Languages. English text is the key: t('Leave') returns the string for the current language, or the English itself when a
 // language has no entry. Parameters are written {name} and filled from the second argument: t('{n} tracks', { n: 3 }).
 // Saved games and settings never contain translated text, so switching language never touches progress.
 
@@ -60,7 +60,7 @@ const ES = {
   'Huzzah!': '¡Hurra!', 'Blood Moon!': '¡Luna de Sangre!',
   // HUD and shop
   'Tuner: music & radio stations': 'Sintonizador: música y emisoras', 'Tap: use   Hold: switch': 'Toca: usar   Mantén: cambiar', 'Restart': 'Reiniciar',
-  'Merchant': 'Mercader', 'In bag: {n}': 'En la bolsa: {n}', 'Buy': 'Comprar', 'Leave': 'Salir', 'Need {n}': 'Faltan {n}', '{n} Gold': '{n} de oro',
+  'Merchant': 'Mercader', 'In bag: {n}': 'En la bolsa: {n}', 'Leave': 'Salir', 'Tap anywhere to close': 'Toca en cualquier lugar para cerrar', 'Click anywhere to close': 'Haz clic en cualquier lugar para cerrar',
   'Synergy Elixir': 'Elixir de sinergia', 'Red Potion': 'Poción roja', 'Blue Potion': 'Poción azul', 'Green Potion': 'Poción verde',
   'A placeholder potion. It does nothing yet.': 'Una poción de relleno. Todavía no hace nada.',
   "Resets every party member's skills so they all fire together within a second, Huzzah! first so the damage skills get its full benefit.": 'Reinicia las habilidades de todo el grupo para que se activen juntas en un segundo, con ¡Hurra! primero para que las de daño aprovechen todo su efecto.',
@@ -135,7 +135,7 @@ const ZH = {
   'Huzzah!': '万岁！', 'Blood Moon!': '血月！',
   // HUD and shop
   'Tuner: music & radio stations': '调谐器：音乐与电台', 'Tap: use   Hold: switch': '轻点：使用   长按：切换', 'Restart': '重新开始',
-  'Merchant': '商人', 'In bag: {n}': '背包中：{n}', 'Buy': '购买', 'Leave': '离开', 'Need {n}': '还差 {n}', '{n} Gold': '{n} 金币',
+  'Merchant': '商人', 'In bag: {n}': '背包中：{n}', 'Leave': '离开', 'Tap anywhere to close': '点击任意位置关闭', 'Click anywhere to close': '点击任意位置关闭',
   'Synergy Elixir': '协同灵药', 'Red Potion': '红色药水', 'Blue Potion': '蓝色药水', 'Green Potion': '绿色药水',
   'A placeholder potion. It does nothing yet.': '占位药水，目前没有任何效果。',
   "Resets every party member's skills so they all fire together within a second, Huzzah! first so the damage skills get its full benefit.": '重置全队技能，使它们在一秒内同时发动；“万岁！”最先触发，让伤害技能获得其全部加成。',
