@@ -3,7 +3,8 @@
 // nearest-neighbour by the page.
 
 import { C, CA, withAlpha, mix, clamp255, hash, ease, rnd, Pix, tintImage } from './util.js';
-import { Sprites, PARTY } from './sprites.js';
+import { Sprites, PARTY, PARTY_NAMES } from './sprites.js';
+import { t } from './i18n.js';
 import { Sound } from './sfx.js';
 
 export const DESIGN_HEIGHT = 33;
@@ -123,6 +124,8 @@ export class PixelScene {
     this.onProgress = null;   // callback: the saved progress changed
 
     this._initCoins(); this._initStory(); this._initTraits(); this._initEnemies(); this._initHealth(); this._initItems();
+    this.starting = false; this.startRects = []; this.signRect = null; this.startHover = -1;
+    this._beginStart();
   }
 
   get marching() { return this._marching && !this.suspended; }
@@ -855,6 +858,7 @@ export class PixelScene {
   get atCamp() { return this.camp > 0.85 && this.marching && !this.progressing; }
 
   _updateCamp(dt) {
+    if (this.starting) { this.camp = 1; return; }   // the heroes wait at the fire until one of them is picked
     const freeToCamp = this.enc === 'None' || this.enc === 'Approaching';
     if (this.marching && !this.progressing && freeToCamp) this.camp = Math.min(1, this.camp + dt / 0.9);
     else if (this.progressing || !freeToCamp) this.camp = Math.max(0, this.camp - dt / 0.7);
@@ -968,11 +972,105 @@ export class PixelScene {
     this.tavernWorldX = this.scroll + this.lastLw + 6;
   }
 
+  // ---- The start of an adventure: two heroes at a campfire, and a sign ----------------------------------------------------
+
+  /** Two different playable characters, drawn at random, sit at a campfire; the player picks who leads the party. */
+  _beginStart() {
+    const all = PARTY.slice(), picks = [];
+    while (picks.length < 2) { const k = all[rnd(all.length)]; if (picks.indexOf(k) < 0) picks.push(k); }
+    this.offer = picks;
+    this.starting = true;
+    this.enc = 'Waiting';
+    this.camp = 1;
+    this.startHover = -1;
+  }
+
+  /** Which of the two heroes is under a point in control pixels (a little forgiving), or -1. */
+  startCandidateAt(x, y) {
+    if (!this.starting) return -1;
+    const sx = x / this.lastScale, sy = (y - this.lastTop) / this.lastScale;
+    for (let i = 0; i < this.startRects.length; i++) {
+      const r = this.startRects[i];
+      if (sx >= r.x - 3 && sx <= r.x + r.w + 3 && sy >= r.y - 4 && sy <= r.y + r.h + 3) return i;
+    }
+    return -1;
+  }
+
+  _drawStartCandidates(g, lw) {
+    this.startRects = [];
+    if (!this.offer) return;
+    const fx = Math.trunc(lw / 2), centers = [fx - 20, fx + 15];   // one either side of the fire
+    let signLeft = fx + 29;
+    for (let i = 0; i < this.offer.length && i < 2; i++) {
+      const sprite = Sprites.party[this.offer[i]];
+      const frame = i === 1 ? sprite.fa : sprite.a;   // the right-hand one turns to face the fire
+      const breath = Math.sin(this.time * 2 * Math.PI / IDLE_BREATH_SECONDS - i * 0.6) > 0 ? 1 : 0;
+      const x = centers[i] - Math.trunc(sprite.w / 2), y = this.groundY + 1 - sprite.h - breath;
+      if (i === 1) signLeft = x + sprite.w + 5;
+      g.ellipse(x + Math.trunc((sprite.w - 12) / 2), this.groundY, 12, 2, CA(90, 20, 30, 20));
+      if (i === this.startHover) g.ellipse(x - 3, y - 3, sprite.w + 6, sprite.h + 7, CA(70, 255, 226, 140));
+      g.image(frame, x, y, false, undefined, sprite.w, sprite.h + breath);
+      this.startRects.push({ x: x, y: y, w: sprite.w, h: sprite.h + breath });
+    }
+    this._drawStartSign(g, lw, signLeft);
+  }
+
+  /** A wooden sign on a post, to the right of the fire and the two heroes; the text itself is drawn at screen resolution. */
+  _drawStartSign(g, lw, left) {
+    const bw = 34, bh = 14, bx = Math.max(2, Math.min(left, lw - bw - 2)), by = this.groundY - 17;
+    const ink = C(30, 22, 40), wood = C(158, 100, 58), dark = C(104, 62, 38), pale = C(204, 146, 92), nail = C(250, 212, 76);
+    this.signRect = { x: bx, y: by, w: bw, h: bh };
+    const px = bx + Math.trunc(bw / 2) - 1, postH = this.groundY + 1 - (by + bh);
+    g.rect(px - 1, by + bh, 4, postH, ink); g.rect(px, by + bh, 2, postH, wood); g.rect(px + 1, by + bh, 1, postH, dark);
+    g.rect(bx - 1, by - 1, bw + 2, bh + 2, ink);
+    g.rect(bx, by, bw, bh, wood);
+    g.rect(bx, by, bw, 1, pale);
+    g.rect(bx, by + bh - 1, bw, 1, dark);
+    g.rect(bx, by + Math.trunc(bh / 2), bw, 1, dark);   // the seam between two planks
+    g.rect(bx + 1, by + 1, 1, 1, nail); g.rect(bx + bw - 2, by + 1, 1, 1, nail);
+    g.rect(bx + 1, by + bh - 3, 1, 1, nail); g.rect(bx + bw - 2, by + bh - 3, 1, 1, nail);
+  }
+
+  static _signLines(text) {
+    text = (text || '').trim();
+    const mid = Math.trunc(text.length / 2);
+    let best = -1;
+    for (let i = 0; i < text.length; i++) if (text[i] === ' ' && (best < 0 || Math.abs(i - mid) < Math.abs(best - mid))) best = i;
+    if (best > 0) return [text.substring(0, best), text.substring(best + 1)];
+    let cut = text.search(/[，,、]/);   // no spaces (Chinese): after the comma, or the middle
+    if (cut < 0 || cut >= text.length - 1) cut = mid - 1;
+    return [text.substring(0, cut + 1), text.substring(cut + 1)];
+  }
+
+  /** Over the head; in a short view that would run into the HUD pills, so across the body instead. */
+  _startLabelY(r) {
+    const y = this.lastTop + (r.y - 5) * this.lastScale;
+    return y < 48 ? this.lastTop + (r.y + r.h * 0.62) * this.lastScale : y;
+  }
+
+  /** The sign's words, and a name over each hero. */
+  _appendStartText(list) {
+    if (!this.starting || !this.offer || !this.signRect) return;
+    const lines = PixelScene._signLines(t('Play the radio to adventure!')), small = this.lastScale < 5;
+    const cx = (this.signRect.x + this.signRect.w / 2) * this.lastScale;
+    lines.forEach((line, i) => list.push({
+      text: line, x: cx, y: this.lastTop + (this.signRect.y + this.signRect.h * (i === 0 ? 0.27 : 0.73)) * this.lastScale,
+      alpha: 1, bubble: false, small: small, color: C(255, 244, 214)
+    }));
+    for (let i = 0; i < this.startRects.length && i < this.offer.length; i++) {
+      const r = this.startRects[i];
+      list.push({
+        text: t(PARTY_NAMES[this.offer[i]]), x: (r.x + r.w / 2) * this.lastScale, y: this._startLabelY(r),
+        alpha: 1, bubble: false, color: i === this.startHover ? C(255, 226, 150) : C(255, 255, 255)
+      });
+    }
+  }
+
   _beginChoosing() {
     if (this.party.length >= 6) { this._startOldMan(); return; }
     this.enc = 'Waiting';
     if (this.offer === null) {
-      const pool = PARTY.filter(k => k !== 'paca' && this.party.indexOf(k) < 0);
+      const pool = PARTY.filter(k => this.party.indexOf(k) < 0);
       if (pool.length === 0) { this.enc = 'None'; return; }
       const picks = [];
       while (picks.length < Math.min(2, pool.length)) { const k = pool[rnd(pool.length)]; if (picks.indexOf(k) < 0) picks.push(k); }
@@ -984,6 +1082,17 @@ export class PixelScene {
   /** The player's pick (0 or 1) from the two on offer. */
   choose(index) {
     if (!this.isChoosing || index < 0 || index >= this.offer.length) return;
+    if (this.starting) {
+      // The first pick: this hero leads the party. They stay at the fire until a radio stream starts and the road calls.
+      this.party = [this.offer[index]];
+      this.offer = null;
+      this.starting = false;
+      this.enc = 'None';
+      this.arrived = false; this.groupLeft = NaN; this.startHover = -1;
+      Sound.play('DiscClick');
+      this.raiseProgress();
+      return;
+    }
     this.party.push(this.offer[index]);
     this.offer = null;
     this.joinT = 0;
@@ -1000,6 +1109,7 @@ export class PixelScene {
     this.notes.length = 0;
     this._resetStory(); this._resetCoins(); this._resetTraits(); this._resetItems();
     this.kills = {};
+    this._beginStart();   // and the adventure begins again at the campfire, with a new pair to pick from
     this.raiseProgress();
   }
 
@@ -1008,7 +1118,7 @@ export class PixelScene {
   saveState() {
     const f5 = this.dayPhase.toFixed(5);
     return ['3', this.party.map(k => PARTY_ENUM[k]).join(','), f5, String(this.daysCompleted), this.offer ? this.offer.map(k => PARTY_ENUM[k]).join(',') : '',
-      this._saveStoryFields(), String(this.gold), this._saveTraitFields(), this._saveBestiaryFields()].concat(this._saveItemFields(), [this._saveHpFields(), this._saveBerserkFields()]).join('|');
+      this._saveStoryFields(), String(this.gold), this._saveTraitFields(), this._saveBestiaryFields()].concat(this._saveItemFields(), [this._saveHpFields(), this._saveBerserkFields(), this.starting ? '1' : '']).join('|');
   }
 
   loadState(state) {
@@ -1016,12 +1126,14 @@ export class PixelScene {
     try {
       const p = state.split('|');
       if (p.length < 4 || (p[0] !== '1' && p[0] !== '2' && p[0] !== '3')) return;
-      const party = ['paca'];
+      const party = [];
       for (const name of p[1].split(',').filter(s => s)) {
         const k = KIND_FROM_ENUM[name];
-        if (k && k !== 'paca' && party.indexOf(k) < 0) party.push(k);
+        if (k && party.indexOf(k) < 0) party.push(k);   // the first one leads (it is the hero picked at the fire)
       }
+      if (party.length === 0) party.push('paca');
       this.party = party;
+      this.starting = false;
       this.groupLeft = NaN;
       this.enc = 'None'; this.arrived = false; this.tavernVisible = false; this.move = 1;
 
@@ -1035,11 +1147,12 @@ export class PixelScene {
       this.yearDay = this.playDays % (SEASON_DAYS * 4);
 
       this.offer = null;
+      const startFlag = p.length > 17 && p[17] === '1';
       if (p.length > 4 && this.party.length < 6) {
         const offer = [];
         for (const name of p[4].split(',').filter(s => s)) {
           const k = KIND_FROM_ENUM[name];
-          if (k && k !== 'paca' && this.party.indexOf(k) < 0 && offer.indexOf(k) < 0) offer.push(k);
+          if (k && (startFlag || this.party.indexOf(k) < 0) && offer.indexOf(k) < 0) offer.push(k);   // (the heroes at the fire may include the placeholder Paca)
         }
         if (offer.length === Math.min(2, 6 - this.party.length)) this.offer = offer;
       }
@@ -1050,6 +1163,7 @@ export class PixelScene {
       this._loadTraitFields(p.length > 10 ? p[10] : null);
       this._loadBestiaryFields(p.length > 11 ? p[11] : null);
       this._loadItemFields(p.length > 12 ? p[12] : null, p.length > 13 ? p[13] : null, p.length > 14 ? p[14] : null);   // the bag, the hot slots, the Merchant's last day
+      if (startFlag && this.offer !== null && this.party.length === 1) { this.starting = true; this.enc = 'Waiting'; this.camp = 1; }   // saved at the campfire, before a hero was picked
       this._loadBerserkFields(p.length > 16 ? p[16] : null);   // the Monster Berserker's multiplier and time left (absent in older saves)
       this._loadHpFields(p.length > 15 ? p[15] : null);   // members below full health (absent in older saves: everyone is at full)
     } catch (e) { /* a bad save just starts a fresh party */ }
@@ -1070,6 +1184,7 @@ export class PixelScene {
   }
 
   _drawParty(g, lw) {
+    if (this.starting) { this._drawStartCandidates(g, lw); return; }
     const n = this.party.length;
     const walking = this.marching && this.move > 0.05;
     const stepB = walking && (this.clock.beatIndex % 2 === 1);

@@ -495,11 +495,11 @@ export class Visualizer {
   // ---- Scene text, camp hint ---------------------------------------------------------------------------------------
 
   _drawSceneText(ctx) {
-    const px = Math.round(11 * PT * this.hud);
+    const px = Math.round(11 * PT * this.hud), pxSmall = Math.round(8.25 * PT * this.hud);
     for (const t of this.scene.textOverlays()) {
       if (t.alpha <= 0.01) continue;
       const a = Math.min(1, t.alpha);
-      ctx.font = '700 ' + px + 'px ' + FONT;
+      ctx.font = '700 ' + (t.small ? pxSmall : px) + 'px ' + FONT;
       const tw = ctx.measureText(t.text).width;
       if (t.bubble) {
         const w = Math.round(tw) + 14 * this.hud, h = px + 6 * this.hud;
@@ -550,7 +550,7 @@ export class Visualizer {
     return { x: 6, y: y, w: size, h: size };
   }
   // The item button belongs to every view the party is shown in, not only the enlarged one.
-  get _hotVisible() { return !this.scene.isShopping && !this.scene.isGameOver; }
+  get _hotVisible() { return !this.scene.isShopping && !this.scene.isGameOver && !this.scene.starting; }
   get _discCenter() { return { x: 8 + 46 + 22 + 6, y: this._hotRect.y + 22 }; }   // the disc opens inward; its edge keeps the button's 8 px margin
 
   /** In a short view (the party strip under the Radio and Local Music tabs) the four-way disc would not fit, so the slots open as a row. */
@@ -886,6 +886,7 @@ export class Visualizer {
     const n = s.offer ? s.offer.length : 0;
     const out = { k: 0, stacked: false, rects: [], bannerY: 0, bannerH: 0 };
     if (!s.isChoosing || n === 0) return out;
+    if (s.starting && this.height < 250) return out;   // a short view has no room for the cards: the heroes at the fire are tapped instead
     const bannerOf = k => Math.round(10.5 * PT * k + 6 * k + 4);
     // The block sits below the HUD pills (which may have wrapped onto a second row), never under them.
     const L0 = this._hudLayout(this.ctx);
@@ -937,7 +938,7 @@ export class Visualizer {
     const lay = this._cardLayout(), rects = lay.rects;
     if (rects.length === 0) return;
     const s = this.scene, k = lay.k;
-    const title = t(s.offer.length === 1 ? 'A tavern! Your last companion is waiting.' : 'A tavern! Who joins the party?');
+    const title = s.starting ? t('Who will you adventure as?') : t(s.offer.length === 1 ? 'A tavern! Your last companion is waiting.' : 'A tavern! Who joins the party?');
     this._banner(ctx, k, title, true, lay.bannerY);   // centered above the cards, in the middle of the page
     for (let i = 0; i < rects.length && i < s.offer.length; i++) {
       const r = rects[i], hot = i === this.hover.card, kind = s.offer[i];
@@ -1121,6 +1122,10 @@ export class Visualizer {
       this.canvas.style.cursor = this._shopHover.kind || this._shopInfoId ? 'pointer' : 'default';
       return;
     }
+    if (s.starting) {
+      s.startHover = s.startCandidateAt(p.x, p.y);
+      if (s.startHover >= 0) hover.card = -1;
+    }
     const cards = this._cardRects();
     for (let i = 0; i < cards.length; i++) if (this._inRect(p, cards[i])) hover.card = i;
     if (s.isLevelSelect) {
@@ -1172,6 +1177,10 @@ export class Visualizer {
     if (this._inRect(h, this._settingsRect)) { this._settingsOpen = !this._settingsOpen; Sound.play('DiscClick'); return; }
     if (this._discOpen) return;   // a tap on the disc is settled when the pointer comes up
     if (this._inHot(h)) { this._hotDown = true; this._hotDownAt = performance.now(); this._discByPress = false; return; }
+    if (s.starting) {
+      const sc = s.startCandidateAt(p.x, p.y);   // tapping a hero at the fire picks them (the cards need room a short view hasn't got)
+      if (sc >= 0) { s.choose(sc); this.hover.card = -1; return; }
+    }
     const cards = this._cardRects();
     for (let i = 0; i < cards.length; i++) if (this._inRect(p, cards[i])) { s.choose(i); this.hover.card = -1; return; }
     if (this._inTuner(h)) { this.host.openTuner && this.host.openTuner(); return; }

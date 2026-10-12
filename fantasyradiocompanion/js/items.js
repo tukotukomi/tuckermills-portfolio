@@ -110,7 +110,7 @@ export function installItems(P) {
   /** Uses the item in the selected hot slot. False when there is none left. */
   m.useHotItem = function () {
     const id = this.hot[this.hotSel];
-    if (this.itemCount(id) <= 0 || this.isShopping || this.isWaiting || this.isGameOver) return false;
+    if (this.itemCount(id) <= 0 || this.isShopping || this.isWaiting || this.isGameOver || this.starting) return false;
     if (ITEM_DEFS[id].picks) {
       this.targetItem = id; this.targetT = 0; this.targetHover = null;   // nothing is spent: the game pauses and 1X to 5X are offered
       Sound.play('DiscClick');

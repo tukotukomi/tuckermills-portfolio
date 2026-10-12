@@ -5,7 +5,7 @@
 import { C, CA, withAlpha, rnd } from './util.js';
 import { Sprites } from './sprites.js';
 import { Sound } from './sfx.js';
-import { peckDamage, peckInterval, axeInterval } from './traits.js';
+import { peckDamage, peckInterval, axeInterval, BASIC_ATTACKERS, BASIC_DAMAGE, basicInterval } from './traits.js';
 import { t } from './i18n.js';
 
 // The four originals, then the variant of each that takes over half the spawns from Year 2 (same moves, twice the damage).
@@ -74,6 +74,7 @@ export function installEnemies(P) {
     this.bloodMoonT = -1;   // 0..1 while the Blood Moon plays out, <0 otherwise
     this.bloodMoonStruck = false;
     this.kills = {};   // a kind is "known" once it has an entry here
+    this.basicTimer = {};   // seconds to each basic attack of the Thief, Fae, Light Mage and Fire Mage
   };
 
   Object.defineProperty(m, 'inCombat', { get() { return this.enemy !== null && this.enemy.deathT < 0; } });
@@ -100,6 +101,7 @@ export function installEnemies(P) {
   m._spawnEnemy = function () {
     const kind = this._pickEnemyKind();
     this.enemy = { kind: kind, x: this.lastLw + 6, hp: DEFS[kind].hp, maxHp: DEFS[kind].hp, engaged: false, walkT: 0, attackTimer: 0, attackAnim: -1, attackPose: 0, struck: false, peckTimer: 0, axeTimer: 0, bloodMoonUsed: false, hurtFlash: 0, deathT: -1 };
+    this.basicTimer = {};
     this._noteSeen(kind);
     Sound.play(ROAR[baseOf(kind)]);   // a warning as it comes into view
   };
@@ -157,6 +159,26 @@ export function installEnemies(P) {
         this.peckAnim = 0;
         Sound.play('Peck');
         this._damageEnemy(e, this._withHuzzah(peckDamage(level)), false, e.x, 0);
+      }
+    }
+
+    // The Thief, Fae, Light Mage and Fire Mage have a basic attack of their own, but only while they lead the line and stand right
+    // next to the enemy (a Gargogryph hovering at its standoff is out of reach).
+    {
+      const lead = this._frontKind();
+      const rr = this._rectOf(lead), adjacent = e.deathT < 0 && e.x - (rr.x + rr.w) <= 4;
+      for (const who of BASIC_ATTACKERS) {
+        const interval = basicInterval(who);
+        if (who !== lead || !this._active(who) || !adjacent) { this.basicTimer[who] = interval; continue; }
+        let left = this.basicTimer[who] === undefined ? interval : this.basicTimer[who];
+        left -= dt;
+        if (left <= 0) {
+          left += interval;
+          this.peckAnim = 0;   // the leader lunges
+          Sound.play('Peck');
+          this._damageEnemy(e, this._withHuzzah(BASIC_DAMAGE), false, e.x, 0);
+        }
+        this.basicTimer[who] = left;
       }
     }
 

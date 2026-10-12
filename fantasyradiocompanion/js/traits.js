@@ -22,6 +22,10 @@ export function starHatInterval(level) { return 5 * 60; }
 export function starHatDuration(level) { return 60; }
 export function peckDamage(level) { return 1; }
 export function peckInterval(level) { return 1.0; }
+// The basic attacks of the other four: 1 damage every few seconds, but only from the front of the line and right next to the enemy.
+export const BASIC_ATTACKERS = ['thief', 'fae', 'lightmage', 'firemage'];
+export const BASIC_DAMAGE = 1;
+export function basicInterval(kind) { return { thief: 2, fae: 3, lightmage: 3, firemage: 5 }[kind] || 5; }
 export function fireballDamage(level) { return 5; }
 export function axeDamage(level) { return 3; }          // the Warrior's thrown axe
 export function axeInterval(level) { return 3.0; }
@@ -86,7 +90,7 @@ export function installTraits(P) {
   };
 
   Object.defineProperties(m, {
-    itemStorage: { get() { return this.party.indexOf('paca') >= 0 ? storageSlots(this.levelOf('paca')) : 0; } },
+    itemStorage: { get() { return this.party.indexOf('paca') >= 0 && !this.starting ? storageSlots(this.levelOf('paca')) : 0; } },
     partyInspired: { get() { return this.inspireLeft > 0; } },
     starHatsOn: { get() { return this.hatLeft > 0; } },
   });
@@ -274,6 +278,7 @@ export function installTraits(P) {
     this._appendEnemyText(list);
     this._appendItemText(list);
     this._appendHpText(list);
+    this._appendStartText(list);
     return list;
   };
 
