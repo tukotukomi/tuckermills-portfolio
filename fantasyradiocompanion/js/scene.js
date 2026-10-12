@@ -873,7 +873,7 @@ export class PixelScene {
   _drawCampfire(g, lw) {
     if (this.camp < 0.04) return;
     const fade = Math.min(1.0, this.camp * 2.5);
-    const fx = Math.trunc(lw / 2), baseY = this.groundY;
+    const fx = this._fireX(lw), baseY = this.groundY;
     const a255 = Math.trunc(255 * fade);
     const rect = (x, y, w, h, c) => g.rect(x, y, w, h, withAlpha(a255, c));
 
@@ -911,7 +911,7 @@ export class PixelScene {
     if (this.camp < 0.04) return;
     const night = this.starlight();
     const strength = Math.min(1.0, this.camp * 2) * (0.22 + 0.78 * night) * (0.88 + 0.12 * Math.sin(this.time * 11) + 0.2 * this.bass);
-    const cx = Math.trunc(lw / 2), cy = this.groundY - 6;
+    const cx = this._fireX(lw), cy = this.groundY - 6;
     const radius = [34, 24, 15, 8], alpha = [16, 28, 44, 70];
     for (let i = 0; i < radius.length; i++)
       g.ellipse(cx - radius[i], cy - radius[i] * 0.7, radius[i] * 2, radius[i] * 1.4, CA(Math.trunc(Math.min(255, alpha[i] * strength)), 255, 150, 60));
@@ -985,6 +985,16 @@ export class PixelScene {
     this.startHover = -1;
   }
 
+  /** The sign's width: as wide as there is room for, up to 46 scene pixels (the words shrink to fit it). */
+  static _startSignWidth(lw) { return lw >= 150 ? 46 : 36; }
+
+  /** Where the fire is. In the middle, except at the start in a narrow view, where the fire and the two heroes shift left so that the
+   *  sign still fits to their right. */
+  _fireX(lw) {
+    if (!this.starting) return Math.trunc(lw / 2);
+    return Math.max(29, Math.min(Math.trunc(lw / 2), lw - 27 - PixelScene._startSignWidth(lw)));
+  }
+
   /** Which of the two heroes is under a point in control pixels (a little forgiving), or -1. */
   startCandidateAt(x, y) {
     if (!this.starting) return -1;
@@ -999,25 +1009,24 @@ export class PixelScene {
   _drawStartCandidates(g, lw) {
     this.startRects = [];
     if (!this.offer) return;
-    const fx = Math.trunc(lw / 2), centers = [fx - 20, fx + 15];   // one either side of the fire
-    let signLeft = fx + 29;
+    const fx = this._fireX(lw), centers = [fx - 18, fx + 14];   // one either side of the fire
+    if (this.offer.length > 1) this._drawStartSign(g, lw, centers[1] + Math.trunc(Sprites.party[this.offer[1]].w / 2) + 4);
     for (let i = 0; i < this.offer.length && i < 2; i++) {
       const sprite = Sprites.party[this.offer[i]];
       const frame = i === 1 ? sprite.fa : sprite.a;   // the right-hand one turns to face the fire
       const breath = Math.sin(this.time * 2 * Math.PI / IDLE_BREATH_SECONDS - i * 0.6) > 0 ? 1 : 0;
       const x = centers[i] - Math.trunc(sprite.w / 2), y = this.groundY + 1 - sprite.h - breath;
-      if (i === 1) signLeft = x + sprite.w + 5;
       g.ellipse(x + Math.trunc((sprite.w - 12) / 2), this.groundY, 12, 2, CA(90, 20, 30, 20));
       if (i === this.startHover) g.ellipse(x - 3, y - 3, sprite.w + 6, sprite.h + 7, CA(70, 255, 226, 140));
       g.image(frame, x, y, false, undefined, sprite.w, sprite.h + breath);
       this.startRects.push({ x: x, y: y, w: sprite.w, h: sprite.h + breath });
     }
-    this._drawStartSign(g, lw, signLeft);
   }
 
   /** A wooden sign on a post, to the right of the fire and the two heroes; the text itself is drawn at screen resolution. */
   _drawStartSign(g, lw, left) {
-    const bw = 34, bh = 14, bx = Math.max(2, Math.min(left, lw - bw - 2)), by = this.groundY - 17;
+    // Room for two lines of capitals: as wide as the view allows, up to 46 scene pixels (the text shrinks to fit what it gets).
+    const bw = PixelScene._startSignWidth(lw), bh = 15, bx = Math.max(2, Math.min(left, lw - bw - 2)), by = this.groundY - 18;
     const ink = C(30, 22, 40), wood = C(158, 100, 58), dark = C(104, 62, 38), pale = C(204, 146, 92), nail = C(250, 212, 76);
     this.signRect = { x: bx, y: by, w: bw, h: bh };
     const px = bx + Math.trunc(bw / 2) - 1, postH = this.groundY + 1 - (by + bh);
@@ -1033,6 +1042,8 @@ export class PixelScene {
 
   static _signLines(text) {
     text = (text || '').trim();
+    const nl = text.indexOf('\n');
+    if (nl > 0) return [text.substring(0, nl).trim(), text.substring(nl + 1).trim()];   // the words say where the line breaks
     const mid = Math.trunc(text.length / 2);
     let best = -1;
     for (let i = 0; i < text.length; i++) if (text[i] === ' ' && (best < 0 || Math.abs(i - mid) < Math.abs(best - mid))) best = i;
@@ -1051,12 +1062,12 @@ export class PixelScene {
   /** The sign's words, and a name over each hero. */
   _appendStartText(list) {
     if (!this.starting || !this.offer || !this.signRect) return;
-    const lines = PixelScene._signLines(t('Play the radio to adventure!')), small = this.lastScale < 5;
+    const lines = PixelScene._signLines(t('START THE RADIO,\nSTART YOUR ADVENTURE!')), small = this.lastScale < 5;
     const cx = (this.signRect.x + this.signRect.w / 2) * this.lastScale;
-    lines.forEach((line, i) => list.push({
-      text: line, x: cx, y: this.lastTop + (this.signRect.y + this.signRect.h * (i === 0 ? 0.27 : 0.73)) * this.lastScale,
-      alpha: 1, bubble: false, small: small, color: C(255, 244, 214)
-    }));
+    list.push({   // both lines as one label, so they shrink to fit together and stay the same size
+      text: lines[0] + '\n' + lines[1], x: cx, y: this.lastTop + (this.signRect.y + this.signRect.h * 0.5) * this.lastScale,
+      alpha: 1, bubble: false, small: small, maxWidth: (this.signRect.w - 5) * this.lastScale, color: C(255, 244, 214)
+    });
     for (let i = 0; i < this.startRects.length && i < this.offer.length; i++) {
       const r = this.startRects[i];
       list.push({

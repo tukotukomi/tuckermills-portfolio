@@ -499,8 +499,13 @@ export class Visualizer {
     for (const t of this.scene.textOverlays()) {
       if (t.alpha <= 0.01) continue;
       const a = Math.min(1, t.alpha);
-      ctx.font = '700 ' + (t.small ? pxSmall : px) + 'px ' + FONT;
-      const tw = ctx.measureText(t.text).width;
+      let fpx = t.small ? pxSmall : px;
+      const lines = String(t.text).split('\n');
+      const widest = () => { ctx.font = '700 ' + fpx + 'px ' + FONT; return Math.max.apply(null, lines.map(l => ctx.measureText(l).width)); };
+      let tw = widest();
+      if (t.maxWidth > 0) {   // smaller until it fits (the words on the start sign, in a narrow view)
+        while (tw > t.maxWidth && fpx > 6) { fpx -= 0.5; tw = widest(); }
+      }
       if (t.bubble) {
         const w = Math.round(tw) + 14 * this.hud, h = px + 6 * this.hud;
         const x = Math.max(4, Math.min(this.width - w - 4, t.x - w / 2)), y = Math.max(4, t.y - h - 7);
@@ -518,8 +523,11 @@ export class Visualizer {
         ctx.save();
         ctx.globalAlpha = a;
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.fillStyle = 'rgba(10,24,16,0.75)'; ctx.fillText(t.text, t.x + 1, t.y + 1);
-        ctx.fillStyle = css(t.color); ctx.fillText(t.text, t.x, t.y);
+        const lh = fpx * 1.3, top = t.y - (lines.length - 1) * lh / 2;
+        lines.forEach((line, i) => {
+          ctx.fillStyle = 'rgba(10,24,16,0.75)'; ctx.fillText(line, t.x + 1, top + i * lh + 1);
+          ctx.fillStyle = css(t.color); ctx.fillText(line, t.x, top + i * lh);
+        });
         ctx.restore();
       }
     }
