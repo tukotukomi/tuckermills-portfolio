@@ -8,12 +8,10 @@ import { Sound } from './sfx.js';
 import { peckDamage, peckInterval, axeInterval } from './traits.js';
 import { t } from './i18n.js';
 
-export const ENEMY_KINDS = ['sheller', 'orc', 'nightmare', 'gargogryph'];
-export const ENEMY_ENUM = { sheller: 'Sheller', orc: 'Orc', nightmare: 'Nightmare', gargogryph: 'Gargogryph' };
-const ENEMY_FROM_ENUM = { Sheller: 'sheller', Orc: 'orc', Nightmare: 'nightmare', Gargogryph: 'gargogryph' };
-
-/** HP an attack takes off the member it lands on: 1 for everyone for now, 2 for the Gargogryph (a whole volley of feathers counts as one attack). */
-const enemyDamage = kind => (kind === 'gargogryph' ? 2 : 1);
+// The four originals, then the variant of each that takes over half the spawns from Year 2 (same moves, twice the damage).
+export const ENEMY_KINDS = ['sheller', 'orc', 'nightmare', 'gargogryph', 'spikedsheller', 'bassorc', 'slasher', 'wickedgryph'];
+export const ENEMY_ENUM = { sheller: 'Sheller', orc: 'Orc', nightmare: 'Nightmare', gargogryph: 'Gargogryph', spikedsheller: 'SpikedSheller', bassorc: 'BassOrc', slasher: 'Slasher', wickedgryph: 'Wickedgryph' };
+const ENEMY_FROM_ENUM = { Sheller: 'sheller', Orc: 'orc', Nightmare: 'nightmare', Gargogryph: 'gargogryph', SpikedSheller: 'spikedsheller', BassOrc: 'bassorc', Slasher: 'slasher', Wickedgryph: 'wickedgryph' };
 
 const DEFS = {
   sheller: { name: 'Sheller', hp: 10, attackInterval: 2.0, walkSpeed: 20, nightOnly: false, headOffset: 0, habitat: 'Roams by day', note: 'A grumpy shell-back. Punches first, claws second.' },
@@ -22,14 +20,29 @@ const DEFS = {
   gargogryph: { name: 'Gargogryph', hp: 40, attackInterval: 3.5, walkSpeed: 18, nightOnly: true, headOffset: 4, hover: 5, standoff: 30, habitat: 'Only under a dark sky', note: 'A stone lion-ox with eagle wings, hard to hurt. Wingbeats throw razor feathers, and it can call down a Blood Moon.' },
 };
 
+DEFS.spikedsheller = Object.assign({}, DEFS.sheller, { base: 'sheller', name: 'Spiked Sheller', habitat: 'Roams by day, from Year 2', note: 'A Sheller that grew spikes over the winter. Hits twice as hard.' });
+DEFS.bassorc = Object.assign({}, DEFS.orc, { base: 'orc', name: 'Bass Orc', habitat: 'Roams day and night, from Year 2', note: 'Plays its orcish bass guitar at the party, and swings it, too. Hits twice as hard.' });
+DEFS.slasher = Object.assign({}, DEFS.nightmare, { base: 'nightmare', name: 'Slasher', habitat: 'Roams after dark, from Year 2', note: 'A Nightmare that traded its scythe for a horror knife. Hits twice as hard.' });
+DEFS.wickedgryph = Object.assign({}, DEFS.gargogryph, { base: 'gargogryph', name: 'Wickedgryph', habitat: 'Only under a dark sky, from Year 2', note: 'A Gargogryph with big fangs and a worse temper. Hits twice as hard, and so does its Blood Moon.' });
+
+/** The original a variant is built on (an original is its own): a variant behaves, sounds and moves like it. */
+const baseOf = kind => DEFS[kind].base || kind;
+const isVariant = kind => baseOf(kind) !== kind;
+const VARIANT_OF = { sheller: 'spikedsheller', orc: 'bassorc', nightmare: 'slasher', gargogryph: 'wickedgryph' };
+
+/** HP an attack takes off the member it lands on: 1 for everyone for now, 2 for the Gargogryph (a whole volley of feathers counts as one attack); the variants hit twice as hard. */
+const enemyDamage = kind => (baseOf(kind) === 'gargogryph' ? 2 : 1) * (isVariant(kind) ? 2 : 1);
+/** HP the Blood Moon takes off every member of the party when it breaks (a Wickedgryph's takes twice as much). */
+const bloodMoonDamage = kind => (isVariant(kind) ? 10 : 5);
+
 export function enemyDef(kind) { return DEFS[kind]; }
 
 const ROAR = { sheller: 'ShellerRoar', orc: 'OrcRoar', nightmare: 'NightmareRoar', gargogryph: 'GargogryphRoar' };
 const DEATH = { sheller: 'ShellerDeath', orc: 'OrcDeath', nightmare: 'NightmareDeath', gargogryph: 'GargogryphDeath' };
 const BLOOD_MOON_SECONDS = 3.2;
-const BLOOD_MOON_DAMAGE = 5;          // HP the Blood Moon takes off every member of the party when it breaks
 const BLOOD_MOON_HP_FRACTION = 0.55;   // it is called down once, when the Gargogryph is hurt this badly
 function attackFx(kind, pose, hit) {
+  kind = baseOf(kind);
   if (kind === 'gargogryph') return hit ? 'GargogryphShot' : 'GargogryphFlap';
   const p = kind === 'orc' ? (pose === 0 ? ['OrcSmashSwing', 'OrcSmashHit'] : ['OrcSweepSwing', 'OrcSweepHit'])
     : kind === 'nightmare' ? (pose === 0 ? ['NightmareSweepSwing', 'NightmareSweepHit'] : ['NightmareChopSwing', 'NightmareChopHit'])
@@ -37,6 +50,7 @@ function attackFx(kind, pose, hit) {
   return p[hit ? 1 : 0];
 }
 function strikeEffect(kind, pose) {
+  kind = baseOf(kind);
   if (kind === 'gargogryph') return 'feathers';
   if (kind === 'nightmare') return 'scythe';
   if (kind === 'orc') return 'impact';
@@ -71,7 +85,10 @@ export function installEnemies(P) {
 
   m._pickEnemyKind = function () {
     const pool = this.isNight ? ['nightmare', 'nightmare', 'orc', 'gargogryph'] : ['sheller', 'sheller', 'orc'];
-    return pool[rnd(pool.length)];
+    let kind = pool[rnd(pool.length)];
+    // From Year 2 half of them turn up as their meaner variant.
+    if (this.year >= 2 && Math.random() < 0.5) kind = VARIANT_OF[kind];
+    return kind;
   };
 
   m._canSpawnEnemy = function () {
@@ -84,7 +101,7 @@ export function installEnemies(P) {
     const kind = this._pickEnemyKind();
     this.enemy = { kind: kind, x: this.lastLw + 6, hp: DEFS[kind].hp, maxHp: DEFS[kind].hp, engaged: false, walkT: 0, attackTimer: 0, attackAnim: -1, attackPose: 0, struck: false, peckTimer: 0, axeTimer: 0, bloodMoonUsed: false, hurtFlash: 0, deathT: -1 };
     this._noteSeen(kind);
-    Sound.play(ROAR[kind]);   // a warning as it comes into view
+    Sound.play(ROAR[baseOf(kind)]);   // a warning as it comes into view
   };
 
   /** Enemy logic in adventuring time: the walk-in, the attack timer, the Paca's pecks. */
@@ -114,8 +131,9 @@ export function installEnemies(P) {
     e.x = stopX;
 
     // The Gargogryph's special: once, when it is badly hurt, it calls down a Blood Moon in place of an attack.
-    if (e.kind === 'gargogryph' && !e.bloodMoonUsed && e.hp <= e.maxHp * BLOOD_MOON_HP_FRACTION && e.attackAnim < 0 && this.bloodMoonT < 0) {
+    if (baseOf(e.kind) === 'gargogryph' && !e.bloodMoonUsed && e.hp <= e.maxHp * BLOOD_MOON_HP_FRACTION && e.attackAnim < 0 && this.bloodMoonT < 0) {
       e.bloodMoonUsed = true;
+      this.bloodMoonDamage = bloodMoonDamage(e.kind);
       this.bloodMoonT = 0;
       this.bloodMoonStruck = false;
       e.attackTimer = 5.5;   // and a breather afterwards
@@ -166,7 +184,7 @@ export function installEnemies(P) {
     this.bursts.push({ x: fire ? Math.min(fx, r.x + r.w / 2.0) : r.x + 2, y: fire ? r.y + r.h * 0.4 : r.y + r.h * 0.35, kind: fire ? 'fire' : 'peck', age: 0 });
     if (e.hp <= 0) {
       e.deathT = 0;
-      Sound.play(DEATH[e.kind]);
+      Sound.play(DEATH[baseOf(e.kind)]);
       Sound.play('CoinDrop');
       this._noteKill(e.kind);
       this.enemyTimer = 15 + Math.random() * 15;
@@ -219,7 +237,7 @@ export function installEnemies(P) {
           const mr = this._rectOf(k);
           this.bursts.push({ x: mr.x + mr.w / 2.0, y: mr.y + mr.h * 0.45, kind: 'blood', age: 0 });
         }
-        for (const k of this.party.slice()) this.damageMember(k, BLOOD_MOON_DAMAGE);   // the wave of red light hurts everyone
+        for (const k of this.party.slice()) this.damageMember(k, this.bloodMoonDamage || 5);   // the wave of red light hurts everyone
         this.flinch = 0.6;
       }
       if (this.bloodMoonT >= 1) this.bloodMoonT = -1;
@@ -334,7 +352,7 @@ export function installEnemies(P) {
     if (e.deathT >= 0) frame = set.hurt;
     else {
       const walking = !e.engaged;
-      const flier = e.kind === 'gargogryph';
+      const flier = baseOf(e.kind) === 'gargogryph';
       frame = walking ? ((Math.trunc(e.walkT * (flier ? 7 : 5))) % 2 === 0 ? set.walkA : set.walkB) : ((Math.trunc(this.time * (flier ? 4 : 2))) % 2 === 0 ? set.walkA : set.walkB);
       if (e.attackAnim >= 0) {
         const u = e.attackAnim;
