@@ -65,6 +65,43 @@ function thump(seconds, f0, f1, noiseAmt, gain) {
 const RECIPES = {
   // The party.
   Peck() { let ph = 0; return make(0.09, t => { ph += (2300 - 9500 * t) / R; return sqr(ph, 0.3) * exp(t, 0.022) * 0.55 + noise() * 0.25 * exp(t, 0.004); }); },
+  ShopBell() {
+    const d = new Float32Array(Math.trunc(0.7 * R));
+    layer(d, note(1568, 0.35, 0.14, sin, 0.5), 0.0, 1);
+    layer(d, note(3136, 0.25, 0.08, sin, 0.18), 0.0, 1);
+    layer(d, note(2093, 0.45, 0.17, sin, 0.45), 0.14, 1);
+    layer(d, note(4186, 0.3, 0.1, sin, 0.15), 0.14, 1);
+    return d;
+  },
+  ItemBuy() {
+    const d = new Float32Array(Math.trunc(0.6 * R));
+    layer(d, note(988, 0.08, 0.035, p => sqr(p, 0.25), 0.4), 0.0, 1);
+    layer(d, note(1319, 0.08, 0.035, p => sqr(p, 0.25), 0.4), 0.06, 1);
+    layer(d, note(1976, 0.2, 0.08, p => sqr(p, 0.25), 0.4), 0.12, 1);
+    layer(d, note(2637, 0.3, 0.12, sin, 0.3), 0.2, 1);
+    return d;
+  },
+  ElixirUse() {
+    const d = new Float32Array(Math.trunc(1.0 * R));
+    const notes = [523.25, 784, 1047, 1568, 2093, 3136];
+    for (let i = 0; i < notes.length; i++) layer(d, note(notes[i], 0.4, 0.15, sin, 0.42), i * 0.06, 1);
+    layer(d, whoosh(0.5, 0.2, 0.9, 1, 0.5, true), 0.0, 1);
+    layer(d, note(130.8, 0.6, 0.3, tri, 0.4), 0.0, 1);
+    return d;
+  },
+  PotionUse() {
+    const d = new Float32Array(Math.trunc(0.55 * R));
+    let ph = 0, ph2 = 0;
+    layer(d, make(0.16, t => { ph += (330 - 700 * t) / R; return sin(ph) * exp(t, 0.06) * 0.7; }), 0.0, 1);
+    layer(d, make(0.14, t => { ph2 += (260 - 600 * t) / R; return sin(ph2) * exp(t, 0.05) * 0.6; }), 0.17, 1);
+    layer(d, note(1500, 0.06, 0.02, sin, 0.35), 0.36, 1);
+    layer(d, note(1900, 0.05, 0.02, sin, 0.3), 0.42, 1);
+    return d;
+  },
+  DiscClick() {
+    let ph = 0;
+    return make(0.07, t => { ph += (900 + 600 * t) / R; return tri(ph) * exp(t, 0.02) * 0.45 + noise() * 0.12 * exp(t, 0.004); });
+  },
   GargogryphRoar() {
     let ph = 0, gr = 0;
     return make(0.75, t => {

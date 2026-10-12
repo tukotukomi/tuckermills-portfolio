@@ -267,6 +267,7 @@ export function installTraits(P) {
       list.push({ text: 'Huzzah!', x: (r.x + r.w / 2.0) * this.lastScale, y: this.lastTop + (r.y - 3) * this.lastScale, alpha: Math.max(0, a), bubble: true, color: C(70, 24, 20) });
     }
     this._appendEnemyText(list);
+    this._appendItemText(list);
     return list;
   };
 

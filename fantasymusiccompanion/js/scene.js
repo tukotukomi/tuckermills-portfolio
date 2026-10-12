@@ -122,7 +122,7 @@ export class PixelScene {
 
     this.onProgress = null;   // callback: the saved progress changed
 
-    this._initCoins(); this._initStory(); this._initTraits(); this._initEnemies();
+    this._initCoins(); this._initStory(); this._initTraits(); this._initEnemies(); this._initItems();
   }
 
   get marching() { return this._marching && !this.suspended; }
@@ -163,6 +163,7 @@ export class PixelScene {
     }
 
     this._updateCrystalHum(travel);
+    if (travel && this.enc === 'None') this._updateMerchant();   // on his days he comes down the road with a shop
     this._advanceCoins(dt, frozen || !travel);
     this._advanceTraits(dt, frozen || !travel);
     this._advanceEnemies(dt, frozen || !travel);
@@ -214,11 +215,13 @@ export class PixelScene {
     this._drawTavern(g, lw);
     this._drawGround(g, lw);
     this._drawOldMan(g);
+    this._drawMerchant(g, lw);
     this._drawCampfire(g, lw);
     this._drawEnemies(g);
     this._drawParty(g, lw);
     this._drawCoins(g);
     this._drawTraitEffects(g, lw);
+    this._drawItemEffects(g);
     this._drawEnemyEffects(g);
     this._drawWeather(g, lw);
     this._drawNotes(g, lw);
@@ -924,6 +927,7 @@ export class PixelScene {
     this._advanceCoinEffects(dt);
     this._advanceTraitEffects(dt);
     this._advanceEnemyEffects(dt);
+    this._advanceItemEffects(dt);
     this._updateCamp(dt);
     const target = this._groupLeftTarget();
     this.groupLeft = isNaN(this.groupLeft) ? target : this.groupLeft + (target - this.groupLeft) * Math.min(1, dt * 3);
@@ -984,7 +988,7 @@ export class PixelScene {
     this.arrived = false; this.tavernVisible = false; this.joinT = 0; this.move = 1; this.groupLeft = NaN;
     this.daysCompleted = 0; this.dayPhase = 0; this.yearDay = 0;
     this.notes.length = 0;
-    this._resetStory(); this._resetCoins(); this._resetTraits();
+    this._resetStory(); this._resetCoins(); this._resetTraits(); this._resetItems();
     this.kills = {};
     this.raiseProgress();
   }
@@ -994,7 +998,7 @@ export class PixelScene {
   saveState() {
     const f5 = this.dayPhase.toFixed(5);
     return ['3', this.party.map(k => PARTY_ENUM[k]).join(','), f5, String(this.daysCompleted), this.offer ? this.offer.map(k => PARTY_ENUM[k]).join(',') : '',
-      this._saveStoryFields(), String(this.gold), this._saveTraitFields(), this._saveBestiaryFields()].join('|');
+      this._saveStoryFields(), String(this.gold), this._saveTraitFields(), this._saveBestiaryFields()].concat(this._saveItemFields()).join('|');
   }
 
   loadState(state) {
@@ -1035,6 +1039,7 @@ export class PixelScene {
       this.coins.length = 0; this.flying.length = 0;
       this._loadTraitFields(p.length > 10 ? p[10] : null);
       this._loadBestiaryFields(p.length > 11 ? p[11] : null);
+      this._loadItemFields(p.length > 12 ? p[12] : null, p.length > 13 ? p[13] : null, p.length > 14 ? p[14] : null);   // the bag, the hot slots, the Merchant's last day
     } catch (e) { /* a bad save just starts a fresh party */ }
   }
 
@@ -1117,7 +1122,9 @@ import { installCoins } from './coins.js';
 import { installStory } from './story.js';
 import { installTraits } from './traits.js';
 import { installEnemies } from './enemies.js';
+import { installItems } from './items.js';
 installCoins(PixelScene);
 installStory(PixelScene);
 installTraits(PixelScene);
 installEnemies(PixelScene);
+installItems(PixelScene);

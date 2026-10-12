@@ -234,6 +234,7 @@ async function main() {
   window.addEventListener('keydown', e => {
     const typing = /input|textarea/i.test((e.target.tagName || ''));
     if (e.key === 'F11') { e.preventDefault(); toggleFullscreen(); }
+    else if (e.key === 'Escape' && vis.dismissOverlay()) { /* closed the item disc or the shop */ }
     else if (e.key === 'Escape') { if (!$('tuner').hidden) closePopups(); else if (!$('compendium').hidden) closePopups(); else if (document.body.classList.contains('immersive')) toggleFullscreen(); }
     else if (e.key === ' ' && !typing && vis.fullscreen) { e.preventDefault(); player.togglePause(); updateTransport(); }
   });

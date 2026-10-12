@@ -6,6 +6,8 @@ import { Sprites, PARTY_NAMES } from './sprites.js';
 import { roundRect, SummonEffect } from './summon.js';
 import { traitSummary } from './traits.js';
 import { css } from './util.js';
+import { Sound } from './sfx.js';
+import { ITEM_DEFS, HOT_SLOT_COUNT } from './items.js';
 
 export const ZOOMED_SCALE = 5;
 
@@ -54,11 +56,14 @@ export class Visualizer {
     this.running = false;
     this.last = 0;
     this._frame = this._frame.bind(this);
-    document.addEventListener('visibilitychange', () => { this.last = performance.now(); });
+    this._hotDown = false; this._discOpen = false; this._discByPress = false; this._hotDownAt = 0;   // the hot item button and its disc
+    this._discHover = -1; this._overHot = false; this._overBuy = false; this._overLeave = false;    document.addEventListener('visibilitychange', () => { this.last = performance.now(); });
 
     canvas.addEventListener('pointermove', e => this._onMove(e));
     canvas.addEventListener('pointerleave', () => { this.hover = { button: false, restart: false, tuner: false, comp: false, card: -1, tile: -1, levelUp: false }; canvas.style.cursor = 'default'; });
     canvas.addEventListener('pointerdown', e => this._onDown(e));
+    canvas.addEventListener('pointerup', e => this._onUp(e));
+    canvas.addEventListener('pointercancel', () => { this._hotDown = false; });
     window.addEventListener('resize', () => this.resize());
   }
 
@@ -112,6 +117,10 @@ export class Visualizer {
     this.scene.setSpectrum(spec.live, spec.bass, spec.mid, spec.treble, spec.loud);
     const level = this.scene.marching && this.host.level ? this.host.level() : -1;
     this.scene.advance(dt, level);
+    if (this._hotDown && !this._discOpen && performance.now() - this._hotDownAt >= 450) {   // held: the disc of four
+      this._discOpen = true; this._discByPress = true;
+      Sound.play('DiscClick');
+    }
     this._draw(now / 1000);
   }
 
@@ -148,7 +157,10 @@ export class Visualizer {
     this._drawNowPlaying(ctx);
     this._drawTunerButton(ctx);
     this._drawCompendiumButton(ctx);
+    this._drawHotButton(ctx);
+    this._drawDisc(ctx);
     ctx.restore();
+    this._drawShop(ctx);
   }
 
   _text(ctx, str, x, y, o) {
@@ -430,8 +442,172 @@ export class Visualizer {
     this._text(ctx, text, x + w / 2, y + h / 2 + 0.5, { px: px, color: 'rgb(255,226,190)', align: 'center' });
   }
 
-  // ---- Story UI: tavern cards, dialogue, level-up ----------------------------------------------------------------
+  // ---- Items: the hot item button, its disc menu, and the Merchant's shop --------------------------------------------
 
+  get _hotRect() { return { x: this.vw - 8 - 44, y: Math.trunc(this.vh / 2) - 22, w: 44, h: 44 }; }
+  get _hotVisible() { return this.zoomed && !this.scene.isShopping; }
+  get _discCenter() { return { x: this.vw - 6 - 44 - 19, y: this._hotRect.y + 22 }; }
+
+  _discSlotCenter(i) {
+    const c = this._discCenter;
+    return [{ x: c.x, y: c.y - 44 }, { x: c.x + 44, y: c.y }, { x: c.x, y: c.y + 44 }, { x: c.x - 44, y: c.y }][i];
+  }
+
+  _discSlotAt(h) {
+    for (let i = 0; i < HOT_SLOT_COUNT; i++) {
+      const c = this._discSlotCenter(i), dx = h.x - c.x, dy = h.y - c.y;
+      if (dx * dx + dy * dy <= 22 * 22) return i;
+    }
+    return -1;
+  }
+
+  _inHot(h) {
+    if (!this._hotVisible) return false;
+    const r = this._hotRect, dx = h.x - (r.x + r.w / 2), dy = h.y - (r.y + r.h / 2);
+    return dx * dx + dy * dy <= (r.w / 2) * (r.w / 2);
+  }
+
+  /** Closes the disc menu or the shop if one is up (for Escape). True if something was closed. */
+  dismissOverlay() {
+    if (this._discOpen) { this._discOpen = false; this._hotDown = false; return true; }
+    if (this.scene.isShopping) { this.scene.leaveShop(); return true; }
+    return false;
+  }
+
+  _onUp(e) {
+    if (e.button !== undefined && e.button !== 0) return;
+    if (this.popupOpen) return;
+    const p = this._point(e);
+    const h = { x: p.x / this.hud, y: p.y / this.hud };
+    if (this._discOpen) {
+      const slot = this._discSlotAt(h);
+      const opened = this._discByPress;
+      this._discByPress = false;
+      this._hotDown = false;
+      if (slot >= 0) { this.scene.selectHot(slot); this._discOpen = false; }
+      else if (!opened) this._discOpen = false;   // a tap outside the disc closes it; released after the long press it stays up to be tapped
+      return;
+    }
+    if (this._hotDown) {
+      this._hotDown = false;
+      if (this._inHot(h)) this.scene.useHotItem();
+    }
+  }
+
+  _drawItemIcon(ctx, id, cx, cy, factor, dim) {
+    const img = Sprites.items && Sprites.items[id];
+    if (!img) return;
+    const w = img.width * factor, h = img.height * factor;
+    ctx.save();
+    ctx.imageSmoothingEnabled = false;
+    if (dim) ctx.globalAlpha = 0.35;
+    ctx.drawImage(img, Math.round(cx - w / 2), Math.round(cy - h / 2), w, h);
+    ctx.restore();
+  }
+
+  _drawCountBadge(ctx, n, right, bottom) {
+    const s = n > 99 ? '99+' : String(n);
+    const px = 8.5 * PT;
+    const tw = this._measure(ctx, s, px);
+    const w = Math.round(tw + 8), x = right - w, y = bottom - 14;
+    this._pill(ctx, x, y, w, 14, 6, 'rgba(22,18,52,0.92)', 'rgba(255,214,120,0.86)', 1);
+    this._text(ctx, s, x + w / 2, y + 7.5, { px: px, color: n > 0 ? 'white' : 'rgb(255,150,140)', align: 'center' });
+  }
+
+  _drawHotButton(ctx) {
+    if (!this._hotVisible) return;
+    const r = this._hotRect, hot = this._overHot || this._hotDown;
+    const s = this.scene, id = s.hotItem, n = s.itemCount(id);
+    ctx.beginPath(); ctx.arc(r.x + r.w / 2, r.y + r.h / 2, (r.w - 1) / 2, 0, Math.PI * 2);
+    ctx.fillStyle = rgba(12, 16, 44, hot ? 0.75 : 0.47); ctx.fill();
+    ctx.strokeStyle = hot ? 'rgb(255,214,120)' : rgba(210, 224, 255, 0.75); ctx.lineWidth = 1.6; ctx.stroke();
+    this._drawItemIcon(ctx, id, r.x + r.w / 2, r.y + r.h / 2, 2, n <= 0);
+    this._drawCountBadge(ctx, n, r.x + r.w + 2, r.y + r.h + 2);
+    if (this._overHot && !this._discOpen) this._tip(ctx, 'Tap: use   Hold: switch', r.x - 10, r.y + r.h / 2);
+  }
+
+  _drawDisc(ctx) {
+    if (!this._discOpen || !this._hotVisible) return;
+    const c = this._discCenter, outer = 44 + 19 + 6;
+    const s = this.scene, hot = s.hotItems();
+    ctx.beginPath(); ctx.arc(c.x, c.y, outer, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(14,16,46,0.84)'; ctx.fill();
+    ctx.strokeStyle = 'rgba(255,214,120,0.9)'; ctx.lineWidth = 1.8; ctx.stroke();
+    for (let i = 0; i < HOT_SLOT_COUNT; i++) {
+      const sc = this._discSlotCenter(i), selected = i === s.hotSelected, hover = i === this._discHover;
+      ctx.beginPath(); ctx.arc(sc.x, sc.y, 19, 0, Math.PI * 2);
+      ctx.fillStyle = hover ? 'rgba(52,48,110,0.92)' : 'rgba(26,28,74,0.75)'; ctx.fill();
+      ctx.strokeStyle = selected ? 'rgb(255,214,120)' : hover ? 'white' : 'rgba(170,186,240,0.67)'; ctx.lineWidth = selected ? 2.4 : 1.4; ctx.stroke();
+      const n = s.itemCount(hot[i]);
+      this._drawItemIcon(ctx, hot[i], sc.x, sc.y, 2, n <= 0);
+      this._drawCountBadge(ctx, n, sc.x + 22, sc.y + 22);
+    }
+    // The hub shows what is selected, with a name above the disc.
+    const cur = s.hotItem;
+    ctx.beginPath(); ctx.arc(c.x, c.y, 14, 0, Math.PI * 2); ctx.fillStyle = 'rgba(22,18,52,0.86)'; ctx.fill();
+    this._drawItemIcon(ctx, cur, c.x, c.y, 1, s.itemCount(cur) <= 0);
+    const label = ITEM_DEFS[this._discHover >= 0 ? hot[this._discHover] : cur].name;
+    const px = 8.5 * PT, w = Math.round(this._measure(ctx, label, px) + 20);
+    this._pill(ctx, c.x - w / 2, c.y - outer - 30, w, 24, 6, 'rgba(22,18,52,0.88)', 'rgba(255,214,120,0.9)', 1.2);
+    this._text(ctx, label, c.x, c.y - outer - 30 + 12.5, { px: px, color: 'white', align: 'center' });
+  }
+
+  // The shop panel (screen pixels, like the tavern's cards).
+
+  _shopScale() { return Math.min(Math.max(1.0, Math.min(2.0, this.height / 300.0)), (this.width - 24.0) / 400.0); }
+
+  _shopRect() {
+    const k = this._shopScale(), w = Math.trunc(400 * k), h = Math.trunc(200 * k);
+    return { x: Math.trunc((this.width - w) / 2), y: Math.trunc((this.height - h) / 2), w: w, h: h, k: k };
+  }
+
+  _shopButtons() {
+    const r = this._shopRect(), k = r.k;
+    const bw = Math.trunc(84 * k), bh = Math.trunc(34 * k), x = r.x + r.w - bw - Math.trunc(14 * k);
+    return { buy: { x: x, y: r.y + Math.trunc(88 * k), w: bw, h: bh }, leave: { x: x, y: r.y + r.h - bh - Math.trunc(10 * k), w: bw, h: bh } };
+  }
+
+  _drawShopButton(ctx, b, text, px, enabled, hot) {
+    this._pill(ctx, b.x, b.y, b.w, b.h, b.h / 2,
+      enabled ? (hot ? 'rgba(120,86,24,0.94)' : 'rgba(90,62,16,0.9)') : 'rgba(40,40,56,0.8)',
+      enabled ? 'rgb(255,214,120)' : 'rgba(120,120,150,0.63)', 1.6);
+    this._text(ctx, text, b.x + b.w / 2, b.y + b.h / 2 + 0.5, { px: px, color: enabled ? 'white' : 'rgb(170,170,190)', align: 'center' });
+  }
+
+  _drawShop(ctx) {
+    const s = this.scene;
+    if (!s.isShopping) return;
+    const r = this._shopRect(), k = r.k, id = 'SynergyElixir', def = ITEM_DEFS[id];
+    ctx.fillStyle = 'rgba(0,0,0,0.47)'; ctx.fillRect(0, 0, this.width, this.height);
+    this._pill(ctx, r.x, r.y, r.w, r.h, 10 * k, 'rgba(24,20,58,0.94)', 'rgb(255,214,120)', 2.2);
+    const nameFont = 10.5 * PT * k, small = 8.5 * PT * k;
+    this._text(ctx, 'Merchant', r.x + 14 * k, r.y + 21 * k, { px: 12 * PT * k, color: 'rgb(255,226,150)' });
+    // the gold in hand
+    const gold = s.gold.toLocaleString('en-US');
+    const gw = this._measure(ctx, gold, nameFont);
+    this._text(ctx, gold, r.x + r.w - 14 * k - gw, r.y + 21 * k, { px: nameFont, color: 'white' });
+    const coin = Sprites.coin, cs = Math.max(1, Math.round(1.5 * k));
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(coin, Math.round(r.x + r.w - 14 * k - gw - 6 - coin.width * cs), Math.round(r.y + 21 * k - coin.height * cs / 2), coin.width * cs, coin.height * cs);
+    ctx.strokeStyle = 'rgba(170,186,240,0.47)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(r.x + 12 * k, r.y + 40 * k + 0.5); ctx.lineTo(r.x + r.w - 12 * k, r.y + 40 * k + 0.5); ctx.stroke();
+
+    // the one thing he sells
+    const rowY = r.y + 52 * k;
+    this._drawItemIcon(ctx, id, r.x + 38 * k, rowY + 30 * k, Math.max(2, Math.round(3 * k)), false);
+    const tx = r.x + 76 * k, tw = r.x + r.w - tx - 110 * k;
+    this._text(ctx, def.name, tx, rowY + 11 * k, { px: nameFont, color: 'white' });
+    this._wrap(ctx, def.blurb, tx, rowY + 26 * k, tw, small, 'rgb(200,210,245)', 400, 4);
+    this._text(ctx, 'In bag: ' + s.itemCount(id), tx, rowY + 90 * k, { px: small, color: 'rgb(255,214,120)', weight: 400 });
+
+    // Buy and Leave
+    const b = this._shopButtons(), afford = s.gold >= def.price;
+    this._text(ctx, def.price + ' Gold', b.buy.x + b.buy.w / 2, b.buy.y - 14 * k, { px: nameFont, color: afford ? 'rgb(255,226,150)' : 'rgb(255,150,140)', align: 'center' });
+    this._drawShopButton(ctx, b.buy, afford ? 'Buy' : 'Need ' + def.price, nameFont, afford, this._overBuy && afford);
+    this._drawShopButton(ctx, b.leave, 'Leave', nameFont, true, this._overLeave);
+  }
+
+  // ---- Story UI: tavern cards, dialogue, level-up ----------------------------------------------------------------
   _uiScale(designWidth) {
     const k = Math.max(1.0, Math.min(2.2, this.height / 130.0));
     return Math.min(k, (this.width - 24.0) / designWidth);
@@ -643,6 +819,14 @@ export class Visualizer {
       comp: this.zoomed && this._inRect(h, this._compRect),
       card: -1, tile: -1, levelUp: false
     };
+    this._overHot = this._inHot(h);
+    this._discHover = this._discOpen ? this._discSlotAt(h) : -1;
+    if (s.isShopping) {
+      const b = this._shopButtons();
+      this._overBuy = this._inRect(p, b.buy); this._overLeave = this._inRect(p, b.leave);
+      this.canvas.style.cursor = this._overBuy || this._overLeave ? 'pointer' : 'default';
+      return;
+    }
     const cards = this._cardRects();
     for (let i = 0; i < cards.length; i++) if (this._inRect(p, cards[i])) hover.card = i;
     if (s.isLevelSelect) {
@@ -652,7 +836,7 @@ export class Visualizer {
     }
     this.hover = hover;
     const overCoin = !s.isLevelSelect && !s.isDialogue && !s.isChoosing && s.isCoinAt(p.x, p.y);
-    this.canvas.style.cursor = hover.button || hover.restart || hover.tuner || hover.comp || hover.card >= 0 || hover.tile >= 0 || hover.levelUp || overCoin ? 'pointer' : 'default';
+    this.canvas.style.cursor = hover.button || hover.restart || hover.tuner || hover.comp || this._overHot || this._discHover >= 0 || hover.card >= 0 || hover.tile >= 0 || hover.levelUp || overCoin ? 'pointer' : 'default';
   }
 
   _onDown(e) {
@@ -662,6 +846,14 @@ export class Visualizer {
     const p = this._point(e);
     const h = { x: p.x / this.hud, y: p.y / this.hud };
     const s = this.scene;
+    if (s.isShopping) {   // the shop is modal
+      const b = this._shopButtons();
+      if (this._inRect(p, b.buy)) s.buyItem('SynergyElixir');
+      else if (this._inRect(p, b.leave)) { this._overBuy = false; this._overLeave = false; s.leaveShop(); }
+      return;
+    }
+    if (this._discOpen) return;   // a tap on the disc is settled when the pointer comes up
+    if (this._inHot(h)) { this._hotDown = true; this._hotDownAt = performance.now(); this._discByPress = false; return; }
     const cards = this._cardRects();
     for (let i = 0; i < cards.length; i++) if (this._inRect(p, cards[i])) { s.choose(i); this.hover.card = -1; return; }
     if (this._inTuner(h)) { this.host.openTuner && this.host.openTuner(); return; }

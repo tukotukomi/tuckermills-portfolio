@@ -70,7 +70,7 @@ export function installEnemies(P) {
   };
 
   m._canSpawnEnemy = function () {
-    if (this.enc !== 'None' || this.story !== 'None' || this.camp > 0.01 || this.crystalActive) return false;
+    if (this.enc !== 'None' || this.story !== 'None' || this.camp > 0.01 || this.crystalActive || (this.merchantActive && !this.merchantMet)) return false;
     if (this._needsTavern() && this.dayPhase >= 0.88 - 0.06) return false;
     return true;
   };
