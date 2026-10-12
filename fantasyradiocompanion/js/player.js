@@ -88,6 +88,7 @@ export class Player {
   _wire(a) {
     a.addEventListener('playing', () => {
       if (a !== this.active) return;
+      if (this._standby) return;   // the old station is still sounding while the next one connects: the status stays "Connecting..."
       this._setStatus('Playing');
       if (a === this.analysed && this.canAnalyse && this.mode === 'radio') this._checkRouting(a);
     });
@@ -298,6 +299,9 @@ export class Player {
     this._endFade();
     this.station = station;
     this._startMeta(station);
+    // The sound carries on, but the scene treats it like any new tune-in: the summoning effect, and the party waits until the new
+    // station is actually playing.
+    this._setStatus('Connecting...');
     const kind = (station.cors === false || !this.analyser) ? 'plain' : 'analysed';
     const el = kind === 'analysed' ? this._makeAnalysed() : this._makePlain();
     const standby = { el: el, kind: kind, station: station };
