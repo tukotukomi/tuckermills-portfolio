@@ -492,23 +492,23 @@ export class Visualizer {
   }
   // The item button belongs to every view the party is shown in, not only the enlarged one.
   get _hotVisible() { return !this.scene.isShopping; }
-  get _discCenter() { return { x: 6 + 44 + 19, y: this._hotRect.y + 22 }; }   // the disc opens inward, to the right of the button
+  get _discCenter() { return { x: 8 + 46 + 22 + 6, y: this._hotRect.y + 22 }; }   // the disc opens inward; its edge keeps the button's 8 px margin
 
   /** In a short view (the party strip under the Radio and Local Music tabs) the four-way disc would not fit, so the slots open as a row. */
-  get _compactDisc() { return this.vh < 2 * (44 + 19 + 6) + 16; }
-  get _slotR() { return this._compactDisc ? 14 : 19; }
+  get _compactDisc() { return this.vh < 2 * (46 + 22 + 6) + 16; }
+  get _slotR() { return this._compactDisc ? 16 : 22; }   // the slots are the size of the button itself
   get _compactBounds() {
-    const r = this._hotRect, SR = 14, GAP = 6, w = HOT_SLOT_COUNT * (SR * 2 + GAP) + GAP;
+    const r = this._hotRect, SR = 16, GAP = 6, w = HOT_SLOT_COUNT * (SR * 2 + GAP) + GAP;
     return { x: r.x + r.w + 6, y: r.y + r.h / 2 - SR - 5, w: w, h: SR * 2 + 10 };
   }
 
   _discSlotCenter(i) {
     if (this._compactDisc) {
       const b = this._compactBounds;
-      return { x: b.x + 6 + 14 + i * (14 * 2 + 6), y: b.y + b.h / 2 };
+      return { x: b.x + 6 + 16 + i * (16 * 2 + 6), y: b.y + b.h / 2 };
     }
     const c = this._discCenter;
-    return [{ x: c.x, y: c.y - 44 }, { x: c.x + 44, y: c.y }, { x: c.x, y: c.y + 44 }, { x: c.x - 44, y: c.y }][i];
+    return [{ x: c.x, y: c.y - 46 }, { x: c.x + 46, y: c.y }, { x: c.x, y: c.y + 46 }, { x: c.x - 46, y: c.y }][i];
   }
 
   _discSlotAt(h) {
@@ -591,7 +591,7 @@ export class Visualizer {
 
   _drawDisc(ctx) {
     if (!this._discOpen || !this._hotVisible) return;
-    const c = this._discCenter, outer = 44 + 19 + 6, compact = this._compactDisc;
+    const c = this._discCenter, outer = 46 + 22 + 6, compact = this._compactDisc;
     const s = this.scene, hot = s.hotItems();
     if (compact) {
       const b = this._compactBounds;
