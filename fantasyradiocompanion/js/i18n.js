@@ -207,7 +207,7 @@ export function onLanguageChange(f) { listeners.push(f); }
 
 // The page's own static text and attributes: [selector, what, English text].
 const DOM = [
-  ['#tabs [data-tab=adventure]', 'text', 'Adventure'], ['#tabs [data-tab=music]', 'text', 'Music'], ['#tabs [data-tab=radio]', 'text', 'Radio'],
+  ['#tabs [data-tab=adventure]', 'text', 'Adventure'], ['#tabs [data-tab=music]', 'text', 'Local Music'], ['#tabs [data-tab=radio]', 'text', 'Radio'],
   ['#menuBtn', 'title', 'Menu'], ['#menuBtn', 'aria-label', 'Menu'],
   ['#menu [data-act=export]', 'text', 'Export progress'], ['#menu [data-act=import]', 'text', 'Import progress'],
   ['#menu [data-act=restart]', 'text', 'Restart adventure'], ['#menu [data-act=about]', 'text', 'About'], ['#menuLangHdr', 'text', 'Language'],
