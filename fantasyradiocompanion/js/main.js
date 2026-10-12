@@ -7,6 +7,7 @@ import { t, setLanguage, getLanguage, detectLanguage, applyDom, onLanguageChange
 import { Sound } from './sfx.js';
 import { Player, STATIONS, AUDIO_EXTENSIONS, parsePlaylist } from './player.js';
 import { SUPPORT } from './support.js';
+import { iconSvg } from './icons.js';
 import { VirtualList, fmtTime, el } from './ui.js';
 import { flipImage, silhouetteImage, C } from './util.js';
 
@@ -318,12 +319,19 @@ async function main() {
     } else { $('nowTitle').textContent = t('Nothing playing'); $('nowSub').textContent = ''; }
   }
 
+  // The playback controls are SVG icons (see icons.js): glyph characters sat off-centre in their buttons and differed per platform.
+  function setIcon(id, name) {
+    const b = $(id);
+    if (b.dataset.icon !== name) { b.innerHTML = iconSvg(name); b.dataset.icon = name; }
+  }
+  setIcon('btnShuffle', 'shuffle'); setIcon('btnPrev', 'prev'); setIcon('btnNext', 'next');
+
   function updateTransport() {
     showNowPlaying();
-    $('btnPlay').innerHTML = player.playing ? '&#9208;&#xFE0E;' : '&#9654;&#xFE0E;';
+    setIcon('btnPlay', player.playing ? 'pause' : 'play');
     $('btnShuffle').classList.toggle('active', library.shuffle);
     $('btnRepeat').classList.toggle('active', library.repeat > 0);
-    $('btnRepeat').textContent = library.repeat === 2 ? '↻1' : '↻';
+    setIcon('btnRepeat', library.repeat === 2 ? 'repeatOne' : 'repeat');
     $('seek').disabled = player.mode !== 'local';
   }
   player.onStatus = updateTransport;
