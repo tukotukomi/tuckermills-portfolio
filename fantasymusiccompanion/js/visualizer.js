@@ -145,6 +145,7 @@ export class Visualizer {
     this._drawDayCounter(ctx);
     this._drawGoldCounter(ctx);
     this._drawStorageChip(ctx);
+    this._drawNowPlaying(ctx);
     this._drawTunerButton(ctx);
     this._drawCompendiumButton(ctx);
     ctx.restore();
@@ -191,7 +192,72 @@ export class Visualizer {
   }
   _hudRightPx(ctx) {
     const r = this.scene.itemStorage > 0 ? this._storageRect(ctx) : this._goldRect(ctx);
-    return Math.trunc((r.x + r.w + 10) * this.hud);
+    let right = r.x + r.w + 10;
+    const np = this._npRect(ctx);
+    if (np && !np.second) right = Math.max(right, np.x + np.w + 10);
+    return Math.trunc(right * this.hud);
+  }
+
+  // ---- The now-playing pill (full screen only: the page already shows these in its own controls) ---------------
+
+  _np() {
+    if (!this.fullscreen || !this.host.nowPlaying) return null;
+    const n = this.host.nowPlaying();
+    if (!n || (!n.station && !n.title)) return null;
+    return n;
+  }
+
+  _npFont(px, bold, italic) { return (italic ? 'italic ' : '') + (bold ? '700' : '400') + ' ' + px + 'px ' + FONT; }
+
+  /** The pill sits right after the item storage chip when there is room on the first row, else on a row of its own below. */
+  _npRect(ctx) {
+    const n = this._np();
+    if (!n) return null;
+    const px = 9.5 * PT;
+    ctx.font = this._npFont(px, true, false); const sw = n.station ? Math.ceil(ctx.measureText(n.station).width) : 0;
+    ctx.font = this._npFont(px, false, true); const tw = n.title ? Math.ceil(ctx.measureText(n.title).width) : 0;
+    const ICON = 30, GAP = 18, PADR = 12;
+    const natural = ICON + sw + (n.station && n.title ? GAP : 0) + tw + PADR;
+    const s = this.scene.itemStorage > 0 ? this._storageRect(ctx) : this._goldRect(ctx);
+    const left = s.x + s.w + 8, maxRight = this._compRect.x - 8;
+    const avail = maxRight - left;
+    if (avail >= Math.min(natural, 200)) return { x: left, y: 8, w: Math.min(natural, avail), h: 26, second: false, n: n, sw: sw, px: px };
+    return { x: 8, y: 8 + 26 + 8, w: Math.min(natural, Math.max(200, this.vw - 16)), h: 26, second: true, n: n, sw: sw, px: px };
+  }
+
+  _drawNowPlaying(ctx) {
+    const r = this._npRect(ctx);
+    if (!r) return;
+    this._pill(ctx, r.x, r.y, r.w, r.h, 6, rgba(12, 16, 44, 0.59), 'rgba(130,200,255,0.82)', 1.4);
+    // A little equaliser: three bars that bounce while it plays.
+    const t = performance.now() / 1000;
+    ctx.fillStyle = 'rgb(120,200,255)';
+    for (let i = 0; i < 3; i++) {
+      const h = 5 + Math.round(5 * (0.5 + 0.5 * Math.sin(t * (5 + i * 1.7) + i * 2)));
+      ctx.fillRect(r.x + 9 + i * 5, r.y + (r.h + 12) / 2 - h, 3, h);
+    }
+    const n = r.n, right = r.x + r.w - 12, cy = r.y + r.h / 2 + 0.5;
+    let x = r.x + 30;
+    ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+    if (n.station) {   // the name is gold and bold...
+      const maxW = Math.max(40, right - x);
+      ctx.font = this._npFont(r.px, true, false); ctx.fillStyle = 'rgb(255,214,120)';
+      ctx.fillText(this._fit(ctx, n.station, maxW), x, cy);
+      x += Math.min(r.sw + 2, maxW);
+      if (n.title) { ctx.fillStyle = 'rgba(190,210,255,0.6)'; ctx.fillRect(x + 8, r.y + r.h / 2 - 1, 3, 3); x += 18; }
+    }
+    if (n.title && x < right) {   // ...and the song is white and italic
+      ctx.font = this._npFont(r.px, false, true); ctx.fillStyle = 'white';
+      ctx.fillText(this._fit(ctx, n.title, right - x), x, cy);
+    }
+  }
+
+  /** The text cut with an ellipsis to fit; the context's font must already be set. */
+  _fit(ctx, str, maxW) {
+    if (ctx.measureText(str).width <= maxW) return str;
+    let s = str;
+    while (s.length > 1 && ctx.measureText(s + '\u2026').width > maxW) s = s.slice(0, -1);
+    return s + '\u2026';
   }
   _topPillX(ctx, w) {
     const left = this._hudRightPx(ctx), right = this.width - (this.zoomed ? 78 : 44) * this.hud;

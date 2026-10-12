@@ -173,7 +173,16 @@ async function main() {
     spectrum: () => player.spectrum(),
     level: () => player.level(),
     unlockAudio: () => { Sound.unlock(); player.unlock(); },
-    openTuner: () => openTuner(),
+    // What the full screen now-playing pill shows: the station (gold) and its song (white italic), or just the track for local music.
+    nowPlaying: () => {
+      if (!player.playing) return null;
+      if (player.mode === 'radio' && player.station && player.status === 'Playing') return { station: player.station.name, title: player.songTitle || '' };
+      if (player.mode === 'local') {
+        const e = library.filtered[library.current];
+        return e ? { station: '', title: e.name.replace(/\.[^.]+$/, '') } : null;
+      }
+      return null;
+    },    openTuner: () => openTuner(),
     openCompendium: () => openCompendium(),
     toggleFullscreen: () => toggleFullscreen(),
     restartRequested: () => restartAdventure(),
@@ -282,7 +291,7 @@ async function main() {
       $('nowSub').textContent = e ? e.path : '';
     } else if (player.mode === 'radio') {
       $('nowTitle').textContent = player.station.name;
-      $('nowSub').textContent = player.status + (player.canAnalyse ? '' : ' - no audio reactions');
+      $('nowSub').textContent = player.songTitle || (player.status + (player.canAnalyse ? '' : ' - no audio reactions'));
     } else { $('nowTitle').textContent = 'Nothing playing'; $('nowSub').textContent = ''; }
   }
 

@@ -66,6 +66,8 @@ export class Player {
     this._peaks = { bass: 0.002, mid: 0.002, treble: 0.002 };
     this._lastSpec = { live: false, bass: 0, mid: 0, treble: 0, loud: 0 };
     this._currentUrl = null;
+    this.songTitle = '';          // radio: what the station says is playing, when it publishes that (else '')
+    this._metaTimer = 0;
 
     for (const a of [this.analysed, this.plain]) {
       a.addEventListener('playing', () => { if (a === this.active) { this._setStatus('Playing'); } });
@@ -77,6 +79,37 @@ export class Player {
 
   _setStatus(s) { this.status = s; if (this.onStatus) this.onStatus(); }
 
+  /** Browsers can't read a stream's in-band title unless the station allows it, so this asks the station's own "now playing" feed.
+   *  AzuraCast stations (the DNBRadio channels) publish one with open CORS at /api/nowplaying/<shortcode>. */
+  _metaUrl(station) {
+    if (station.metaUrl) return station.metaUrl;
+    const m = /^(https?:\/\/[^\/]+)\/listen\/([^\/]+)\//.exec(station.url || '');
+    return m ? m[1] + '/api/nowplaying/' + m[2] : '';
+  }
+
+  _startMeta(station) {
+    this._stopMeta();
+    const url = this._metaUrl(station);
+    if (!url) return;
+    const poll = async () => {
+      try {
+        const r = await fetch(url, { cache: 'no-store' });
+        if (!r.ok) return;
+        const j = await r.json();
+        const s = j && j.now_playing && j.now_playing.song;
+        const title = s ? (s.text || [s.artist, s.title].filter(Boolean).join(' - ')) : '';
+        if (this.station === station && title !== this.songTitle) { this.songTitle = title || ''; if (this.onStatus) this.onStatus(); }
+      } catch (e) { /* no feed, or blocked: the station name alone is shown */ }
+    };
+    poll();
+    this._metaTimer = setInterval(poll, 15000);
+  }
+
+  _stopMeta() {
+    clearInterval(this._metaTimer);
+    this._metaTimer = 0;
+    this.songTitle = '';
+  }
   /** Builds the Web Audio graph. Must run from a user gesture (click / key) the first time. */
   unlock() {
     if (!this.ctx) {
@@ -112,6 +145,7 @@ export class Player {
     this.analysed.removeAttribute('src'); this.analysed.load();
     this.plain.removeAttribute('src'); this.plain.load();
     this.mode = 'none'; this.station = null; this.status = ''; this.canAnalyse = false;
+    this._stopMeta();
     if (this.onStatus) this.onStatus();
   }
 
@@ -122,6 +156,7 @@ export class Player {
     if (this._currentUrl) URL.revokeObjectURL(this._currentUrl);
     this._currentUrl = URL.createObjectURL(file);
     this.mode = 'local'; this.station = null; this.status = '';
+    this._stopMeta();
     this.active = this.analysed;
     this.canAnalyse = !!this.analyser;
     this.analysed.removeAttribute('crossorigin');
@@ -135,6 +170,7 @@ export class Player {
     this.unlock();
     this._stopBoth();
     this.mode = 'radio'; this.station = station; this._setStatus('Connecting...');
+    this._startMeta(station);
     if (station.cors === 'blocked') { this._setStatus('Error: this station only streams over plain http'); return; }
     const tryPlain = () => {
       this.active = this.plain;
