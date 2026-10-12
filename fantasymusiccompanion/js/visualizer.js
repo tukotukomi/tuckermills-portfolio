@@ -8,6 +8,16 @@ import { traitSummary } from './traits.js';
 import { css } from './util.js';
 
 export const ZOOMED_SCALE = 5;
+
+// On a phone or tablet the adventure only progresses while the page is on screen: backgrounded or with the screen locked, the radio
+// plays on but the game waits (desktop browsers keep their own rules: a visible window keeps going).
+const IS_MOBILE = (() => {
+  try {
+    return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)
+      || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)   // iPadOS reports itself as a Mac
+      || (window.matchMedia && window.matchMedia('(pointer: coarse)').matches && !window.matchMedia('(hover: hover)').matches);
+  } catch (e) { return false; }
+})();
 const BLURB = {
   thief: 'Quick, quiet and always one step ahead.',
   warrior: 'A stalwart front-liner who never backs down.',
@@ -44,6 +54,7 @@ export class Visualizer {
     this.running = false;
     this.last = 0;
     this._frame = this._frame.bind(this);
+    document.addEventListener('visibilitychange', () => { this.last = performance.now(); });
 
     canvas.addEventListener('pointermove', e => this._onMove(e));
     canvas.addEventListener('pointerleave', () => { this.hover = { button: false, restart: false, tuner: false, comp: false, card: -1, tile: -1, levelUp: false }; canvas.style.cursor = 'default'; });
@@ -89,6 +100,10 @@ export class Visualizer {
     requestAnimationFrame(this._frame);
     let dt = (now - this.last) / 1000;
     this.last = now;
+    if (IS_MOBILE && document.visibilityState !== 'visible') {
+      this.scene._updateCrystalHum(false);   // silent too: the hum belongs to the game, not the radio
+      return;
+    }
     dt = Math.min(dt, 0.25);   // a long stall (a hidden tab) is taken in one capped step, not replayed
     this.resize();
     const spec = this.host.spectrum ? this.host.spectrum() : { live: false, bass: 0, mid: 0, treble: 0, loud: 0 };

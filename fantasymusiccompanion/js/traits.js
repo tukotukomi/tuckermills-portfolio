@@ -22,6 +22,10 @@ export function starHatDuration(level) { return 60; }
 export function peckDamage(level) { return 1; }
 export function peckInterval(level) { return 1.0; }
 export function fireballDamage(level) { return 5; }
+export function axeDamage(level) { return 3; }          // the Warrior's thrown axe
+export function axeInterval(level) { return 3.0; }
+export function axeRangeBlocks(level) { return 10; }   // blocks of grass it travels
+export const BLOCK_PIXELS = 8;                          // one block of grass = one repeat of the ground's pattern
 
 export function traitInterval(trait, level) {
   switch (trait) {
@@ -46,6 +50,21 @@ export function traitSummary(kind, level) {
   return '';
 }
 
+const AXE_SPEED = 90;   // scene pixels per second
+const AXE_ARC = 11;     // how high the lob rises above the straight line
+const AXE_COLORS = { n: C(158, 100, 58), w: C(250, 250, 255), g: C(206, 212, 226), G: C(126, 134, 160) };
+// The axe's four spin positions (5x5): one picture turned a quarter turn at a time.
+const AXE_FRAMES = (() => {
+  let grid = ['..nwg', '..ngg', '..nGg', '..n..', '..n..'];
+  const frames = [];
+  for (let f = 0; f < 4; f++) {
+    frames.push(grid);
+    const next = [];
+    for (let y = 0; y < 5; y++) { let row = ''; for (let x = 0; x < 5; x++) row += grid[4 - x][y]; next.push(row); }
+    grid = next;
+  }
+  return frames;
+})();
 const TIMED_TRAITS = ['Heal', 'Fireball', 'Huzzah', 'StarHat'];
 const SHOUT_SECONDS = 2.2;
 const HAT_ROWS = ['...y...', '..bbb..', '..byb..', '.bbybb.', 'BBBBBBB'];
@@ -59,6 +78,7 @@ export function installTraits(P) {
     this.traitTimer = {};
     this.memberRects = {};
     this.fireballs = [];
+    this.axes = [];
     this.heals = [];
     this.inspireLeft = 0; this.hatLeft = 0; this.shoutAge = -1; this.castFlash = 0; this.luckyFlash = 0;
     this.headSpots = new Map();
@@ -169,14 +189,47 @@ export function installTraits(P) {
       }
       if (f.x > this.lastLw + 12) this.fireballs.splice(i, 1);
     }
+    // Axes lob up and over the party and come down on the enemy, or in the grass if it is out of reach.
+    for (let i = this.axes.length - 1; i >= 0; i--) {
+      const a = this.axes[i];
+      a.age += dt;
+      a.travel = Math.min(a.range, a.travel + dt * AXE_SPEED);
+      const u = a.range > 0 ? a.travel / a.range : 1;
+      a.x = a.startX + a.travel;
+      a.y = a.startY + (a.endY - a.startY) * u - AXE_ARC * Math.sin(Math.PI * u);
+      if (a.travel < a.range) continue;
+      this.axes.splice(i, 1);
+      if (target !== null && this.enemy !== null && this.enemy.deathT < 0 && a.x >= this.enemy.x - 0.5) {
+        this._damageEnemy(this.enemy, this._withHuzzah(axeDamage(this.levelOf('warrior'))), false, a.x, a.y);
+      } else {
+        this.bursts.push({ x: a.x, y: this.groundY - 1, kind: 'peck', age: 0 });   // it sinks into the grass short of its mark
+      }
+      Sound.play('AxeHit');
+    }
     if (this.castFlash > 0) this.castFlash = Math.max(0, this.castFlash - dt);
     if (this.luckyFlash > 0) this.luckyFlash = Math.max(0, this.luckyFlash - dt);
     if (this.shoutAge >= 0) { this.shoutAge += dt; if (this.shoutAge > SHOUT_SECONDS) this.shoutAge = -1; }
   };
 
+  /** The Warrior's basic attack: throws an axe that travels up to axeRangeBlocks blocks of grass. */
+  m._throwAxe = function (e, level) {
+    const r = this._rectOf('warrior');
+    const sx = r.x + r.w - 2, sy = r.y + 4;
+    let range = axeRangeBlocks(level) * BLOCK_PIXELS;
+    const toEnemy = e.x - sx;
+    let endY = this.groundY - 2;   // short of the enemy it comes down in the grass
+    if (toEnemy <= range) {
+      range = Math.max(6, toEnemy);
+      const er = this._enemyRect(e);
+      endY = er.y + er.h * 0.4;
+    }
+    this.axes.push({ startX: sx, startY: sy, endY: endY, range: range, travel: 0, x: sx, y: sy, age: 0 });
+    Sound.play('AxeThrow');
+  };
+
   m._resetTraits = function () {
     this.traitTimer = {};
-    this.fireballs.length = 0; this.heals.length = 0;
+    this.fireballs.length = 0; this.axes.length = 0; this.heals.length = 0;
     this.inspireLeft = 0; this.hatLeft = 0; this.shoutAge = -1; this.castFlash = 0; this.luckyFlash = 0;
     this._resetEnemies();
   };
@@ -224,6 +277,7 @@ export function installTraits(P) {
     this._drawHeals(g);
     this._drawCastFlash(g);
     this._drawFireballs(g);
+    this._drawAxes(g);
     this._drawLuckyFlash(g);
   };
 
@@ -262,6 +316,18 @@ export function installTraits(P) {
     const cx = r.x + r.w - 1, cy = r.y + 5;
     g.ring(cx - rad, cy - rad, rad * 2, rad * 2, CA(Math.trunc(230 * (1 - u)), 255, 150, 40));
     g.rect(cx - 1, cy - 1, 3, 3, CA(Math.trunc(255 * (1 - u)), 255, 230, 140));
+  };
+
+  m._drawAxes = function (g) {
+    for (const a of this.axes) {
+      const grid = AXE_FRAMES[Math.trunc(a.age * 16) % 4];
+      const ox = Math.round(a.x) - 2, oy = Math.round(a.y) - 2;
+      for (let y = 0; y < 5; y++)
+        for (let x = 0; x < 5; x++) {
+          const col = AXE_COLORS[grid[y][x]];
+          if (col) g.rect(ox + x, oy + y, 1, 1, col);
+        }
+    }
   };
 
   m._drawFireballs = function (g) {

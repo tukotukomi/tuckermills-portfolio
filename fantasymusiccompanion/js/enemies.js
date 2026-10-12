@@ -5,7 +5,7 @@
 import { C, CA, withAlpha, rnd } from './util.js';
 import { Sprites } from './sprites.js';
 import { Sound } from './sfx.js';
-import { peckDamage, peckInterval } from './traits.js';
+import { peckDamage, peckInterval, axeInterval } from './traits.js';
 
 export const ENEMY_KINDS = ['sheller', 'orc', 'nightmare'];
 export const ENEMY_ENUM = { sheller: 'Sheller', orc: 'Orc', nightmare: 'Nightmare' };
@@ -69,7 +69,7 @@ export function installEnemies(P) {
 
   m._spawnEnemy = function () {
     const kind = this._pickEnemyKind();
-    this.enemy = { kind: kind, x: this.lastLw + 6, hp: DEFS[kind].hp, maxHp: DEFS[kind].hp, engaged: false, walkT: 0, attackTimer: 0, attackAnim: -1, attackPose: 0, struck: false, peckTimer: 0, hurtFlash: 0, deathT: -1 };
+    this.enemy = { kind: kind, x: this.lastLw + 6, hp: DEFS[kind].hp, maxHp: DEFS[kind].hp, engaged: false, walkT: 0, attackTimer: 0, attackAnim: -1, attackPose: 0, struck: false, peckTimer: 0, axeTimer: 0, hurtFlash: 0, deathT: -1 };
     this._noteSeen(kind);
     Sound.play(ROAR[kind]);   // a warning as it comes into view
   };
@@ -92,7 +92,7 @@ export function installEnemies(P) {
       const roadSpeed = 12.0 * this.clock.bpm / 112.0 * this.move;   // the road is still scrolling past under the party
       e.x -= (DEFS[e.kind].walkSpeed + roadSpeed) * dt;
       e.walkT += dt;
-      if (e.x <= stopX) { e.x = stopX; e.engaged = true; e.attackTimer = 1.0; e.peckTimer = 0.6; }
+      if (e.x <= stopX) { e.x = stopX; e.engaged = true; e.attackTimer = 1.0; e.peckTimer = 0.6; e.axeTimer = 1.5; }
       return;
     }
 
@@ -114,6 +114,16 @@ export function installEnemies(P) {
         this.peckAnim = 0;
         Sound.play('Peck');
         this._damageEnemy(e, this._withHuzzah(peckDamage(level)), false, e.x, 0);
+      }
+    }
+
+    // The Warrior throws an axe every few seconds while there is a fight.
+    if (this.party.indexOf('warrior') >= 0 && e.deathT < 0) {
+      const level = this.levelOf('warrior');
+      e.axeTimer -= dt;
+      if (e.axeTimer <= 0) {
+        e.axeTimer += axeInterval(level);
+        this._throwAxe(e, level);
       }
     }
   };

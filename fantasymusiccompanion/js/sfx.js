@@ -65,6 +65,24 @@ function thump(seconds, f0, f1, noiseAmt, gain) {
 const RECIPES = {
   // The party.
   Peck() { let ph = 0; return make(0.09, t => { ph += (2300 - 9500 * t) / R; return sqr(ph, 0.3) * exp(t, 0.022) * 0.55 + noise() * 0.25 * exp(t, 0.004); }); },
+  AxeThrow() {
+    let lp = 0, ph = 0;
+    return make(0.32, t => {
+      const u = t / 0.32;
+      lp += (0.12 + 0.35 * u) * (noise() - lp);
+      const spin = 0.65 + 0.35 * sin(t * 22);
+      const env = Math.sin(Math.PI * Math.pow(u, 0.7));
+      ph += (260 - 120 * u) / R;
+      return ((noise() - lp) * 0.8 + tri(ph) * 0.18) * spin * env * 0.8;
+    });
+  },
+  AxeHit() {
+    let ph = 0;
+    return make(0.22, t => {
+      ph += (150 * Math.exp(-t * 18) + 55) / R;
+      return sin(ph) * exp(t, 0.07) * 0.95 + noise() * 0.6 * exp(t, 0.008) + sqr(ph * 3, 0.5) * 0.15 * exp(t, 0.02);
+    });
+  },
   FireCast() {
     let ph = 0, lp = 0;
     return make(0.5, t => {
