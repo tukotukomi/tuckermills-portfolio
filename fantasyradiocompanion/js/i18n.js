@@ -16,7 +16,7 @@ const ES = {
   'Select your music folder of choice to play local music.': 'Elige tu carpeta de música para reproducir música local.',
   'Add playlist…': 'Añadir lista…', 'Stations from .m3u / .m3u8 / .pls files are kept in this browser.': 'Las emisoras de archivos .m3u / .m3u8 / .pls se guardan en este navegador.',
   'Shuffle': 'Aleatorio', 'Previous': 'Anterior', 'Play or pause': 'Reproducir o pausar', 'Next': 'Siguiente', 'Repeat': 'Repetir',
-  'SUPPORT': 'APOYAR', 'Music volume': 'Volumen de la música', 'Music volume:': 'Volumen de la música:',
+  'SUPPORT': 'APOYAR', 'Theme': 'Tema', 'Default': 'Predeterminado', 'Custom Theme {n}': 'Tema personalizado {n}', 'Music volume': 'Volumen de la música', 'Music volume:': 'Volumen de la música:',
   'the slider sets the level': 'el control ajusta el nivel',
   'this station plays outside the page: the slider only mutes it, the device volume buttons set the level': 'esta emisora suena fuera de la página: el control solo la silencia, el nivel lo ajustan los botones de volumen del dispositivo',
   'this stream plays outside the page: the slider only mutes it, the device volume buttons set the level': 'esta transmisión suena fuera de la página: el control solo la silencia, el nivel lo ajustan los botones de volumen del dispositivo',
@@ -96,7 +96,7 @@ const ZH = {
   'Select your music folder of choice to play local music.': '请选择你的音乐文件夹以播放本地音乐。',
   'Add playlist…': '添加播放列表…', 'Stations from .m3u / .m3u8 / .pls files are kept in this browser.': '来自 .m3u / .m3u8 / .pls 文件的电台保存在此浏览器中。',
   'Shuffle': '随机播放', 'Previous': '上一首', 'Play or pause': '播放或暂停', 'Next': '下一首', 'Repeat': '重复',
-  'SUPPORT': '支持', 'Music volume': '音乐音量', 'Music volume:': '音乐音量：',
+  'SUPPORT': '支持', 'Theme': '主题', 'Default': '默认', 'Custom Theme {n}': '自定义主题 {n}', 'Music volume': '音乐音量', 'Music volume:': '音乐音量：',
   'the slider sets the level': '滑块可调节音量',
   'this station plays outside the page: the slider only mutes it, the device volume buttons set the level': '此电台在页面之外播放：滑块只能静音，音量请用设备的音量键调节',
   'this stream plays outside the page: the slider only mutes it, the device volume buttons set the level': '此直播流在页面之外播放：滑块只能静音，音量请用设备的音量键调节',
@@ -225,7 +225,7 @@ const DOM = [
   ['#aboutIntro', 'text', 'A pixel-art adventure that marches to your music. Your party grows as you listen to radio; local music makes camp.'],
   ['#aboutArt', 'text', 'All pixel art is original. Radio stations are independent third-party streams; no music is included or uploaded: the music folder is read in your browser only.'],
   ['#aboutRadio', 'text', "Radio: stations that allow it also drive the scene's reactions; others just play. Final Fantasy Radio is http-only and plays in the Windows app."],
-  ['#pathLabel', 'text', 'Music volume:'], ['#soundLabel', 'text', 'Sound effects:'], ['#soundTest', 'text', 'Play test sound'], ['#aboutClose', 'text', 'Close'],
+  ['#themeText', 'text', 'Theme'], ['#themeSel', 'aria-label', 'Theme'], ['#pathLabel', 'text', 'Music volume:'], ['#soundLabel', 'text', 'Sound effects:'], ['#soundTest', 'text', 'Play test sound'], ['#aboutClose', 'text', 'Close'],
 ];
 
 /** Writes the current language into the page's static text. */
