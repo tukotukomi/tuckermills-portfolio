@@ -56,7 +56,7 @@ export function installCoins(P) {
   m._coinY = function (c) { return this.groundY - 6 - Math.abs(Math.sin(this.time * 4 + c.phase)) * 6; };
 
   m._coinIndexAt = function (px, py) {
-    if (!this.marching) return -1;   // coins can only be collected while music is playing
+    if (!this.marching || !this.progressing) return -1;   // like any time-progress mechanic: only while a radio stream plays (local music just camps)
     const lx = px / this.lastScale, ly = (py - this.lastTop) / this.lastScale;
     for (let i = 0; i < this.coins.length; i++)
       if (Math.abs(lx - this._coinX(this.coins[i])) <= 8 && Math.abs(ly - (this.groundY - 8)) <= 12) return i;
