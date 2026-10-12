@@ -15,7 +15,7 @@ const DEFS = {
   sheller: { name: 'Sheller', hp: 10, attackInterval: 2.0, walkSpeed: 20, nightOnly: false, headOffset: 0, habitat: 'Roams by day', note: 'A grumpy shell-back. Punches first, claws second.' },
   orc: { name: 'Orc', hp: 18, attackInterval: 3.0, walkSpeed: 15, nightOnly: false, headOffset: 7, habitat: 'Roams day and night', note: 'Fond of shiny earrings and swinging big sticks.' },
   nightmare: { name: 'Nightmare', hp: 12, attackInterval: 2.5, walkSpeed: 24, nightOnly: true, headOffset: 0, hover: 2, habitat: 'Roams after dark', note: 'A cloaked drifter that only calls after dark.' },
-  gargogryph: { name: 'Gargogryph', hp: 40, attackInterval: 3.5, walkSpeed: 18, nightOnly: true, headOffset: 4, hover: 5, standoff: 30, habitat: 'Only under a dark sky', note: 'Stone-faced, eagle-winged and hard to hurt. Wingbeats throw razor feathers, and it can call down a Blood Moon.' },
+  gargogryph: { name: 'Gargogryph', hp: 40, attackInterval: 3.5, walkSpeed: 18, nightOnly: true, headOffset: 4, hover: 5, standoff: 30, habitat: 'Only under a dark sky', note: 'A stone lion-ox with eagle wings, hard to hurt. Wingbeats throw razor feathers, and it can call down a Blood Moon.' },
 };
 
 export function enemyDef(kind) { return DEFS[kind]; }
