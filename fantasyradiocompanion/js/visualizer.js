@@ -57,7 +57,9 @@ export class Visualizer {
     this.last = 0;
     this._frame = this._frame.bind(this);
     this._hotDown = false; this._discOpen = false; this._discByPress = false; this._hotDownAt = 0;   // the hot item button and its disc
-    this._discHover = -1; this._overHot = false; this._overBuy = false; this._overLeave = false;    document.addEventListener('visibilitychange', () => { this.last = performance.now(); });
+    this._discHover = -1; this._overHot = false; this._overBuy = false; this._overLeave = false;
+    this._settingsOpen = false;   // the cog's menu
+    document.addEventListener('visibilitychange', () => { this.last = performance.now(); });
 
     canvas.addEventListener('pointermove', e => this._onMove(e));
     canvas.addEventListener('pointerleave', () => { this.hover = { button: false, restart: false, tuner: false, comp: false, card: -1, tile: -1, levelUp: false }; canvas.style.cursor = 'default'; });
@@ -150,7 +152,7 @@ export class Visualizer {
     ctx.save();
     if (hud !== 1) ctx.scale(hud, hud);
     this._drawExpandButton(ctx);
-    if (this._restartVisible) this._drawRestartButton(ctx);
+    this._drawSettingsButton(ctx);
     this._drawDayCounter(ctx);
     this._drawGoldCounter(ctx);
     this._drawStorageChip(ctx);
@@ -159,6 +161,7 @@ export class Visualizer {
     this._drawCompendiumButton(ctx);
     this._drawHotButton(ctx);
     this._drawDisc(ctx);
+    this._drawSettingsMenu(ctx);
     ctx.restore();
     this._drawShop(ctx);
   }
@@ -184,32 +187,55 @@ export class Visualizer {
 
   // ---- HUD geometry (in HUD units: pixels at hud scale 1) -------------------------------------------------------
 
-  _dayPillRect(ctx) {
-    const left = 'Year ' + this.scene.year + '  Day ' + this.scene.dayOfYear + '   ';
+  // The HUD pills flow along the top-left and wrap to the next row when they would run into the buttons.
+  _dayWidth(ctx) {
     const px = 9.5 * PT;
-    const leftW = this._measure(ctx, left, px);
+    const leftW = this._measure(ctx, 'Year ' + this.scene.year + '  Day ' + this.scene.dayOfYear + '   ', px);
     let seasonW = 0;
     for (const n of ['Spring', 'Summer', 'Fall', 'Winter']) seasonW = Math.max(seasonW, this._measure(ctx, n, px));
-    return { x: 8, y: 8, w: Math.round(leftW + seasonW + 24), h: 26, leftW: leftW, seasonW: seasonW };
-  }
-  _goldRect(ctx) {
-    const textW = this._measure(ctx, this.scene.gold.toLocaleString('en-US'), 10.5 * PT);
-    const d = this._dayPillRect(ctx);
-    return { x: d.x + d.w + 8, y: 8, w: Math.max(62, Math.round(36 + textW + 10)), h: 26 };
-  }
-  _storageRect(ctx) {
-    const textW = this._measure(ctx, '+' + this.scene.itemStorage, 9.5 * PT);
-    const g = this._goldRect(ctx);
-    return { x: g.x + g.w + 8, y: 8, w: Math.round(8 + 16 + 6 + textW + 10), h: 26 };
-  }
-  _hudRightPx(ctx) {
-    const r = this.scene.itemStorage > 0 ? this._storageRect(ctx) : this._goldRect(ctx);
-    let right = r.x + r.w + 10;
-    const np = this._npRect(ctx);
-    if (np && !np.second) right = Math.max(right, np.x + np.w + 10);
-    return Math.trunc(right * this.hud);
+    return { w: Math.round(leftW + seasonW + 24), leftW: leftW, seasonW: seasonW };
   }
 
+  /** Where each pill goes: left to right along the top, wrapping below when the next would reach the buttons (later rows: the edge). */
+  _hudLayout(ctx) {
+    const limit = (this.zoomed ? this._compRect.x : this._buttonRect.x) - 8;
+    let x = 8, y = 8;
+    const rowLimit = () => (y === 8 ? limit : this.vw - 8);
+    const place = w => {
+      if (x > 8 && x + w > rowLimit()) { x = 8; y += 26 + 8; }
+      const r = { x: x, y: y, w: w, h: 26 };
+      x += w + 8;
+      return r;
+    };
+    const day = this._dayWidth(ctx);
+    const L = { day: Object.assign(place(day.w), { leftW: day.leftW, seasonW: day.seasonW }), gold: null, storage: null, np: null };
+    const goldW = Math.max(62, Math.round(36 + this._measure(ctx, this.scene.gold.toLocaleString('en-US'), 10.5 * PT) + 10));
+    L.gold = place(goldW);
+    if (this.scene.itemStorage > 0) L.storage = place(Math.round(8 + 16 + 6 + this._measure(ctx, '+' + this.scene.itemStorage, 9.5 * PT) + 10));
+    const n = this._np();
+    if (n) {
+      const px = 9.5 * PT;
+      ctx.font = this._npFont(px, true, false); const sw = n.station ? Math.ceil(ctx.measureText(n.station).width) : 0;
+      ctx.font = this._npFont(px, false, true); const tw = n.title ? Math.ceil(ctx.measureText(n.title).width) : 0;
+      const natural = 30 + sw + (n.station && n.title ? 18 : 0) + tw + 12;
+      let avail = rowLimit() - x;
+      if (x > 8 && avail < Math.min(natural, 200)) { x = 8; y += 26 + 8; avail = rowLimit() - x; }
+      L.np = { x: x, y: y, w: Math.min(natural, Math.max(200, avail)), h: 26, second: y > 8, n: n, sw: sw, px: px };
+    }
+    return L;
+  }
+
+  _dayPillRect(ctx) { return this._hudLayout(ctx).day; }
+  _goldRect(ctx) { return this._hudLayout(ctx).gold; }
+  _storageRect(ctx) { return this._hudLayout(ctx).storage; }
+
+  /** The left edge of the free space along the top: clear of every pill that sits on the first row. */
+  _hudRightPx(ctx) {
+    const L = this._hudLayout(ctx);
+    let right = L.day.x + L.day.w;
+    for (const r of [L.gold, L.storage, L.np]) if (r && r.y === 8) right = Math.max(right, r.x + r.w);
+    return Math.trunc((right + 10) * this.hud);
+  }
   // ---- The now-playing pill (full screen only: the page already shows these in its own controls) ---------------
 
   _np() {
@@ -221,22 +247,7 @@ export class Visualizer {
 
   _npFont(px, bold, italic) { return (italic ? 'italic ' : '') + (bold ? '700' : '400') + ' ' + px + 'px ' + FONT; }
 
-  /** The pill sits right after the item storage chip when there is room on the first row, else on a row of its own below. */
-  _npRect(ctx) {
-    const n = this._np();
-    if (!n) return null;
-    const px = 9.5 * PT;
-    ctx.font = this._npFont(px, true, false); const sw = n.station ? Math.ceil(ctx.measureText(n.station).width) : 0;
-    ctx.font = this._npFont(px, false, true); const tw = n.title ? Math.ceil(ctx.measureText(n.title).width) : 0;
-    const ICON = 30, GAP = 18, PADR = 12;
-    const natural = ICON + sw + (n.station && n.title ? GAP : 0) + tw + PADR;
-    const s = this.scene.itemStorage > 0 ? this._storageRect(ctx) : this._goldRect(ctx);
-    const left = s.x + s.w + 8, maxRight = this._compRect.x - 8;
-    const avail = maxRight - left;
-    if (avail >= Math.min(natural, 200)) return { x: left, y: 8, w: Math.min(natural, avail), h: 26, second: false, n: n, sw: sw, px: px };
-    return { x: 8, y: 8 + 26 + 8, w: Math.min(natural, Math.max(200, this.vw - 16)), h: 26, second: true, n: n, sw: sw, px: px };
-  }
-
+  _npRect(ctx) { return this._hudLayout(ctx).np; }
   _drawNowPlaying(ctx) {
     const r = this._npRect(ctx);
     if (!r) return;
@@ -272,17 +283,18 @@ export class Visualizer {
     return s + '\u2026';
   }
   _topPillX(ctx, w) {
-    const left = this._hudRightPx(ctx), right = this.width - (this.zoomed ? 78 : 44) * this.hud;
+    const left = this._hudRightPx(ctx), right = this.width - (this.zoomed ? 112 : 78) * this.hud;
     let x = Math.trunc((this.width - w) / 2);
     if (x + w > right) x = right - w;
     if (x < left) x = left;
     return x;
   }
-  get _buttonRect() { return { x: this.vw - 34, y: 8, w: 26, h: 26 }; }
-  get _compRect() { return { x: this.vw - 34 - 34, y: 8, w: 26, h: 26 }; }
-  get _tunerRect() { return { x: this.vw - 8 - 52, y: this.vh - 8 - 52, w: 52, h: 52 }; }
-  get _restartRect() { return { x: 8, y: this.vh - 34, w: 66, h: 26 }; }
-  get _restartVisible() { return !this.scene.isLevelSelect; }
+  get _settingsRect() { return { x: this.vw - 34, y: 8, w: 26, h: 26 }; }          // the cog, top-right corner
+  get _buttonRect() { return { x: this.vw - 68, y: 8, w: 26, h: 26 }; }
+  get _compRect() { return { x: this.vw - 102, y: 8, w: 26, h: 26 }; }
+  get _tunerRect() { return { x: 8, y: this.vh - 8 - 52, w: 52, h: 52 }; }          // bottom-left
+  get _settingsMenuRect() { const c = this._settingsRect; return { x: c.x + c.w - 118, y: c.y + c.h + 6, w: 118, h: 38 }; }
+  get _restartItemRect() { const m = this._settingsMenuRect; return { x: m.x + 4, y: m.y + 4, w: m.w - 8, h: 30 }; }
 
   _drawExpandButton(ctx) {
     const r = this._buttonRect, hot = this.hover.button;
@@ -301,10 +313,31 @@ export class Visualizer {
     ctx.lineCap = 'butt';
   }
 
-  _drawRestartButton(ctx) {
-    const r = this._restartRect, hot = this.hover.restart;
+  /** A plain cog: a ring of eight teeth round a hole. */
+  _drawSettingsButton(ctx) {
+    const r = this._settingsRect, hot = this.hover.settings || this._settingsOpen;
     this._pill(ctx, r.x, r.y, r.w, r.h, 5, rgba(12, 16, 44, hot ? 0.75 : 0.47), rgba(210, 224, 255, hot ? 1 : 0.67));
-    this._text(ctx, 'Restart', r.x + r.w / 2, r.y + r.h / 2 + 0.5, { px: 8.5 * PT, color: 'white', align: 'center' });
+    const cx = r.x + r.w / 2 - 0.5, cy = r.y + r.h / 2 - 0.5;
+    ctx.beginPath();
+    for (let i = 0; i < 8; i++) {
+      const a = i * Math.PI / 4;
+      for (const [da, rad] of [[-0.30, 6.0], [-0.17, 9.0], [0.17, 9.0], [0.30, 6.0]]) {
+        const x = cx + Math.cos(a + da) * rad, y = cy + Math.sin(a + da) * rad;
+        if (i === 0 && da === -0.30) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+    }
+    ctx.closePath();
+    ctx.fillStyle = 'white'; ctx.fill();
+    ctx.beginPath(); ctx.arc(cx, cy, 2.6, 0, Math.PI * 2);
+    ctx.fillStyle = hot ? 'rgb(56,60,100)' : 'rgb(40,46,84)'; ctx.fill();
+  }
+
+  _drawSettingsMenu(ctx) {
+    if (!this._settingsOpen) return;
+    const m = this._settingsMenuRect, item = this._restartItemRect;
+    this._pill(ctx, m.x, m.y, m.w, m.h, 7, 'rgba(22,18,52,0.92)', 'rgba(255,214,120,0.9)', 1.4);
+    if (this.hover.restart) this._pill(ctx, item.x, item.y, item.w, item.h, 5, 'rgba(90,70,150,0.47)');
+    this._text(ctx, 'Restart', item.x + item.w / 2, item.y + item.h / 2 + 0.5, { px: 9.5 * PT, color: 'white', align: 'center' });
   }
 
   _drawDayCounter(ctx) {
@@ -373,7 +406,7 @@ export class Visualizer {
     ctx.beginPath(); ctx.arc(cx, cy + 15.5 * s, 4.5 * s, 0, Math.PI * 2); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(cx, cy + 12.5 * s); ctx.lineTo(cx, cy + 15 * s); ctx.stroke();
     ctx.lineCap = 'butt';
-    if (hot) this._tip(ctx, 'Tuner: music & radio stations', r.x - 10, r.y + r.h / 2);
+    if (hot) this._tip(ctx, 'Tuner: music & radio stations', r.x + r.w + 10, r.y + r.h / 2, true);
   }
 
   _drawCompendiumButton(ctx) {
@@ -390,11 +423,13 @@ export class Visualizer {
     if (hot) this._tip(ctx, 'Monster Compendium', r.x - 8, r.y + r.h / 2);
   }
 
-  _tip(ctx, text, rightX, midY) {
+  /** A little label beside a button: ending at anchorX, or (alignLeft) starting at it. */
+  _tip(ctx, text, anchorX, midY, alignLeft) {
     const px = 8.5 * PT;
     const w = Math.round(this._measure(ctx, text, px)) + 20;
-    this._pill(ctx, rightX - w, midY - 12, w, 24, 6, 'rgba(22,18,52,0.84)', 'rgba(255,214,120,0.9)');
-    this._text(ctx, text, rightX - w / 2, midY + 0.5, { px: px, color: 'white', align: 'center' });
+    const x = alignLeft ? anchorX : anchorX - w;
+    this._pill(ctx, x, midY - 12, w, 24, 6, 'rgba(22,18,52,0.84)', 'rgba(255,214,120,0.9)');
+    this._text(ctx, text, x + w / 2, midY + 0.5, { px: px, color: 'white', align: 'center' });
   }
 
   // ---- Scene text, camp hint ---------------------------------------------------------------------------------------
@@ -444,9 +479,9 @@ export class Visualizer {
 
   // ---- Items: the hot item button, its disc menu, and the Merchant's shop --------------------------------------------
 
-  get _hotRect() { return { x: this.vw - 8 - 44, y: Math.trunc(this.vh / 2) - 22, w: 44, h: 44 }; }
+  get _hotRect() { return { x: 8, y: Math.trunc(this.vh / 2) - 22, w: 44, h: 44 }; }   // middle of the left edge
   get _hotVisible() { return this.zoomed && !this.scene.isShopping; }
-  get _discCenter() { return { x: this.vw - 6 - 44 - 19, y: this._hotRect.y + 22 }; }
+  get _discCenter() { return { x: 6 + 44 + 19, y: this._hotRect.y + 22 }; }   // the disc opens inward, to the right of the button
 
   _discSlotCenter(i) {
     const c = this._discCenter;
@@ -469,6 +504,7 @@ export class Visualizer {
 
   /** Closes the disc menu or the shop if one is up (for Escape). True if something was closed. */
   dismissOverlay() {
+    if (this._settingsOpen) { this._settingsOpen = false; return true; }
     if (this._discOpen) { this._discOpen = false; this._hotDown = false; return true; }
     if (this.scene.isShopping) { this.scene.leaveShop(); return true; }
     return false;
@@ -523,7 +559,7 @@ export class Visualizer {
     ctx.strokeStyle = hot ? 'rgb(255,214,120)' : rgba(210, 224, 255, 0.75); ctx.lineWidth = 1.6; ctx.stroke();
     this._drawItemIcon(ctx, id, r.x + r.w / 2, r.y + r.h / 2, 2, n <= 0);
     this._drawCountBadge(ctx, n, r.x + r.w + 2, r.y + r.h + 2);
-    if (this._overHot && !this._discOpen) this._tip(ctx, 'Tap: use   Hold: switch', r.x - 10, r.y + r.h / 2);
+    if (this._overHot && !this._discOpen) this._tip(ctx, 'Tap: use   Hold: switch', r.x + r.w + 10, r.y + r.h / 2, true);
   }
 
   _drawDisc(ctx) {
@@ -548,8 +584,9 @@ export class Visualizer {
     this._drawItemIcon(ctx, cur, c.x, c.y, 1, s.itemCount(cur) <= 0);
     const label = ITEM_DEFS[this._discHover >= 0 ? hot[this._discHover] : cur].name;
     const px = 8.5 * PT, w = Math.round(this._measure(ctx, label, px) + 20);
-    this._pill(ctx, c.x - w / 2, c.y - outer - 30, w, 24, 6, 'rgba(22,18,52,0.88)', 'rgba(255,214,120,0.9)', 1.2);
-    this._text(ctx, label, c.x, c.y - outer - 30 + 12.5, { px: px, color: 'white', align: 'center' });
+    const lx = Math.max(6, c.x - w / 2);
+    this._pill(ctx, lx, c.y - outer - 30, w, 24, 6, 'rgba(22,18,52,0.88)', 'rgba(255,214,120,0.9)', 1.2);
+    this._text(ctx, label, lx + w / 2, c.y - outer - 30 + 12.5, { px: px, color: 'white', align: 'center' });
   }
 
   // The shop panel (screen pixels, like the tavern's cards).
@@ -814,7 +851,8 @@ export class Visualizer {
     const s = this.scene;
     const hover = {
       button: this._inRect(h, this._buttonRect),
-      restart: this._restartVisible && this._inRect(h, this._restartRect),
+      settings: this._inRect(h, this._settingsRect),
+      restart: this._settingsOpen && this._inRect(h, this._restartItemRect),
       tuner: this._inTuner(h),
       comp: this.zoomed && this._inRect(h, this._compRect),
       card: -1, tile: -1, levelUp: false
@@ -836,7 +874,7 @@ export class Visualizer {
     }
     this.hover = hover;
     const overCoin = !s.isLevelSelect && !s.isDialogue && !s.isChoosing && s.isCoinAt(p.x, p.y);
-    this.canvas.style.cursor = hover.button || hover.restart || hover.tuner || hover.comp || this._overHot || this._discHover >= 0 || hover.card >= 0 || hover.tile >= 0 || hover.levelUp || overCoin ? 'pointer' : 'default';
+    this.canvas.style.cursor = hover.button || hover.settings || hover.restart || hover.tuner || hover.comp || this._overHot || this._discHover >= 0 || hover.card >= 0 || hover.tile >= 0 || hover.levelUp || overCoin ? 'pointer' : 'default';
   }
 
   _onDown(e) {
@@ -852,13 +890,17 @@ export class Visualizer {
       else if (this._inRect(p, b.leave)) { this._overBuy = false; this._overLeave = false; s.leaveShop(); }
       return;
     }
+    if (this._settingsOpen) {
+      if (this._inRect(h, this._restartItemRect)) { this._settingsOpen = false; this.hover.restart = false; this.host.restartRequested && this.host.restartRequested(); return; }
+      if (!this._inRect(h, this._settingsRect)) { this._settingsOpen = false; return; }   // a click elsewhere just closes it
+    }
+    if (this._inRect(h, this._settingsRect)) { this._settingsOpen = !this._settingsOpen; Sound.play('DiscClick'); return; }
     if (this._discOpen) return;   // a tap on the disc is settled when the pointer comes up
     if (this._inHot(h)) { this._hotDown = true; this._hotDownAt = performance.now(); this._discByPress = false; return; }
     const cards = this._cardRects();
     for (let i = 0; i < cards.length; i++) if (this._inRect(p, cards[i])) { s.choose(i); this.hover.card = -1; return; }
     if (this._inTuner(h)) { this.host.openTuner && this.host.openTuner(); return; }
     if (this.zoomed && this._inRect(h, this._compRect)) { this.host.openCompendium && this.host.openCompendium(); return; }
-    if (this._restartVisible && this._inRect(h, this._restartRect)) { this.host.restartRequested && this.host.restartRequested(); return; }
     if (this._inRect(h, this._buttonRect)) { this.host.toggleFullscreen && this.host.toggleFullscreen(); return; }
 
     if (s.isLevelSelect) {
