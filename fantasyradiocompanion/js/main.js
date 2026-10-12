@@ -8,7 +8,7 @@ import { Sound } from './sfx.js';
 import { Player, STATIONS, AUDIO_EXTENSIONS, parsePlaylist } from './player.js';
 import { SUPPORT } from './support.js';
 import { iconSvg } from './icons.js';
-import { THEMES, applyTheme } from './themes.js';
+import { THEMES, applyTheme, themeIndexFor } from './themes.js';
 import { VirtualList, fmtTime, el } from './ui.js';
 import { flipImage, silhouetteImage, C } from './util.js';
 
@@ -554,20 +554,19 @@ async function main() {
     THEMES.forEach((th, i) => {
       const o = document.createElement('option');
       o.value = String(i);
-      o.textContent = th.n ? t('Custom Theme {n}', { n: th.n }) : t('Default');
+      o.textContent = t('Custom Theme {n}', { n: th.n });
       sel.appendChild(o);
     });
     sel.value = cur || '0';
   }
-  let themeIndex = parseInt(store.get('theme', '0'), 10);
-  if (!(themeIndex >= 0 && themeIndex < THEMES.length)) themeIndex = 0;
+  const themeIndex = themeIndexFor(store.get('theme', ''));
   buildThemeOptions();
   $('themeSel').value = String(themeIndex);
   applyTheme(themeIndex);
   $('themeSel').addEventListener('change', () => {
     const i = parseInt($('themeSel').value, 10) || 0;
     applyTheme(i);
-    store.set('theme', String(i));
+    store.set('theme', THEMES[i].id);   // the id, so the list can change without moving anyone's choice
   });
 
   function refreshLanguage() {

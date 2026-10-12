@@ -1,8 +1,7 @@
 // The Windows app's "Custom Theme 1-8" looks, for the web app. Each has a tint (the average colour of its texture, from src/Theming.cs) and
-// a texture tile exported from the app's own generator (web/tools/export-themes.ps1 -> assets/themes/t1..t8.png). Index 0 is the plain
-// look the web app always had.
+// a texture tile exported from the app's own generator (web/tools/export-themes.ps1 -> assets/themes/t1..t8.png). Custom Theme 1 is the
+// look the page opens in (it replaced the plain look, which it matched closely).
 export const THEMES = [
-  { id: 'default' },
   { id: 't1', n: 1, tint: [14, 20, 72] },
   { id: 't2', n: 2, tint: [78, 86, 106] },
   { id: 't3', n: 3, tint: [28, 40, 118] },
@@ -15,20 +14,27 @@ export const THEMES = [
 
 const shade = (c, f) => c.map(v => Math.max(0, Math.min(255, Math.round(v * f))));
 const rgb = c => 'rgb(' + c.join(',') + ')';
-const VARS = ['--bg', '--panel', '--panel2', '--line', '--list', '--bar-bg', '--foot-bg', '--pane-bg', '--play', '--text', '--muted', '--tex', '--bar-line'];
 
-/** Applies a theme (an index into THEMES) to the page. 0 puts everything back to the stylesheet's own values. */
+/** The index to open in: what was saved (a theme id, or the number an earlier version saved), else Custom Theme 1. */
+export function themeIndexFor(saved) {
+  if (saved) {
+    const byId = THEMES.findIndex(th => th.id === saved);
+    if (byId >= 0) return byId;
+    // Earlier versions saved a position in a list that began with a "Default" entry: 0 was Default, n was Custom Theme n.
+    if (/^\d+$/.test(saved)) {
+      const n = parseInt(saved, 10);
+      const idx = THEMES.findIndex(th => th.n === Math.max(1, n));
+      if (idx >= 0) return idx;
+    }
+  }
+  return 0;
+}
+
+/** Applies a theme (an index into THEMES) to the page. */
 export function applyTheme(index) {
   const root = document.documentElement;
   const th = THEMES[index] || THEMES[0];
   const meta = document.querySelector('meta[name=theme-color]');
-  if (!th.tint) {
-    for (const v of VARS) root.style.removeProperty(v);
-    root.classList.remove('themed');
-    root.removeAttribute('data-theme');
-    if (meta) meta.setAttribute('content', '#14123a');
-    return;
-  }
   const T = th.tint;
   const set = (k, v) => root.style.setProperty(k, v);
   const tex = 'url("' + new URL('assets/themes/' + th.id + '.png', document.baseURI).href + '")';
