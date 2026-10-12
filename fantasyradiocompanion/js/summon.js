@@ -77,6 +77,7 @@ export class SummonEffect {
     ctx.strokeStyle = 'rgba(255,214,120,0.9)'; ctx.lineWidth = 1.4;
     roundRect(ctx, pillX, pillY, w, h, h / 2); ctx.stroke();
     ctx.fillStyle = 'rgb(255,244,214)';
+    ctx.textAlign = 'left';   // the context is shared: the last text drawn may have left it centred or right-aligned
     ctx.textBaseline = 'middle';
     ctx.fillText(text, pillX + 13, pillY + h / 2 + 0.5);
     ctx.restore();
