@@ -32,6 +32,10 @@ input[type=range] { accent-color: var(--gold); }
 
 #main { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
 #stage { flex: 1 1 auto; min-height: 0; position: relative; background: #000; }
+.tip { position: absolute; left: 50%; bottom: 14%; transform: translateX(-50%); max-width: calc(100% - 32px); z-index: 5; pointer-events: none;
+  background: rgba(14, 12, 42, 0.9); color: var(--text); border: 1px solid var(--gold); border-radius: 999px; padding: 9px 16px; font-size: 14px; text-align: center;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.5); opacity: 0; transition: opacity 0.35s; }
+.tip.show { opacity: 1; }
 #scene { width: 100%; height: 100%; display: block; image-rendering: pixelated; touch-action: manipulation; }
 body.view-list #stage { flex: 0 0 132px; }
 .pane { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; padding: 10px 12px; gap: 8px; background: var(--panel); }
@@ -102,7 +106,8 @@ dialog::backdrop { background: rgba(0,0,0,0.65); }
 
 /* Full screen (or the iPhone's stand-in for it): the scene alone. */
 body.immersive #topbar, body.immersive #transport, body.immersive .pane { display: none; }
-body.immersive #app { padding: 0; }
+/* The scene fills the screen but stays clear of the status bar / Dynamic Island, the home indicator and any landscape notch. */
+body.immersive #app { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
 body.immersive #stage { flex: 1 1 auto; }
 #stage:fullscreen { background: #000; }
 #stage:fullscreen #scene { width: 100vw; height: 100vh; }

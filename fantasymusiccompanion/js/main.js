@@ -2,7 +2,7 @@
 
 import { PixelScene } from './scene.js';
 import { Sprites } from './sprites.js';
-import { Visualizer } from './visualizer.js';
+import { Visualizer, IS_MOBILE } from './visualizer.js';
 import { Sound } from './sfx.js';
 import { Player, STATIONS, AUDIO_EXTENSIONS, parsePlaylist } from './player.js';
 import { VirtualList, fmtTime, el } from './ui.js';
@@ -440,6 +440,23 @@ async function main() {
   for (const ev of ['pointerdown', 'pointerup', 'click', 'keydown', 'touchend'])
     window.addEventListener(ev, () => { if (Sound.state !== 'running') Sound.unlock(); }, { capture: true, passive: true });
   document.addEventListener('visibilitychange', () => { if (!document.hidden) Sound.unlock(); });
+
+  // On a phone or tablet the game waits while it is minimized (see visualizer.js). Say so when the player comes back, if the
+  // adventure was progressing and they were away long enough to have noticed nothing happening.
+  let tipTimer = 0;
+  function showTip(text) {
+    const tip = $('tip');
+    tip.textContent = text;
+    tip.classList.add('show');
+    clearTimeout(tipTimer);
+    tipTimer = setTimeout(() => tip.classList.remove('show'), 4500);
+  }
+  let hiddenAt = 0, wasProgressing = false;
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) { hiddenAt = Date.now(); wasProgressing = !!scene.progressing; return; }
+    if (IS_MOBILE && hiddenAt && wasProgressing && Date.now() - hiddenAt > 1500) showTip('Progress paused while game minimized.');
+    hiddenAt = 0;
+  });
   function updateSoundState() {
     const s = Sound.state;
     $('soundState').textContent = s === 'running' ? 'on (volume ' + Math.round(Sound.volume) + '%)'

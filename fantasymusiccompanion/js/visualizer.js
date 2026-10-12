@@ -11,7 +11,7 @@ export const ZOOMED_SCALE = 5;
 
 // On a phone or tablet the adventure only progresses while the page is on screen: backgrounded or with the screen locked, the radio
 // plays on but the game waits (desktop browsers keep their own rules: a visible window keeps going).
-const IS_MOBILE = (() => {
+export const IS_MOBILE = (() => {
   try {
     return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)
       || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)   // iPadOS reports itself as a Mac
