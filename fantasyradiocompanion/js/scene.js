@@ -137,6 +137,7 @@ export class PixelScene {
   // ---- Stepping ---------------------------------------------------------------------------------------
 
   advance(dt, level) {
+    if (this.targetItem !== null) { this.targetT += dt; return; }   // a healing item is waiting for its target: everything stands still
     this.time += dt;
     this._updateAudio(dt, level);
     this._advanceParty(dt);   // real time, so the party settles and the newcomer walks out even with the music paused
@@ -230,6 +231,7 @@ export class PixelScene {
     this._drawGlowSpots(g);
     this._drawCampfireGlow(g, lw);
     this._drawCrystalLayer(g, lw);
+    if (this.targetItem !== null) this._drawTargetOverlay(g, lw);
     return this.canvas;
   }
 
@@ -1106,6 +1108,7 @@ export class PixelScene {
       g.ellipse(x + Math.trunc((sprite.w - 12) / 2), this.groundY, 12, 2, CA(90, 20, 30, 20));
       g.image(frame, x, y, false, undefined, sprite.w, sprite.h + breath);
       this._noteMemberRect(kind, x, y, sprite.w, sprite.h + breath);
+      this.memberFrames[kind] = frame;
       if (this.hatLeft > 0 && !newcomer) this._drawStarHat(g, frame, x, y);
     }
   }

@@ -528,6 +528,7 @@ export class Visualizer {
 
   /** Closes the disc menu or the shop if one is up (for Escape). True if something was closed. */
   dismissOverlay() {
+    if (this.scene.isTargeting) { this.scene.cancelTargeting(); return true; }
     if (this._settingsOpen) { this._settingsOpen = false; return true; }
     if (this._discOpen) { this._discOpen = false; this._hotDown = false; return true; }
     if (this.scene.isShopping) { if (this._shopInfoId) this._shopInfoId = null; else this.scene.leaveShop(); return true; }
@@ -577,8 +578,25 @@ export class Visualizer {
     this._text(ctx, s, x + w / 2, y + 7.5, { px: px, color: n > 0 ? 'white' : 'rgb(255,150,140)', align: 'center' });
   }
 
+  /** While a healing item waits for its target the item button turns into a cancel button, with a prompt beside it. */
+  _drawTargetUi(ctx) {
+    const r = this._hotRect, hot = this._overHot;
+    const cx = r.x + r.w / 2, cy = r.y + r.h / 2;
+    ctx.beginPath(); ctx.arc(cx, cy, (r.w - 1) / 2, 0, Math.PI * 2);
+    ctx.fillStyle = rgba(44, 16, 30, hot ? 0.9 : 0.78); ctx.fill();
+    ctx.strokeStyle = hot ? 'rgb(255,214,120)' : 'rgba(255,170,150,0.86)'; ctx.lineWidth = 1.6; ctx.stroke();
+    const d = r.w * 0.18;
+    ctx.strokeStyle = 'white'; ctx.lineWidth = 2.4; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(cx - d, cy - d); ctx.lineTo(cx + d, cy + d); ctx.moveTo(cx - d, cy + d); ctx.lineTo(cx + d, cy - d); ctx.stroke();
+    ctx.lineCap = 'butt';
+    const label = t('Choose who to heal'), px = 8.5 * PT, w = Math.round(this._measure(ctx, label, px) + 20), x = r.x + r.w + 8, y = r.y + (r.h - 24) / 2;
+    this._pill(ctx, x, y, w, 24, 6, 'rgba(22,18,52,0.88)', 'rgba(150,255,190,0.9)', 1.2);
+    this._text(ctx, label, x + w / 2, y + 12.5, { px: px, color: 'white', align: 'center' });
+  }
+
   _drawHotButton(ctx) {
     if (!this._hotVisible) return;
+    if (this.scene.isTargeting) { this._drawTargetUi(ctx); return; }
     const r = this._hotRect, hot = this._overHot || this._hotDown;
     const s = this.scene, id = s.hotItem, n = s.itemCount(id);
     ctx.beginPath(); ctx.arc(r.x + r.w / 2, r.y + r.h / 2, (r.w - 1) / 2, 0, Math.PI * 2);
@@ -962,6 +980,13 @@ export class Visualizer {
     const p = this._point(e);
     const h = { x: p.x / this.hud, y: p.y / this.hud };
     const s = this.scene;
+    if (s.isTargeting) {
+      const overCancel = this._inHot(h), member = overCancel ? null : s.memberAt(p.x, p.y);
+      s.targetHover = member;
+      this._overHot = overCancel;
+      this.canvas.style.cursor = overCancel || member ? 'pointer' : 'default';
+      return;
+    }
     const hover = {
       button: this._inRect(h, this._buttonRect),
       settings: this._inRect(h, this._settingsRect),
@@ -996,6 +1021,12 @@ export class Visualizer {
     const p = this._point(e);
     const h = { x: p.x / this.hud, y: p.y / this.hud };
     const s = this.scene;
+    if (s.isTargeting) {   // tap a member to use the item on them; the cross, or a tap anywhere else, puts it back
+      const who = this._inHot(h) ? null : s.memberAt(p.x, p.y);
+      if (who) s.chooseTarget(who); else s.cancelTargeting();
+      this._overHot = false; this._hotDown = false;
+      return;
+    }
     if (s.isShopping) {   // the shop is modal
       if (this._shopInfoId) { this._shopInfoId = null; return; }   // any tap closes the description
       const hit = this._shopHit(p), L = this._shopLayout();

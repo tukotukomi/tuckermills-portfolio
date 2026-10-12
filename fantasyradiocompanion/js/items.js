@@ -1,7 +1,7 @@
 // Items: the party's bag, the four hot item slots, the Synergy Elixir, and the Merchant who comes down the road. A port of
 // src\PixelItems.cs; the same numbers, so a change made to the C# can be made here the same way.
 
-import { C, CA } from './util.js';
+import { C, CA, silhouetteImage } from './util.js';
 import { Sprites } from './sprites.js';
 import { Sound } from './sfx.js';
 import { TRAIT_OWNER } from './traits.js';
@@ -10,12 +10,13 @@ import { t } from './i18n.js';
 export const ITEM_IDS = ['SynergyElixir', 'PotionRed', 'PotionBlue', 'PotionGreen'];
 export const HOT_SLOT_COUNT = 4;
 
-/** Name, blurb and price (0 = the Merchant doesn't sell it). The three potions are placeholders to prove the item UI. */
+/** Name, blurb and price (0 = the Merchant doesn't sell it). `heal` is the HP an item restores to the member it is used on. The red and blue
+ *  potions are placeholders to prove the item UI; the green one is the Healing Potion I (its id stays PotionGreen so saved bags keep working). */
 export const ITEM_DEFS = {
   SynergyElixir: { name: 'Synergy Elixir', price: 20, blurb: "Resets every party member's skills so they all fire together within a second, Huzzah! first so the damage skills get its full benefit." },
   PotionRed: { name: 'Red Potion', price: 0, blurb: 'A placeholder potion. It does nothing yet.' },
   PotionBlue: { name: 'Blue Potion', price: 0, blurb: 'A placeholder potion. It does nothing yet.' },
-  PotionGreen: { name: 'Green Potion', price: 0, blurb: 'A placeholder potion. It does nothing yet.' },
+  PotionGreen: { name: 'Healing Potion I', price: 0, heal: 10, blurb: 'Heals one party member for 10 HP. After using it, tap the member to heal.' },
 };
 
 const TIMED_TRAITS = ['Heal', 'Fireball', 'Huzzah', 'StarHat'];
@@ -37,6 +38,10 @@ export function installItems(P) {
     this.itemTexts = [];
     this.synergyFlash = 0;
     this.buyFlash = 0;
+    this.targetItem = null;           // a healing item waiting for the player to pick who it is used on (the game is paused meanwhile)
+    this.targetT = 0;
+    this.targetHover = null;
+    this.memberFrames = {};           // what each member was drawn with last frame
     this._giveStarterItems();
   };
 
@@ -49,6 +54,8 @@ export function installItems(P) {
 
   Object.defineProperties(m, {
     isShopping: { get() { return this.enc === 'Shop'; } },
+    /** True while a healing item is waiting for its target: the adventure is paused and the page asks for a tap on a member. */
+    isTargeting: { get() { return this.targetItem !== null; } },
     hotSelected: { get() { return this.hotSel; } },
     hotItem: { get() { return this.hot[this.hotSel]; } },
   });
@@ -93,7 +100,13 @@ export function installItems(P) {
   /** Uses the item in the selected hot slot. False when there is none left. */
   m.useHotItem = function () {
     const id = this.hot[this.hotSel];
-    if (this.itemCount(id) <= 0 || this.isShopping) return false;
+    if (this.itemCount(id) <= 0 || this.isShopping || this.isTargeting) return false;
+    if (ITEM_DEFS[id].heal > 0 && this.party.length > 0) {
+      // Nothing is spent yet: the game pauses and the player taps who to heal (or cancels).
+      this.targetItem = id; this.targetT = 0; this.targetHover = null;
+      Sound.play('DiscClick');
+      return true;
+    }
     this._addItem(id, -1);
     const x = this._leaderCenterX(), y = this.groundY - 30;
     if (id === 'SynergyElixir') {
@@ -105,6 +118,65 @@ export function installItems(P) {
     }
     this.raiseProgress();
     return true;
+  };
+
+  /** Uses the waiting healing item on `who`. False when nothing is waiting or the member isn't in the party. */
+  m.chooseTarget = function (who) {
+    if (this.targetItem === null || this.party.indexOf(who) < 0) return false;
+    const id = this.targetItem;
+    this.targetItem = null; this.targetHover = null;
+    if (this.itemCount(id) <= 0) return false;
+    this._addItem(id, -1);
+    const amount = ITEM_DEFS[id].heal;
+    this._applyHeal(who, amount);
+    this.heals.push({ from: who, to: who, amount: amount, age: 0 });
+    Sound.play('Heal');
+    this.raiseProgress();
+    return true;
+  };
+
+  /** Puts the waiting item back (nothing was spent) and resumes the game. */
+  m.cancelTargeting = function () {
+    if (this.targetItem === null) return;
+    this.targetItem = null; this.targetHover = null;
+    Sound.play('DiscClick');
+  };
+
+  /** The party member under a point in control pixels (a little forgiving, as the members are small), or null. */
+  m.memberAt = function (x, y) {
+    const sx = x / this.lastScale, sy = (y - this.lastTop) / this.lastScale;
+    let best = null, bestD = Infinity;
+    for (const kind of this.party) {
+      const r = this.memberRects[kind];
+      if (!r) continue;
+      if (sx < r.x - 3 || sx > r.x + r.w + 3 || sy < r.y - 4 || sy > r.y + r.h + 3) continue;
+      const dx = sx - (r.x + r.w / 2), dy = sy - (r.y + r.h / 2), d = dx * dx + dy * dy;
+      if (d < bestD) { bestD = d; best = kind; }
+    }
+    return best;
+  };
+
+  /** While a healing item waits for its target: most of the scene goes dark, and the members glow so they read as the thing to tap. */
+  m._drawTargetOverlay = function (g, lw) {
+    g.rect(0, 0, lw, this.lh, CA(170, 0, 0, 0));
+    const pulse = 0.5 + 0.5 * Math.sin(this.targetT * 5);
+    if (!this._glowCache) this._glowCache = new WeakMap();
+    for (const kind of this.party) {
+      const r = this.memberRects[kind], frame = this.memberFrames[kind];
+      if (!r || !frame) continue;
+      const hover = this.targetHover === kind;
+      const k = hover ? 1.0 : 0.65 + 0.35 * pulse;
+      const cx = r.x + Math.trunc(r.w / 2), cy = r.y + Math.trunc(r.h / 2);
+      for (let i = 3; i >= 0; i--) {   // a soft halo behind
+        const rx = Math.trunc(r.w / 2) + 2 + i * 2, ry = Math.trunc(r.h / 2) + 2 + i * 2;
+        g.ellipse(cx - rx, cy - ry, rx * 2, ry * 2, CA(Math.trunc((hover ? 46 : 30) * k), 140, 255, 190));
+      }
+      let sil = this._glowCache.get(frame);
+      if (!sil) { sil = silhouetteImage(frame, C(200, 255, 220)); this._glowCache.set(frame, sil); }
+      for (const d of [[-1, 0], [1, 0], [0, -1], [0, 1]]) g.image(sil, r.x + d[0], r.y + d[1], false, k, r.w, r.h);   // and a bright outline
+      g.image(frame, r.x, r.y, false, undefined, r.w, r.h);
+      if (this.hatLeft > 0) this._drawStarHat(g, frame, r.x, r.y);
+    }
   };
 
   /**
@@ -175,6 +247,7 @@ export function installItems(P) {
     this.merchantActive = false; this.merchantMet = false; this.merchantDay = -1;
     this.itemTexts.length = 0;
     this.synergyFlash = 0; this.buyFlash = 0;
+    this.targetItem = null; this.targetHover = null;
   };
 
   // ---- Saved: "SynergyElixir=1;PotionRed=5" | "SynergyElixir,PotionRed,PotionBlue,PotionGreen,0" | merchant day ----------------
