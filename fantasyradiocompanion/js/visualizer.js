@@ -480,22 +480,32 @@ export class Visualizer {
 
   // ---- Items: the hot item button, its disc menu, and the Merchant's shop --------------------------------------------
 
-  get _hotRect() { return { x: 8, y: Math.trunc(this.vh / 2) - 22, w: 44, h: 44 }; }   // middle of the left edge
+  get _hotRect() {
+    if (!this._compactDisc) return { x: 8, y: Math.trunc(this.vh / 2) - 22, w: 44, h: 44 };   // middle of the left edge
+    // A short strip: a smaller button just under the HUD pills, at the left edge (the full-size one would sit over the calendar).
+    const size = 32, L = this._hudLayout(this.ctx);
+    let bottom = 0;
+    for (const r of [L.day, L.gold, L.storage, L.np]) if (r) bottom = Math.max(bottom, r.y + r.h);
+    let y = bottom + 6;
+    if (y + size + 6 > this.vh) y = Math.max(0, this.vh - size - 6);
+    return { x: 6, y: y, w: size, h: size };
+  }
   // The item button belongs to every view the party is shown in, not only the enlarged one.
   get _hotVisible() { return !this.scene.isShopping; }
   get _discCenter() { return { x: 6 + 44 + 19, y: this._hotRect.y + 22 }; }   // the disc opens inward, to the right of the button
 
   /** In a short view (the party strip under the Radio and Local Music tabs) the four-way disc would not fit, so the slots open as a row. */
   get _compactDisc() { return this.vh < 2 * (44 + 19 + 6) + 16; }
+  get _slotR() { return this._compactDisc ? 14 : 19; }
   get _compactBounds() {
-    const r = this._hotRect, w = HOT_SLOT_COUNT * (19 * 2 + 8) + 8;
-    return { x: r.x + r.w + 8, y: r.y + 22 - 19 - 6, w: w, h: 19 * 2 + 12 };
+    const r = this._hotRect, SR = 14, GAP = 6, w = HOT_SLOT_COUNT * (SR * 2 + GAP) + GAP;
+    return { x: r.x + r.w + 6, y: r.y + r.h / 2 - SR - 5, w: w, h: SR * 2 + 10 };
   }
 
   _discSlotCenter(i) {
     if (this._compactDisc) {
       const b = this._compactBounds;
-      return { x: b.x + 8 + 19 + i * (19 * 2 + 8), y: b.y + b.h / 2 };
+      return { x: b.x + 6 + 14 + i * (14 * 2 + 6), y: b.y + b.h / 2 };
     }
     const c = this._discCenter;
     return [{ x: c.x, y: c.y - 44 }, { x: c.x + 44, y: c.y }, { x: c.x, y: c.y + 44 }, { x: c.x - 44, y: c.y }][i];
@@ -504,7 +514,8 @@ export class Visualizer {
   _discSlotAt(h) {
     for (let i = 0; i < HOT_SLOT_COUNT; i++) {
       const c = this._discSlotCenter(i), dx = h.x - c.x, dy = h.y - c.y;
-      if (dx * dx + dy * dy <= 22 * 22) return i;
+      const rr = this._slotR + 3;
+      if (dx * dx + dy * dy <= rr * rr) return i;
     }
     return -1;
   }
@@ -533,8 +544,11 @@ export class Visualizer {
       const opened = this._discByPress;
       this._discByPress = false;
       this._hotDown = false;
+      // The release that ends the long press only opens the menu. In the radial disc the pointer is still over a slot (the left one
+      // sits on the button), so that release must not choose it: the menu stays up until the next tap.
+      if (opened) return;
       if (slot >= 0) { this.scene.selectHot(slot); this._discOpen = false; }
-      else if (!opened) this._discOpen = false;   // a tap outside the disc closes it; released after the long press it stays up to be tapped
+      else this._discOpen = false;   // a tap outside the disc closes it
       return;
     }
     if (this._hotDown) {
@@ -570,7 +584,7 @@ export class Visualizer {
     ctx.beginPath(); ctx.arc(r.x + r.w / 2, r.y + r.h / 2, (r.w - 1) / 2, 0, Math.PI * 2);
     ctx.fillStyle = rgba(12, 16, 44, hot ? 0.75 : 0.47); ctx.fill();
     ctx.strokeStyle = hot ? 'rgb(255,214,120)' : rgba(210, 224, 255, 0.75); ctx.lineWidth = 1.6; ctx.stroke();
-    this._drawItemIcon(ctx, id, r.x + r.w / 2, r.y + r.h / 2, 2, n <= 0);
+    this._drawItemIcon(ctx, id, r.x + r.w / 2, r.y + r.h / 2, this._compactDisc ? 1 : 2, n <= 0);
     this._drawCountBadge(ctx, n, r.x + r.w + 2, r.y + r.h + 2);
     if (this._overHot && !this._discOpen) this._tip(ctx, t('Tap: use   Hold: switch'), r.x + r.w + 10, r.y + r.h / 2, true);
   }
@@ -589,12 +603,12 @@ export class Visualizer {
     }
     for (let i = 0; i < HOT_SLOT_COUNT; i++) {
       const sc = this._discSlotCenter(i), selected = i === s.hotSelected, hover = i === this._discHover;
-      ctx.beginPath(); ctx.arc(sc.x, sc.y, 19, 0, Math.PI * 2);
+      ctx.beginPath(); ctx.arc(sc.x, sc.y, this._slotR, 0, Math.PI * 2);
       ctx.fillStyle = hover ? 'rgba(52,48,110,0.92)' : 'rgba(26,28,74,0.75)'; ctx.fill();
       ctx.strokeStyle = selected ? 'rgb(255,214,120)' : hover ? 'white' : 'rgba(170,186,240,0.67)'; ctx.lineWidth = selected ? 2.4 : 1.4; ctx.stroke();
       const n = s.itemCount(hot[i]);
-      this._drawItemIcon(ctx, hot[i], sc.x, sc.y, 2, n <= 0);
-      this._drawCountBadge(ctx, n, sc.x + 22, sc.y + 22);
+      this._drawItemIcon(ctx, hot[i], sc.x, sc.y, compact ? 1 : 2, n <= 0);
+      this._drawCountBadge(ctx, n, sc.x + this._slotR + 3, sc.y + this._slotR + 3);
     }
     // The hub shows what is selected, with a name above the disc.
     const cur = s.hotItem;
@@ -604,8 +618,9 @@ export class Visualizer {
     }
     const label = t(ITEM_DEFS[this._discHover >= 0 ? hot[this._discHover] : cur].name);
     const px = 8.5 * PT, w = Math.round(this._measure(ctx, label, px) + 20);
-    const lx = compact ? Math.max(6, this._compactBounds.x) : Math.max(6, c.x - w / 2);
-    const ly = compact ? Math.max(2, this._compactBounds.y - 28) : c.y - outer - 30;
+    const cb = this._compactBounds;   // in a short view the name sits beside the row, clear of the HUD
+    const lx = compact ? cb.x + cb.w + 6 : Math.max(6, c.x - w / 2);
+    const ly = compact ? cb.y + (cb.h - 24) / 2 : c.y - outer - 30;
     this._pill(ctx, lx, ly, w, 24, 6, 'rgba(22,18,52,0.88)', 'rgba(255,214,120,0.9)', 1.2);
     this._text(ctx, label, lx + w / 2, ly + 12.5, { px: px, color: 'white', align: 'center' });
   }
