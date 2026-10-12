@@ -68,7 +68,7 @@ const ES = {
   // Story
   'Resting at camp: play a radio stream to keep adventuring': 'Descansando en el campamento: reproduce una emisora para seguir la aventura',
   'A tavern! Your last companion is waiting.': '¡Una taberna! Tu último compañero te espera.', 'A tavern! Who joins the party?': '¡Una taberna! ¿Quién se une al grupo?',
-  'Give the crystal to someone in your party': 'Dale el cristal a alguien de tu grupo', 'LEVEL UP': 'SUBIR DE NIVEL', 'Lv. {n}': 'Nv. {n}', '{name} reached Lv. {n}!': '¡{name} alcanzó el nivel {n}!',
+  'Give the crystal to someone in your party': 'Dale el cristal a alguien de tu grupo', 'LEVEL UP': 'SUBIR', 'Lv. {n}': 'Nv. {n}', '{name} reached Lv. {n}!': '¡{name} alcanzó el nivel {n}!',
   'Old Man': 'Anciano', "Quite the journey you've been on.": 'Qué viaje has tenido.',
   'Are you prepared to level up your adventure?': '¿Estás listo para subir de nivel tu aventura?',
   'It matters not, for that is your destiny.': 'No importa, pues ese es tu destino.', 'It so happens I have what you need.': 'Da la casualidad de que tengo lo que necesitas.',
