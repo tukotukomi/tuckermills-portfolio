@@ -124,8 +124,19 @@ export class Player {
         this.analyser = this.ctx.createAnalyser();
         this.analyser.fftSize = 1024;
         this.analyser.smoothingTimeConstant = 0.55;
+        // The music's volume is a gain stage here, not the element's own volume: Safari on iPhone and iPad ignores
+        // HTMLMediaElement.volume (it always reads 1), so a slider driving that did nothing there. The analysis taps the signal
+        // before the gain, so a silent music volume still lets the scene follow a playing station.
+        this._music = this.ctx.createGain();
+        this._music.gain.value = this._volume;
+        src.connect(this._music);
+        this._music.connect(this.ctx.destination);
         src.connect(this.analyser);
-        this.analyser.connect(this.ctx.destination);
+        this._tap = this.ctx.createGain();   // keeps the analyser pulled by the graph without making a sound
+        this._tap.gain.value = 0;
+        this.analyser.connect(this._tap);
+        this._tap.connect(this.ctx.destination);
+        this.analysed.volume = 1;
         this._bands = new Uint8Array(this.analyser.frequencyBinCount);
         this._time = new Uint8Array(this.analyser.fftSize);
       } catch (e) { this.ctx = null; this.analyser = null; }
@@ -133,8 +144,16 @@ export class Player {
     if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume();
   }
 
+  /** The music volume, 0-1. Effects have their own (Sound.volume) and are not affected by this. */
   get volume() { return this._volume; }
-  set volume(v) { this._volume = Math.max(0, Math.min(1, v)); this.analysed.volume = this._volume; this.plain.volume = this._volume; }
+  set volume(v) {
+    this._volume = Math.max(0, Math.min(1, v));
+    // Through the graph once it exists (works on iOS); the element's own volume before that and for streams that can't be analysed.
+    if (this._music) this._music.gain.value = this._volume; else this.analysed.volume = this._volume;
+    this.plain.volume = this._volume;
+    // iOS ignores the element volume, but honours muting: at least a zero volume is silent for the streams outside the graph.
+    this.plain.muted = this._volume <= 0;
+  }
 
   get playing() { return !this.active.paused && !this.active.ended && this.mode !== 'none'; }
   get radioPlaying() { return this.mode === 'radio' && this.playing && this.status === 'Playing'; }

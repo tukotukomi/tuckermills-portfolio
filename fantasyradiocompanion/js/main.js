@@ -349,14 +349,14 @@ async function main() {
     if (player.mode === 'radio') showNowPlaying();
   }, 500);
 
-  // Volumes: the main one scales everything the page plays; the effects fader sits relative to it.
+  // Volumes: two independent faders. Music (the local player and radio) and Effects (the game's sounds); either can be zero
+  // while the other plays.
   const mainVol = parseInt(store.get('vol', '100'), 10), fxVol = parseInt(store.get('fx', '70'), 10);
   $('volMain').value = mainVol; $('volFx').value = fxVol;
   const applyVolumes = () => {
-    const main = parseInt($('volMain').value, 10) / 100;
-    player.volume = main;
+    player.volume = parseInt($('volMain').value, 10) / 100;
     Sound.output = null;
-    Sound.volume = parseInt($('volFx').value, 10) * main;   // effects scale with the main fader too
+    Sound.volume = parseInt($('volFx').value, 10);
     store.set('vol', $('volMain').value); store.set('fx', $('volFx').value);
   };
   $('volMain').addEventListener('input', applyVolumes);
