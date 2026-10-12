@@ -125,6 +125,8 @@ export class PixelScene {
 
     this._initCoins(); this._initStory(); this._initTraits(); this._initEnemies(); this._initHealth(); this._initItems();
     this.starting = false; this.startRects = []; this.signRect = null; this.startHover = -1;
+    // Once the hero is picked, the fire and the sign stay where they are in the world, like any scenery, and scroll away as the party walks on.
+    this.startCampActive = false; this.startFireWorld = 0; this.startSignWorld = 0; this.signW = 0; this.startHeroSide = 1;
     this._beginStart();
   }
 
@@ -228,6 +230,7 @@ export class PixelScene {
     this._drawOldMan(g);
     this._drawMerchant(g, lw);
     this._drawCampfire(g, lw);
+    this._drawPersistentSign(g, lw);
     this._drawEnemies(g);
     this._drawParty(g, lw);
     this._drawCoins(g);
@@ -859,20 +862,23 @@ export class PixelScene {
 
   _updateCamp(dt) {
     if (this.starting) { this.camp = 1; return; }   // the heroes wait at the fire until one of them is picked
+    if (this.startCampActive && this.startFireWorld - this.scroll < -50 && this.startSignWorld + this.signW - this.scroll < -4) this.startCampActive = false;   // out of the scene
     const freeToCamp = this.enc === 'None' || this.enc === 'Approaching';
     if (this.marching && !this.progressing && freeToCamp) this.camp = Math.min(1, this.camp + dt / 0.9);
     else if (this.progressing || !freeToCamp) this.camp = Math.max(0, this.camp - dt / 0.7);
   }
 
   _campSlotLeft(index, spriteWidth, lw) {
-    const side = index % 2 === 0 ? 1 : -1;
+    let side = index % 2 === 0 ? 1 : -1;
+    if (index === 0 && this.startCampActive) side = this.startHeroSide;   // the hero stays on the side they were picked from
     const k = Math.trunc(index / 2);
-    return { x: lw / 2.0 + side * (18 + 22 * k) - spriteWidth / 2.0, faceLeft: side > 0 };
+    return { x: this._fireX(lw) + side * (18 + 22 * k) - spriteWidth / 2.0, faceLeft: side > 0 };
   }
 
   _drawCampfire(g, lw) {
-    if (this.camp < 0.04) return;
-    const fade = Math.min(1.0, this.camp * 2.5);
+    const camp = this.startCampActive ? 1 : this.camp;   // the fire left at the start burns on until it scrolls out of view
+    if (camp < 0.04) return;
+    const fade = Math.min(1.0, camp * 2.5);
     const fx = this._fireX(lw), baseY = this.groundY;
     const a255 = Math.trunc(255 * fade);
     const rect = (x, y, w, h, c) => g.rect(x, y, w, h, withAlpha(a255, c));
@@ -908,9 +914,10 @@ export class PixelScene {
   }
 
   _drawCampfireGlow(g, lw) {
-    if (this.camp < 0.04) return;
+    const camp = this.startCampActive ? 1 : this.camp;
+    if (camp < 0.04) return;
     const night = this.starlight();
-    const strength = Math.min(1.0, this.camp * 2) * (0.22 + 0.78 * night) * (0.88 + 0.12 * Math.sin(this.time * 11) + 0.2 * this.bass);
+    const strength = Math.min(1.0, camp * 2) * (0.22 + 0.78 * night) * (0.88 + 0.12 * Math.sin(this.time * 11) + 0.2 * this.bass);
     const cx = this._fireX(lw), cy = this.groundY - 6;
     const radius = [34, 24, 15, 8], alpha = [16, 28, 44, 70];
     for (let i = 0; i < radius.length; i++)
@@ -980,19 +987,21 @@ export class PixelScene {
     while (picks.length < 2) { const k = all[rnd(all.length)]; if (picks.indexOf(k) < 0) picks.push(k); }
     this.offer = picks;
     this.starting = true;
+    this.startCampActive = false;
     this.enc = 'Waiting';
     this.camp = 1;
     this.startHover = -1;
   }
 
   /** The sign's width: as wide as there is room for, up to 46 scene pixels (the words shrink to fit it). */
-  static _startSignWidth(lw) { return lw >= 150 ? 46 : 36; }
+  static _startSignWidth(lw) { return lw >= 150 ? 46 : 34; }
 
   /** Where the fire is. In the middle, except at the start in a narrow view, where the fire and the two heroes shift left so that the
    *  sign still fits to their right. */
   _fireX(lw) {
+    if (this.startCampActive) return Math.round(this.startFireWorld - this.scroll);   // part of the world now: it scrolls away with the road
     if (!this.starting) return Math.trunc(lw / 2);
-    return Math.max(29, Math.min(Math.trunc(lw / 2), lw - 27 - PixelScene._startSignWidth(lw)));
+    return Math.max(27, Math.min(Math.trunc(lw / 2), lw - 30 - PixelScene._startSignWidth(lw)));
   }
 
   /** Which of the two heroes is under a point in control pixels (a little forgiving), or -1. */
@@ -1009,8 +1018,8 @@ export class PixelScene {
   _drawStartCandidates(g, lw) {
     this.startRects = [];
     if (!this.offer) return;
-    const fx = this._fireX(lw), centers = [fx - 18, fx + 14];   // one either side of the fire
-    if (this.offer.length > 1) this._drawStartSign(g, lw, centers[1] + Math.trunc(Sprites.party[this.offer[1]].w / 2) + 4);
+    const fx = this._fireX(lw), centers = [fx - 17, fx + 17];   // one either side of the fire
+    if (this.offer.length > 1) this._drawStartSign(g, lw, centers[1] + Math.trunc(Sprites.party[this.offer[1]].w / 2) + 3);
     for (let i = 0; i < this.offer.length && i < 2; i++) {
       const sprite = Sprites.party[this.offer[i]];
       const frame = i === 1 ? sprite.fa : sprite.a;   // the right-hand one turns to face the fire
@@ -1026,7 +1035,20 @@ export class PixelScene {
   /** A wooden sign on a post, to the right of the fire and the two heroes; the text itself is drawn at screen resolution. */
   _drawStartSign(g, lw, left) {
     // Room for two lines of capitals: as wide as the view allows, up to 46 scene pixels (the text shrinks to fit what it gets).
-    const bw = PixelScene._startSignWidth(lw), bh = 15, bx = Math.max(2, Math.min(left, lw - bw - 2)), by = this.groundY - 18;
+    const bw = PixelScene._startSignWidth(lw);
+    this._paintSign(g, Math.max(2, Math.min(left, lw - bw - 2)), bw);
+  }
+
+  /** The sign left in the world after the pick: it scrolls away with the fire. */
+  _drawPersistentSign(g, lw) {
+    if (!this.startCampActive) return;
+    const bx = Math.round(this.startSignWorld - this.scroll);
+    if (bx + this.signW < -2 || bx > lw + 2) { this.signRect = { x: bx, y: 0, w: this.signW, h: 0 }; return; }
+    this._paintSign(g, bx, this.signW);
+  }
+
+  _paintSign(g, bx, bw) {
+    const bh = 15, by = this.groundY - 18;
     const ink = C(30, 22, 40), wood = C(158, 100, 58), dark = C(104, 62, 38), pale = C(204, 146, 92), nail = C(250, 212, 76);
     this.signRect = { x: bx, y: by, w: bw, h: bh };
     const px = bx + Math.trunc(bw / 2) - 1, postH = this.groundY + 1 - (by + bh);
@@ -1061,14 +1083,23 @@ export class PixelScene {
 
   /** The sign's words, and a name over each hero. */
   _appendStartText(list) {
-    if (!this.starting || !this.offer || !this.signRect) return;
+    const pick = this.starting && !!this.offer;
+    const left = !pick && this.startCampActive && !!this.signRect && this.signRect.h > 0 && this.signRect.x + this.signRect.w > 0 && this.signRect.x < this.lastLw;
+    if (!pick && !left) return;
+    if (left) {
+      // The sign passes behind the party as the road scrolls: the words wait until nobody is in front of the board.
+      for (const k of this.party) {
+        const r = this.memberRects[k];
+        if (r && r.x + r.w >= this.signRect.x - 1 && r.x <= this.signRect.x + this.signRect.w + 1) return;
+      }
+    }
     const lines = PixelScene._signLines(t('START THE RADIO,\nSTART YOUR ADVENTURE!')), small = this.lastScale < 5;
     const cx = (this.signRect.x + this.signRect.w / 2) * this.lastScale;
     list.push({   // both lines as one label, so they shrink to fit together and stay the same size
       text: lines[0] + '\n' + lines[1], x: cx, y: this.lastTop + (this.signRect.y + this.signRect.h * 0.5) * this.lastScale,
       alpha: 1, bubble: false, small: small, maxWidth: (this.signRect.w - 5) * this.lastScale, color: C(255, 244, 214)
     });
-    for (let i = 0; i < this.startRects.length && i < this.offer.length; i++) {
+    for (let i = 0; pick && i < this.startRects.length && i < this.offer.length; i++) {
       const r = this.startRects[i];
       list.push({
         text: t(PARTY_NAMES[this.offer[i]]), x: (r.x + r.w / 2) * this.lastScale, y: this._startLabelY(r),
@@ -1094,7 +1125,13 @@ export class PixelScene {
   choose(index) {
     if (!this.isChoosing || index < 0 || index >= this.offer.length) return;
     if (this.starting) {
-      // The first pick: this hero leads the party. They stay at the fire until a radio stream starts and the road calls.
+      // The first pick: this hero leads the party. They stay at the fire until a radio stream starts and the road calls; the fire and
+      // the sign stay where they are in the world and scroll off as the party walks on.
+      this.startFireWorld = this.scroll + this._fireX(this.lastLw);
+      this.startSignWorld = this.scroll + (this.signRect ? this.signRect.x : 0);
+      this.signW = this.signRect ? this.signRect.w : PixelScene._startSignWidth(this.lastLw);
+      this.startHeroSide = index === 0 ? -1 : 1;
+      this.startCampActive = true;
       this.party = [this.offer[index]];
       this.offer = null;
       this.starting = false;
