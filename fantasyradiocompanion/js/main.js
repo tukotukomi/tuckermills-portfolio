@@ -6,6 +6,7 @@ import { Visualizer, IS_MOBILE } from './visualizer.js';
 import { t, setLanguage, getLanguage, detectLanguage, applyDom, onLanguageChange } from './i18n.js';
 import { Sound } from './sfx.js';
 import { Player, STATIONS, AUDIO_EXTENSIONS, parsePlaylist } from './player.js';
+import { SUPPORT } from './support.js';
 import { VirtualList, fmtTime, el } from './ui.js';
 import { flipImage, silhouetteImage, C } from './util.js';
 
@@ -245,6 +246,16 @@ async function main() {
   const renderStation = (row, s) => {
     row.append(el('div', 't', s.name), el('div', 's', s.cors === 'blocked' ? t(s.note) : s.source ? t('From playlist: {s}', { s: s.source }) : s.cors === true ? t('Plays and drives the scene') : s.cors === false ? t('Plays (no audio reactions)') : t('Plays; reactions if the station allows')));
     if (s.cors === 'blocked') row.classList.add('disabled');
+    // A pill on the far right opens the station's own page, when STATIONS.md gives it one.
+    const url = SUPPORT[s.name];
+    if (url) {
+      row.classList.add('hasSupport');
+      const b = el('button', 'support', t('SUPPORT'));
+      b.type = 'button';
+      b.title = url;
+      b.addEventListener('click', ev => { ev.stopPropagation(); window.open(url, '_blank', 'noopener'); });
+      row.append(b);
+    }
   };
   const musicList = new VirtualList($('musicList'), renderTrack, i => playIndex(i));
   const radioList = new VirtualList($('radioList'), renderStation, i => playStation(i));
