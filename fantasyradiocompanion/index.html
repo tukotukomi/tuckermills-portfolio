@@ -48,7 +48,7 @@
       <div class="paneBar">
         <button id="addPlaylist" class="primary">Add playlist&hellip;</button>
         <input id="playlistFile" type="file" accept=".m3u,.m3u8,.pls" hidden>
-        <span class="muted">Stations from .m3u / .m3u8 / .pls files are kept in this browser.</span>
+        <span id="radioHint" class="muted">Stations from .m3u / .m3u8 / .pls files are kept in this browser.</span>
       </div>
       <div id="radioList" class="vlist"></div>
     </section>
@@ -65,8 +65,8 @@
     </div>
     <div class="seek"><span id="timeNow" class="muted">0:00</span><input id="seek" type="range" min="0" max="1000" value="0"><span id="timeLen" class="muted">0:00</span></div>
     <div class="vols">
-      <label title="Main volume">Vol <input id="volMain" type="range" min="0" max="100" value="100"></label>
-      <label title="Sound effects volume">FX <input id="volFx" type="range" min="0" max="100" value="70"></label>
+      <label id="volMainLabel" title="Main volume"><span id="volMainText">Vol</span> <input id="volMain" type="range" min="0" max="100" value="100"></label>
+      <label id="volFxLabel" title="Sound effects volume"><span id="volFxText">FX</span> <input id="volFx" type="range" min="0" max="100" value="70"></label>
     </div>
   </footer>
 </div>
@@ -88,12 +88,12 @@
   </div>
   <div id="tunerRadio" class="popBody">
     <div id="tunerStations" class="vlist"></div>
-    <div class="muted foot">Tap a station to tune in and return to the party.</div>
+    <div id="tunerRadioHint" class="muted foot">Tap a station to tune in and return to the party.</div>
   </div>
 </section>
 
 <section id="compendium" class="popup pixel" hidden role="dialog" aria-label="Monster Compendium">
-  <header><span class="tome"></span><h2>MONSTER COMPENDIUM</h2><button id="compClose" class="plain close" aria-label="Close">&times;</button></header>
+  <header><span class="tome"></span><h2 id="compTitle">MONSTER COMPENDIUM</h2><button id="compClose" class="plain close" aria-label="Close">&times;</button></header>
   <div id="compCards"></div>
   <footer id="compFoot"></footer>
 </section>
@@ -103,15 +103,19 @@
   <button data-act="import">Import progress</button>
   <button data-act="restart">Restart adventure</button>
   <button data-act="about">About</button>
+  <div id="menuLangHdr" class="hdr">Language</div>
+  <button data-lang="en">English</button>
+  <button data-lang="es">Español</button>
+  <button data-lang="zh">简体中文</button>
 </div>
 
 <dialog id="about">
   <h3>Fantasy Radio Companion</h3>
-  <p>A pixel-art adventure that marches to your music. Your party grows as you listen to radio; local music makes camp.</p>
-  <p class="muted">All pixel art is original. Radio stations are independent third-party streams; no music is included or uploaded: the music folder is read in your browser only.</p>
-  <p class="muted">Radio: stations that allow it also drive the scene's reactions; others just play. Final Fantasy Radio is http-only and plays in the Windows app.</p>
-  <p class="muted">Sound effects: <span id="soundState">&hellip;</span> <button id="soundTest" type="button">Play test sound</button></p>
-  <form method="dialog"><button class="primary">Close</button></form>
+  <p id="aboutIntro">A pixel-art adventure that marches to your music. Your party grows as you listen to radio; local music makes camp.</p>
+  <p id="aboutArt" class="muted">All pixel art is original. Radio stations are independent third-party streams; no music is included or uploaded: the music folder is read in your browser only.</p>
+  <p id="aboutRadio" class="muted">Radio: stations that allow it also drive the scene's reactions; others just play. Final Fantasy Radio is http-only and plays in the Windows app.</p>
+  <p class="muted"><span id="soundLabel">Sound effects:</span> <span id="soundState">&hellip;</span> <button id="soundTest" type="button">Play test sound</button></p>
+  <form method="dialog"><button id="aboutClose" class="primary">Close</button></form>
 </dialog>
 
 <script type="module" src="js/main.js"></script>

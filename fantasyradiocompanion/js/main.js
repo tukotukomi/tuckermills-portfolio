@@ -3,6 +3,7 @@
 import { PixelScene } from './scene.js';
 import { Sprites } from './sprites.js';
 import { Visualizer, IS_MOBILE } from './visualizer.js';
+import { t, setLanguage, getLanguage, detectLanguage, applyDom, onLanguageChange } from './i18n.js';
 import { Sound } from './sfx.js';
 import { Player, STATIONS, AUDIO_EXTENSIONS, parsePlaylist } from './player.js';
 import { VirtualList, fmtTime, el } from './ui.js';
@@ -41,7 +42,7 @@ async function main() {
     library.current = -1;
     library.cycle.clear();
     applyFilter();
-    $('folderName').textContent = folderName ? folderName + ' (' + entries.length.toLocaleString() + ' tracks)' : '';
+    $('folderName').textContent = folderName ? t('{folder} ({n} tracks)', { folder: folderName, n: entries.length.toLocaleString() }) : '';
     $('musicEmpty').hidden = !!folderName;
     $('musicList').hidden = !folderName;
     renderTunerLocalState();
@@ -59,8 +60,8 @@ async function main() {
     tunerList.setItems(library.filtered);
     musicList.setPlaying(library.current);
     tunerList.setPlaying(library.current);
-    $('musicCount').textContent = words.length ? library.filtered.length.toLocaleString() + ' of ' + library.entries.length.toLocaleString() + ' match' : '';
-    $('tunerFoot').textContent = library.folderName ? library.folderName + (words.length ? ' - ' + library.filtered.length + ' matching' : '') : '';
+    $('musicCount').textContent = words.length ? t('{a} of {b} match', { a: library.filtered.length.toLocaleString(), b: library.entries.length.toLocaleString() }) : '';
+    $('tunerFoot').textContent = library.folderName ? (words.length ? t('{folder} - {n} matching', { folder: library.folderName, n: library.filtered.length }) : library.folderName) : '';
   }
 
   async function chooseFolder() {
@@ -68,7 +69,7 @@ async function main() {
     if (window.showDirectoryPicker) {
       try {
         const dir = await window.showDirectoryPicker({ mode: 'read' });
-        $('folderName').textContent = 'Scanning...';
+        $('folderName').textContent = t('Scanning...');
         const out = [];
         await scanHandle(dir, '', out);
         setEntries(out, dir.name);
@@ -106,7 +107,7 @@ async function main() {
     Sound.unlock(); player.unlock();
     try {
       if ((await h.requestPermission({ mode: 'read' })) !== 'granted') return;
-      $('folderName').textContent = 'Scanning...';
+      $('folderName').textContent = t('Scanning...');
       const out = [];
       await scanHandle(h, '', out);
       setEntries(out, h.name);
@@ -242,7 +243,7 @@ async function main() {
   // ---- Lists -----------------------------------------------------------------------------------------------
   const renderTrack = (row, e) => { row.append(el('div', 't', e.name.replace(/\.[^.]+$/, '')), el('div', 's', e.path)); };
   const renderStation = (row, s) => {
-    row.append(el('div', 't', s.name), el('div', 's', s.cors === 'blocked' ? s.note : s.source ? 'From playlist: ' + s.source : s.cors === true ? 'Plays and drives the scene' : s.cors === false ? 'Plays (no audio reactions)' : 'Plays; reactions if the station allows'));
+    row.append(el('div', 't', s.name), el('div', 's', s.cors === 'blocked' ? t(s.note) : s.source ? t('From playlist: {s}', { s: s.source }) : s.cors === true ? t('Plays and drives the scene') : s.cors === false ? t('Plays (no audio reactions)') : t('Plays; reactions if the station allows')));
     if (s.cors === 'blocked') row.classList.add('disabled');
   };
   const musicList = new VirtualList($('musicList'), renderTrack, i => playIndex(i));
@@ -279,21 +280,27 @@ async function main() {
     $('tunerNoFolder').hidden = has;
     $('tunerList').hidden = !has;
     $('tunerSearch').hidden = !has;
-    $('tunerFolder').textContent = has ? 'Change folder...' : 'Select music folder...';
+    $('tunerFolder').textContent = has ? t('Change folder...') : t('Select music folder...');
   }
   renderTunerLocalState();
   $('musicList').hidden = true;
 
   // ---- Transport -----------------------------------------------------------------------------------------------
+  /** A radio status code ('Connecting...', 'Playing', 'Error: ...') in the current language. */
+  function statusText(s) {
+    if (typeof s === 'string' && s.startsWith('Error: ')) return t('Error: {msg}', { msg: t(s.slice(7)) });
+    return t(s || '');
+  }
+
   function showNowPlaying() {
     if (player.mode === 'local') {
       const e = library.filtered[library.current];
-      $('nowTitle').textContent = e ? e.name.replace(/\.[^.]+$/, '') : 'Playing';
+      $('nowTitle').textContent = e ? e.name.replace(/\.[^.]+$/, '') : t('Playing');
       $('nowSub').textContent = e ? e.path : '';
     } else if (player.mode === 'radio') {
       $('nowTitle').textContent = player.station.name;
-      $('nowSub').textContent = player.songTitle || (player.status + (player.canAnalyse ? '' : ' - no audio reactions'));
-    } else { $('nowTitle').textContent = 'Nothing playing'; $('nowSub').textContent = ''; }
+      $('nowSub').textContent = player.songTitle || (statusText(player.status) + (player.canAnalyse ? '' : t(' - no audio reactions')));
+    } else { $('nowTitle').textContent = t('Nothing playing'); $('nowSub').textContent = ''; }
   }
 
   function updateTransport() {
@@ -414,16 +421,16 @@ async function main() {
       cx.drawImage(img, Math.round((38 - img.width * f) / 2), 34 - img.height * f, img.width * f, img.height * f);
       const mid = el('div');
       if (b.seen) {
-        mid.append(el('div', 'nm', b.name.toUpperCase()));
-        const st = el('div', 'st'); st.innerHTML = '<b>HP ' + b.maxHp + '</b> &nbsp; ' + b.habitat;
-        mid.append(st, el('div', 'nt', b.note));
-      } else { mid.append(el('div', 'nm', '???'), el('div', 'nt', 'Not yet encountered.')); }
+        mid.append(el('div', 'nm', t(b.name).toUpperCase()));
+        const st = el('div', 'st'); st.innerHTML = '<b>' + t('HP {n}', { n: b.maxHp }) + '</b> &nbsp; ' + t(b.habitat);
+        mid.append(st, el('div', 'nt', t(b.note)));
+      } else { mid.append(el('div', 'nm', '???'), el('div', 'nt', t('Not yet encountered.'))); }
       const right = el('div', 'kills');
-      if (b.seen) { right.append(el('div', 'n', 'x ' + b.kills), el('div', 'l', 'DEFEATED')); }
+      if (b.seen) { right.append(el('div', 'n', 'x ' + b.kills), el('div', 'l', t('DEFEATED'))); }
       card.append(cv, mid, right);
       cards.append(card);
     }
-    $('compFoot').textContent = 'DISCOVERED ' + known + '/' + scene.bestiary().length + '   DEFEATED ' + kills;
+    $('compFoot').textContent = t('DISCOVERED {a}/{b}   DEFEATED {n}', { a: known, b: scene.bestiary().length, n: kills });
     showPopup('compendium');
   }
 
@@ -431,15 +438,17 @@ async function main() {
   $('menuBtn').addEventListener('click', e => { e.stopPropagation(); $('menu').hidden = !$('menu').hidden; });
   document.addEventListener('click', () => { $('menu').hidden = true; });
   $('menu').addEventListener('click', e => {
+    const lang = e.target.dataset && e.target.dataset.lang;
+    if (lang) { $('menu').hidden = true; setLanguage(lang); return; }
     const act = e.target.dataset.act;
     if (!act) return;
     $('menu').hidden = true;
     if (act === 'export') {
       const s = scene.saveState();
-      if (navigator.clipboard) navigator.clipboard.writeText(s).then(() => alert('Progress copied. Paste it into Import on another device, or into the Windows app\'s saved settings.'), () => prompt('Copy your progress:', s));
-      else prompt('Copy your progress:', s);
+      if (navigator.clipboard) navigator.clipboard.writeText(s).then(() => alert(t("Progress copied. Paste it into Import on another device, or into the Windows app's saved settings.")), () => prompt(t('Copy your progress:'), s));
+      else prompt(t('Copy your progress:'), s);
     } else if (act === 'import') {
-      const s = prompt('Paste a progress string:');
+      const s = prompt(t('Paste a progress string:'));
       if (s) { scene.loadState(s.trim()); store.set('save', scene.saveState()); }
     } else if (act === 'restart') restartAdventure();
     else if (act === 'about') { updateSoundState(); $('about').showModal(); }
@@ -464,14 +473,14 @@ async function main() {
   let hiddenAt = 0, wasProgressing = false;
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) { hiddenAt = Date.now(); wasProgressing = !!scene.progressing; return; }
-    if (IS_MOBILE && hiddenAt && wasProgressing && Date.now() - hiddenAt > 1500) showTip('Progress paused while game minimized.');
+    if (IS_MOBILE && hiddenAt && wasProgressing && Date.now() - hiddenAt > 1500) showTip(t('Progress paused while game was minimized.'));
     hiddenAt = 0;
   });
   function updateSoundState() {
     const s = Sound.state;
-    $('soundState').textContent = s === 'running' ? 'on (volume ' + Math.round(Sound.volume) + '%)'
-      : s === 'none' ? 'not supported by this browser'
-      : 'waiting for a click or key press (' + s + ')';
+    $('soundState').textContent = s === 'running' ? t('on (volume {n}%)', { n: Math.round(Sound.volume) })
+      : s === 'none' ? t('not supported by this browser')
+      : t('waiting for a click or key press ({s})', { s: s });
   }
   $('soundTest').addEventListener('click', () => {
     Sound.unlock();
@@ -480,8 +489,9 @@ async function main() {
   });
 
   function restartAdventure() {
-    const typed = prompt('This resets your adventure: your party goes back to just the Paca, levels, gold and the compendium are cleared, and the day and season start over.\n\nType RESTART to confirm.');
-    if (typed === 'RESTART') { scene.resetProgress(); store.set('save', scene.saveState()); }
+    const word = t('RESTART');
+    const typed = prompt(t('This resets your adventure: your party goes back to just the Paca, levels, gold and the compendium are cleared, and the day and season start over.\n\nType {word} to confirm.', { word: word }));
+    if (typed !== null && (typed.trim().toLowerCase() === word.toLowerCase() || typed.trim() === 'RESTART')) { scene.resetProgress(); store.set('save', scene.saveState()); }
   }
 
   // ---- Start-up: remembered folder, offline support -----------------------------------------------------------------
@@ -489,12 +499,28 @@ async function main() {
     loadHandle().then(h => {
       if (!h) return;
       const b = $('reopenFolder');
-      b.textContent = 'Reopen "' + h.name + '"';
+      b.textContent = t('Reopen "{name}"', { name: h.name }); b.dataset.name = h.name;
       b.hidden = false;
       b.addEventListener('click', () => reopenFolder(h));
     });
   }
   if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(() => { });
+
+  // ---- Language ------------------------------------------------------------------------------------------------------
+  function refreshLanguage() {
+    applyDom();
+    for (const b of document.querySelectorAll('#menu [data-lang]')) b.classList.toggle('cur', b.dataset.lang === getLanguage());
+    renderTunerLocalState();
+    applyFilter();
+    $('folderName').textContent = library.folderName ? t('{folder} ({n} tracks)', { folder: library.folderName, n: library.entries.length.toLocaleString() }) : '';
+    const rb = $('reopenFolder'); if (!rb.hidden && rb.dataset.name) rb.textContent = t('Reopen "{name}"', { name: rb.dataset.name });
+    showNowPlaying();
+    musicList.refresh(); tunerList.refresh(); tunerStations.refresh(); radioList.refresh();
+    updateSoundState();
+    if (!$('compendium').hidden) openCompendium();
+  }
+  onLanguageChange(code => { store.set('lang', code); refreshLanguage(); });
+  setLanguage(store.get('lang', '') || detectLanguage());
 
   // Press-and-hold must not select the page or open a context menu (the item disc is opened with one); text boxes are left alone.
   document.addEventListener('selectstart', e => {

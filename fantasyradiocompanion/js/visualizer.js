@@ -8,6 +8,7 @@ import { traitSummary } from './traits.js';
 import { css } from './util.js';
 import { Sound } from './sfx.js';
 import { ITEM_DEFS, HOT_SLOT_COUNT } from './items.js';
+import { t, isCjk } from './i18n.js';
 
 export const ZOOMED_SCALE = 5;
 
@@ -28,7 +29,7 @@ const BLURB = {
   fae: 'A glimmering lucky charm who never tires.',
   paca: 'Fast, loyal and always out front.',
 };
-const FONT = '"Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif';
+const FONT = '"Segoe UI", "Microsoft YaHei", "PingFang SC", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif';
 const PT = 96 / 72;   // points to CSS pixels
 
 function rgba(r, g, b, a) { return 'rgba(' + r + ',' + g + ',' + b + ',' + (a === undefined ? 1 : a) + ')'; }
@@ -190,9 +191,9 @@ export class Visualizer {
   // The HUD pills flow along the top-left and wrap to the next row when they would run into the buttons.
   _dayWidth(ctx) {
     const px = 9.5 * PT;
-    const leftW = this._measure(ctx, 'Year ' + this.scene.year + '  Day ' + this.scene.dayOfYear + '   ', px);
+    const leftW = this._measure(ctx, t('Year {y}  Day {d}', { y: this.scene.year, d: this.scene.dayOfYear }) + '   ', px);
     let seasonW = 0;
-    for (const n of ['Spring', 'Summer', 'Fall', 'Winter']) seasonW = Math.max(seasonW, this._measure(ctx, n, px));
+    for (const n of ['Spring', 'Summer', 'Fall', 'Winter']) seasonW = Math.max(seasonW, this._measure(ctx, t(n), px));
     return { w: Math.round(leftW + seasonW + 24), leftW: leftW, seasonW: seasonW };
   }
 
@@ -337,7 +338,7 @@ export class Visualizer {
     const m = this._settingsMenuRect, item = this._restartItemRect;
     this._pill(ctx, m.x, m.y, m.w, m.h, 7, 'rgba(22,18,52,0.92)', 'rgba(255,214,120,0.9)', 1.4);
     if (this.hover.restart) this._pill(ctx, item.x, item.y, item.w, item.h, 5, 'rgba(90,70,150,0.47)');
-    this._text(ctx, 'Restart', item.x + item.w / 2, item.y + item.h / 2 + 0.5, { px: 9.5 * PT, color: 'white', align: 'center' });
+    this._text(ctx, t('Restart'), item.x + item.w / 2, item.y + item.h / 2 + 0.5, { px: 9.5 * PT, color: 'white', align: 'center' });
   }
 
   _drawDayCounter(ctx) {
@@ -346,9 +347,9 @@ export class Visualizer {
     const seasonColor = season === 'Spring' ? 'rgb(166,230,150)' : season === 'Summer' ? 'rgb(255,220,110)' : season === 'Fall' ? 'rgb(246,156,76)' : 'rgb(176,218,255)';
     const r = this._dayPillRect(ctx);
     this._pill(ctx, r.x, r.y, r.w, r.h, 6, rgba(12, 16, 44, 0.59), rgba(210, 224, 255, 0.78));
-    const left = 'Year ' + s.year + '  Day ' + s.dayOfYear + '   ';
+    const left = t('Year {y}  Day {d}', { y: s.year, d: s.dayOfYear }) + '   ';
     this._text(ctx, left, r.x + 12, r.y + r.h / 2 + 0.5, { px: 9.5 * PT, color: 'white' });
-    this._text(ctx, season, r.x + 12 + r.leftW, r.y + r.h / 2 + 0.5, { px: 9.5 * PT, color: seasonColor });
+    this._text(ctx, t(season), r.x + 12 + r.leftW, r.y + r.h / 2 + 0.5, { px: 9.5 * PT, color: seasonColor });
   }
 
   _drawGoldCounter(ctx) {
@@ -406,7 +407,7 @@ export class Visualizer {
     ctx.beginPath(); ctx.arc(cx, cy + 15.5 * s, 4.5 * s, 0, Math.PI * 2); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(cx, cy + 12.5 * s); ctx.lineTo(cx, cy + 15 * s); ctx.stroke();
     ctx.lineCap = 'butt';
-    if (hot) this._tip(ctx, 'Tuner: music & radio stations', r.x + r.w + 10, r.y + r.h / 2, true);
+    if (hot) this._tip(ctx, t('Tuner: music & radio stations'), r.x + r.w + 10, r.y + r.h / 2, true);
   }
 
   _drawCompendiumButton(ctx) {
@@ -420,7 +421,7 @@ export class Visualizer {
     ctx.fillStyle = 'rgb(120,90,80)';
     for (let i = 0; i < 3; i++) { ctx.fillRect(bx + 1, by + 2 + i * 3, 5, 1); ctx.fillRect(bx + 9, by + 2 + i * 3, 5, 1); }
     ctx.fillStyle = 'rgb(255,214,120)'; ctx.fillRect(bx + 11, by + 8, 2, 5);
-    if (hot) this._tip(ctx, 'Monster Compendium', r.x - 8, r.y + r.h / 2);
+    if (hot) this._tip(ctx, t('Monster Compendium'), r.x - 8, r.y + r.h / 2);
   }
 
   /** A little label beside a button: ending at anchorX, or (alignLeft) starting at it. */
@@ -468,7 +469,7 @@ export class Visualizer {
   _drawCampHint(ctx) {
     const s = this.scene;
     if (!s.atCamp || this.width < 560 || s.isDialogue || s.isLevelSelect || s.isChoosing) return;
-    const text = 'Resting at camp: play a radio stream to keep adventuring';
+    const text = t('Resting at camp: play a radio stream to keep adventuring');
     const px = 9 * PT;
     const tw = Math.round(this._measure(ctx, text, px));
     const w = tw + 28, h = px + 12;
@@ -559,7 +560,7 @@ export class Visualizer {
     ctx.strokeStyle = hot ? 'rgb(255,214,120)' : rgba(210, 224, 255, 0.75); ctx.lineWidth = 1.6; ctx.stroke();
     this._drawItemIcon(ctx, id, r.x + r.w / 2, r.y + r.h / 2, 2, n <= 0);
     this._drawCountBadge(ctx, n, r.x + r.w + 2, r.y + r.h + 2);
-    if (this._overHot && !this._discOpen) this._tip(ctx, 'Tap: use   Hold: switch', r.x + r.w + 10, r.y + r.h / 2, true);
+    if (this._overHot && !this._discOpen) this._tip(ctx, t('Tap: use   Hold: switch'), r.x + r.w + 10, r.y + r.h / 2, true);
   }
 
   _drawDisc(ctx) {
@@ -582,7 +583,7 @@ export class Visualizer {
     const cur = s.hotItem;
     ctx.beginPath(); ctx.arc(c.x, c.y, 14, 0, Math.PI * 2); ctx.fillStyle = 'rgba(22,18,52,0.86)'; ctx.fill();
     this._drawItemIcon(ctx, cur, c.x, c.y, 1, s.itemCount(cur) <= 0);
-    const label = ITEM_DEFS[this._discHover >= 0 ? hot[this._discHover] : cur].name;
+    const label = t(ITEM_DEFS[this._discHover >= 0 ? hot[this._discHover] : cur].name);
     const px = 8.5 * PT, w = Math.round(this._measure(ctx, label, px) + 20);
     const lx = Math.max(6, c.x - w / 2);
     this._pill(ctx, lx, c.y - outer - 30, w, 24, 6, 'rgba(22,18,52,0.88)', 'rgba(255,214,120,0.9)', 1.2);
@@ -618,7 +619,7 @@ export class Visualizer {
     ctx.fillStyle = 'rgba(0,0,0,0.47)'; ctx.fillRect(0, 0, this.width, this.height);
     this._pill(ctx, r.x, r.y, r.w, r.h, 10 * k, 'rgba(24,20,58,0.94)', 'rgb(255,214,120)', 2.2);
     const nameFont = 10.5 * PT * k, small = 8.5 * PT * k;
-    this._text(ctx, 'Merchant', r.x + 14 * k, r.y + 21 * k, { px: 12 * PT * k, color: 'rgb(255,226,150)' });
+    this._text(ctx, t('Merchant'), r.x + 14 * k, r.y + 21 * k, { px: 12 * PT * k, color: 'rgb(255,226,150)' });
     // the gold in hand
     const gold = s.gold.toLocaleString('en-US');
     const gw = this._measure(ctx, gold, nameFont);
@@ -633,15 +634,15 @@ export class Visualizer {
     const rowY = r.y + 52 * k;
     this._drawItemIcon(ctx, id, r.x + 38 * k, rowY + 30 * k, Math.max(2, Math.round(3 * k)), false);
     const tx = r.x + 76 * k, tw = r.x + r.w - tx - 110 * k;
-    this._text(ctx, def.name, tx, rowY + 11 * k, { px: nameFont, color: 'white' });
-    this._wrap(ctx, def.blurb, tx, rowY + 26 * k, tw, small, 'rgb(200,210,245)', 400, 4);
-    this._text(ctx, 'In bag: ' + s.itemCount(id), tx, rowY + 90 * k, { px: small, color: 'rgb(255,214,120)', weight: 400 });
+    this._text(ctx, t(def.name), tx, rowY + 11 * k, { px: nameFont, color: 'white' });
+    this._wrap(ctx, t(def.blurb), tx, rowY + 26 * k, tw, small, 'rgb(200,210,245)', 400, 4);
+    this._text(ctx, t('In bag: {n}', { n: s.itemCount(id) }), tx, rowY + 90 * k, { px: small, color: 'rgb(255,214,120)', weight: 400 });
 
     // Buy and Leave
     const b = this._shopButtons(), afford = s.gold >= def.price;
-    this._text(ctx, def.price + ' Gold', b.buy.x + b.buy.w / 2, b.buy.y - 14 * k, { px: nameFont, color: afford ? 'rgb(255,226,150)' : 'rgb(255,150,140)', align: 'center' });
-    this._drawShopButton(ctx, b.buy, afford ? 'Buy' : 'Need ' + def.price, nameFont, afford, this._overBuy && afford);
-    this._drawShopButton(ctx, b.leave, 'Leave', nameFont, true, this._overLeave);
+    this._text(ctx, t('{n} Gold', { n: def.price }), b.buy.x + b.buy.w / 2, b.buy.y - 14 * k, { px: nameFont, color: afford ? 'rgb(255,226,150)' : 'rgb(255,150,140)', align: 'center' });
+    this._drawShopButton(ctx, b.buy, afford ? t('Buy') : t('Need {n}', { n: def.price }), nameFont, afford, this._overBuy && afford);
+    this._drawShopButton(ctx, b.leave, t('Leave'), nameFont, true, this._overLeave);
   }
 
   // ---- Story UI: tavern cards, dialogue, level-up ----------------------------------------------------------------
@@ -660,6 +661,11 @@ export class Visualizer {
     const out = { k: 0, stacked: false, rects: [], bannerY: 0, bannerH: 0 };
     if (!s.isChoosing || n === 0) return out;
     const bannerOf = k => Math.round(10.5 * PT * k + 6 * k + 4);
+    // The block sits below the HUD pills (which may have wrapped onto a second row), never under them.
+    const L0 = this._hudLayout(this.ctx);
+    let hudBottom = 0;
+    for (const r of [L0.day, L0.gold, L0.storage, L0.np]) if (r) hudBottom = Math.max(hudBottom, r.y + r.h);
+    const top0 = Math.trunc(hudBottom * this.hud) + 6, room = this.height - top0 - 8;
     const k0 = Math.max(1.0, Math.min(2.2, this.height / 130.0));
     const kSide = Math.min(k0, (this.width - 40.0) / 660.0);
     let k, stacked = false;
@@ -668,13 +674,13 @@ export class Visualizer {
       stacked = true;
       k = Math.min(1.6, (this.width - 24.0) / 216.0);
       const fit = kk => bannerOf(kk) + Math.trunc(10 * kk) + n * Math.trunc(96 * kk) + (n - 1) * Math.trunc(10 * kk);
-      while (k > 0.5 && fit(k) > this.height - 16) k -= 0.05;
+      while (k > 0.5 && fit(k) > room) k -= 0.05;
     }
     if (k < 0.5) return out;
     const cw = Math.trunc(216 * k), ch = Math.trunc(96 * k), gap = Math.trunc(10 * k);
     const bannerH = bannerOf(k);
     const total = bannerH + gap + (stacked ? n * ch + (n - 1) * gap : ch);
-    const bannerY = Math.max(Math.trunc(5 * k), Math.trunc((this.height - total) / 2));
+    const bannerY = Math.max(top0, top0 + Math.trunc((room - total) / 2));
     const top = bannerY + bannerH + gap;
     const cx = Math.trunc(this.width / 2);
     const rects = [];
@@ -705,7 +711,7 @@ export class Visualizer {
     const lay = this._cardLayout(), rects = lay.rects;
     if (rects.length === 0) return;
     const s = this.scene, k = lay.k;
-    const title = s.offer.length === 1 ? 'A tavern! Your last companion is waiting.' : 'A tavern! Who joins the party?';
+    const title = t(s.offer.length === 1 ? 'A tavern! Your last companion is waiting.' : 'A tavern! Who joins the party?');
     this._banner(ctx, k, title, true, lay.bannerY);   // centered above the cards, in the middle of the page
     for (let i = 0; i < rects.length && i < s.offer.length; i++) {
       const r = rects[i], hot = i === this.hover.card, kind = s.offer[i];
@@ -721,21 +727,23 @@ export class Visualizer {
       ctx.drawImage(sp.a, px0, py0, pw, ph);
 
       const tx = px0 + pw + Math.trunc(10 * k), tw = r.x + r.w - tx - Math.trunc(8 * k);
-      this._text(ctx, PARTY_NAMES[kind], tx, r.y + Math.trunc(7 * k) + 9 * k, { px: 10.5 * PT * k, color: hot ? 'rgb(255,226,150)' : 'white' });
+      this._text(ctx, t(PARTY_NAMES[kind]), tx, r.y + Math.trunc(7 * k) + 9 * k, { px: 10.5 * PT * k, color: hot ? 'rgb(255,226,150)' : 'white' });
       let y = r.y + Math.trunc(7 * k) + 18 * k + 2;
       y = this._wrap(ctx, traitSummary(kind, 1), tx, y, tw, 8 * PT * k, 'rgb(255,214,120)', 600, 2);
-      this._wrap(ctx, BLURB[kind], tx, y + 2, tw, 7.5 * PT * k, 'rgb(178,190,232)', 400, 2, 'italic ');
+      this._wrap(ctx, t(BLURB[kind]), tx, y + 2, tw, 7.5 * PT * k, 'rgb(178,190,232)', 400, 2, 'italic ');
     }
   }
 
   /** Draws wrapped text (up to maxLines) and returns the y below it. */
   _wrap(ctx, text, x, y, maxW, px, color, weight, maxLines, style) {
     ctx.font = (style || '') + weight + ' ' + px + 'px ' + FONT;
-    const words = text.split(' ');
+    const cjk = isCjk();
+    const words = cjk ? Array.from(text) : text.split(' ');
+    const sep = cjk ? '' : ' ';
     const lines = [];
     let cur = '';
     for (const w of words) {
-      const test = cur ? cur + ' ' + w : w;
+      const test = cur ? cur + sep + w : w;
       if (ctx.measureText(test).width > maxW && cur) { lines.push(cur); cur = w; } else cur = test;
     }
     if (cur) lines.push(cur);
@@ -743,7 +751,7 @@ export class Visualizer {
     const lh = px * 1.25;
     for (let i = 0; i < lines.length && i < maxLines; i++) {
       let line = lines[i];
-      if (i === maxLines - 1 && lines.length > maxLines) line = line.replace(/\s*\S*$/, '') + '...';
+      if (i === maxLines - 1 && lines.length > maxLines) line = (cjk ? line.slice(0, -1) : line.replace(/\s*\S*$/, '')) + '...';
       ctx.fillText(line, x, y + i * lh);
     }
     return y + Math.min(lines.length, maxLines) * lh;
@@ -771,8 +779,8 @@ export class Visualizer {
     const who = s.dialogueWho, text = s.dialogueShownText;
     let x = r.x + pad;
     if (who) {
-      this._text(ctx, who + ':', x, r.y + r.h / 2 + 0.5, { px: px, color: 'rgb(255,214,120)' });
-      x += this._measure(ctx, who + ':', px) + 8 * k;
+      this._text(ctx, t(who) + ':', x, r.y + r.h / 2 + 0.5, { px: px, color: 'rgb(255,214,120)' });
+      x += this._measure(ctx, t(who) + ':', px) + 8 * k;
       this._text(ctx, text, x, r.y + r.h / 2 + 0.5, { px: px, color: 'white', weight: 400 });
     } else {
       ctx.font = 'italic 400 ' + px + 'px ' + FONT;
@@ -800,7 +808,7 @@ export class Visualizer {
   _drawLevelSelect(ctx) {
     const s = this.scene;
     const { tiles, levelUp, k } = this._tileRects();
-    this._banner(ctx, k, 'Give the crystal to someone in your party', false);
+    this._banner(ctx, k, t('Give the crystal to someone in your party'), false);
     for (let i = 0; i < tiles.length && i < s.party.length; i++) {
       const r = tiles[i], selected = i === s.selected, hot = i === this.hover.tile, kind = s.party[i];
       roundRect(ctx, r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1, 8 * k);
@@ -813,8 +821,8 @@ export class Visualizer {
       ctx.imageSmoothingEnabled = false;
       ctx.drawImage(sp.a, px0, r.y + Math.trunc((r.h - ph) / 2), pw, ph);
       const tx = px0 + pw + Math.trunc(6 * k);
-      this._text(ctx, PARTY_NAMES[kind], tx, r.y + Math.trunc(8 * k) + 9 * k, { px: 7.5 * PT * k, color: 'white' });
-      this._text(ctx, 'Lv. ' + s.levelOf(kind), tx, r.y + Math.trunc(28 * k) + 10 * k, { px: 10 * PT * k, color: 'rgb(255,214,120)' });
+      this._text(ctx, t(PARTY_NAMES[kind]), tx, r.y + Math.trunc(8 * k) + 9 * k, { px: 7.5 * PT * k, color: 'white' });
+      this._text(ctx, t('Lv. {n}', { n: s.levelOf(kind) }), tx, r.y + Math.trunc(28 * k) + 10 * k, { px: 10 * PT * k, color: 'rgb(255,214,120)' });
     }
     const ready = s.selected >= 0;
     const hotBtn = this.hover.levelUp && ready;
@@ -825,7 +833,7 @@ export class Visualizer {
     else { grad.addColorStop(0, 'rgb(255,206,80)'); grad.addColorStop(1, 'rgb(220,130,24)'); }
     ctx.fillStyle = grad; ctx.fill();
     ctx.strokeStyle = ready ? 'rgb(255,244,190)' : 'rgba(120,126,150,0.63)'; ctx.lineWidth = ready ? 2 : 1.2; ctx.stroke();
-    this._text(ctx, 'LEVEL UP', levelUp.x + levelUp.w / 2, levelUp.y + levelUp.h / 2 + 0.5, { px: 11 * PT * k, weight: 700, color: ready ? 'rgb(70,36,8)' : 'rgb(150,160,176)', align: 'center' });
+    this._text(ctx, t('LEVEL UP'), levelUp.x + levelUp.w / 2, levelUp.y + levelUp.h / 2 + 0.5, { px: 11 * PT * k, weight: 700, color: ready ? 'rgb(70,36,8)' : 'rgb(150,160,176)', align: 'center' });
   }
 
   // ---- Input ---------------------------------------------------------------------------------------------------------

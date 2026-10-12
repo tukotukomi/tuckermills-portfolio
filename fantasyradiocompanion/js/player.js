@@ -19,6 +19,10 @@ export const STATIONS = [
   { name: 'DNBRadio - Plush Recordings', url: 'https://azura.drmnbss.org/listen/plushrecs/radio.mp3', cors: true },
   { name: 'DNBRadio - Section 8 Recordings', url: 'https://azura.drmnbss.org/listen/section8recs/radio.mp3', cors: true },
   { name: 'DNBRadio - Darkstep', url: 'https://azura.drmnbss.org/listen/darkstep/radio.mp3', cors: true },
+  // Radio Rivendell: https with CORS, and an open now-playing feed (AzuraCast, by station id).
+  { name: 'Radio Rivendell', url: 'https://play.radiorivendell.com/radio/8000/radio.mp3', cors: true, metaUrl: 'https://play.radiorivendell.com/api/nowplaying/1' },
+  { name: 'Radio Rivendell - Lothl\u00f3rien', url: 'https://play.radiorivendell.com/radio/8020/radio.mp3', cors: true, metaUrl: 'https://play.radiorivendell.com/api/nowplaying/3' },
+  { name: 'Radio Rivendell - The Green Dragon', url: 'https://play.radiorivendell.com/radio/8010/radio.mp3', cors: true, metaUrl: 'https://play.radiorivendell.com/api/nowplaying/5' },
 ];
 
 /** Parses a .m3u / .m3u8 / .pls playlist into stations (http addresses are tried over https). */

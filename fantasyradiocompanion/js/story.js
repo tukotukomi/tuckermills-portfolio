@@ -1,5 +1,6 @@
 // The Old Man, the Fantasy Crystals, dialogue and levelling up. A port of src\PixelStory.cs.
 
+import { t } from './i18n.js';
 import { C, CA, withAlpha, ease } from './util.js';
 import { Sprites } from './sprites.js';
 import { Sound } from './sfx.js';
@@ -33,22 +34,22 @@ export function installStory(P) {
   Object.defineProperties(m, {
     isDialogue: { get() { return this.enc === 'Story' && this.story === 'Say' && this.line < this.lines.length; } },
     dialogueWho: { get() { return this.isDialogue ? this.lines[this.line].who : null; } },
-    dialogueText: { get() { return this.isDialogue ? this.lines[this.line].text : ''; } },
+    dialogueText: { get() { return this.isDialogue ? t(this.lines[this.line].text) : ''; } },
     dialogueShownText: {
       get() {
         if (!this.isDialogue) return '';
-        const text = this.lines[this.line].text;
+        const text = t(this.lines[this.line].text);
         return text.substring(0, Math.max(0, Math.min(text.length, Math.trunc(this.dlgChars))));
       }
     },
-    dialogueTyping: { get() { return this.isDialogue && Math.trunc(this.dlgChars) < this.lines[this.line].text.length; } },
+    dialogueTyping: { get() { return this.isDialogue && Math.trunc(this.dlgChars) < t(this.lines[this.line].text).length; } },
     dialogueReady: { get() { return this.isDialogue && !this.dialogueTyping && (!this.lines[this.line].toss || this.storyT >= TOSS_SECONDS); } },
     isLevelSelect: { get() { return this.enc === 'Story' && this.story === 'Select'; } },
     isLevelFx: { get() { return this.enc === 'Story' && this.story === 'LevelFx'; } },
     levelFxText: {
       get() {
         return this.fxMember >= 0 && this.fxMember < this.party.length
-          ? displayName(this.party[this.fxMember]) + ' reached Lv. ' + this.fxTo + '!' : '';
+          ? t('{name} reached Lv. {n}!', { name: displayName(this.party[this.fxMember]), n: this.fxTo }) : '';
       }
     },
   });
@@ -57,8 +58,8 @@ export function installStory(P) {
 
   m.advanceDialogue = function () {
     if (this.dialogueTyping) {   // the first click completes the line, the next reads on
-      this.dlgChars = this.lines[this.line].text.length;
-      this.dlgSounded = this.lines[this.line].text.length;
+      this.dlgChars = t(this.lines[this.line].text).length;
+      this.dlgSounded = t(this.lines[this.line].text).length;
       return;
     }
     if (!this.dialogueReady) return;
@@ -146,12 +147,12 @@ export function installStory(P) {
     if (this.story === 'Say' && this.line < this.lines.length) {
       const line = this.lines[this.line];
       if (this.dlgTrackedLine !== this.line) { this.dlgTrackedLine = this.line; this.dlgChars = 0; this.dlgSounded = 0; this.tossSounded = false; }
-      if (this.dlgChars < line.text.length) this.dlgChars = Math.min(line.text.length, this.dlgChars + dt * CHARS_PER_SECOND);
-      const shown = Math.min(line.text.length, Math.trunc(this.dlgChars));
+      if (this.dlgChars < t(line.text).length) this.dlgChars = Math.min(t(line.text).length, this.dlgChars + dt * CHARS_PER_SECOND);
+      const shown = Math.min(t(line.text).length, Math.trunc(this.dlgChars));
       let blipped = false;
       while (this.dlgSounded < shown) {
-        const c = line.text[this.dlgSounded++];
-        if (blipped || !/[a-z0-9]/i.test(c)) continue;
+        const c = t(line.text)[this.dlgSounded++];
+        if (blipped || !/[\p{L}\p{N}]/u.test(c)) continue;
         blipped = true;
         // Each voice has its own pitch; the letter nudges it up or down, which is what makes it sound like mumbling.
         const basePitch = line.who === 'Old Man' ? 128 : line.who === null ? 330 : 220;
@@ -386,4 +387,4 @@ for (const k of Object.keys(ENUM)) FROM_ENUM[ENUM[k]] = k;
 // Saves written before the art rework used the old names; they still load.
 Object.assign(FROM_ENUM, { Chocobo: 'paca', MithraThief: 'thief', WhiteMage: 'lightmage', BlackMage: 'firemage', Moogle: 'fae' });
 const NAMES = { paca: 'Paca', thief: 'Thief', warrior: 'Warrior', lightmage: 'Light Mage', firemage: 'Fire Mage', fae: 'Fae' };
-export function displayName(kind) { return NAMES[kind] || kind; }
+export function displayName(kind) { return t(NAMES[kind] || kind); }

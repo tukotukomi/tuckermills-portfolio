@@ -5,6 +5,7 @@ import { C, CA } from './util.js';
 import { Sprites } from './sprites.js';
 import { Sound } from './sfx.js';
 import { TRAIT_OWNER } from './traits.js';
+import { t } from './i18n.js';
 
 export const ITEM_IDS = ['SynergyElixir', 'PotionRed', 'PotionBlue', 'PotionGreen'];
 export const HOT_SLOT_COUNT = 4;
@@ -70,7 +71,7 @@ export function installItems(P) {
     this.goldPulse = 1;
     this.buyFlash = 0.5;
     Sound.play('ItemBuy');
-    this._addItemText('Bought ' + ITEM_DEFS[id].name, this._merchantScreenX() + 8, this.groundY - 28, C(255, 226, 150));
+    this._addItemText(t('Bought {name}', { name: t(ITEM_DEFS[id].name) }), this._merchantScreenX() + 8, this.groundY - 28, C(255, 226, 150));
     this.raiseProgress();
     return true;
   };
@@ -79,7 +80,7 @@ export function installItems(P) {
     if (!this.isShopping) return;
     this.enc = 'None';
     Sound.play('DiscClick');
-    this._addItemText('Safe travels!', this._merchantScreenX() + 8, this.groundY - 28, C(200, 226, 255));
+    this._addItemText(t('Safe travels!'), this._merchantScreenX() + 8, this.groundY - 28, C(200, 226, 255));
   };
 
   m.selectHot = function (slot) {
@@ -97,10 +98,10 @@ export function installItems(P) {
     const x = this._leaderCenterX(), y = this.groundY - 30;
     if (id === 'SynergyElixir') {
       this._applySynergy();
-      this._addItemText('Synergy!', x, y, C(255, 226, 120));
+      this._addItemText(t('Synergy!'), x, y, C(255, 226, 120));
     } else {
       Sound.play('PotionUse');
-      this._addItemText(ITEM_DEFS[id].name + ': nothing happens yet', x, y, C(200, 226, 255));
+      this._addItemText(t('{name}: nothing happens yet', { name: t(ITEM_DEFS[id].name) }), x, y, C(200, 226, 255));
     }
     this.raiseProgress();
     return true;

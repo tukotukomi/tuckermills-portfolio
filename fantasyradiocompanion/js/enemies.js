@@ -6,6 +6,7 @@ import { C, CA, withAlpha, rnd } from './util.js';
 import { Sprites } from './sprites.js';
 import { Sound } from './sfx.js';
 import { peckDamage, peckInterval, axeInterval } from './traits.js';
+import { t } from './i18n.js';
 
 export const ENEMY_KINDS = ['sheller', 'orc', 'nightmare', 'gargogryph'];
 export const ENEMY_ENUM = { sheller: 'Sheller', orc: 'Orc', nightmare: 'Nightmare', gargogryph: 'Gargogryph' };
@@ -305,11 +306,11 @@ export function installEnemies(P) {
     if (this.bloodMoonT >= 0 && this.bloodMoonT < 0.8 && e !== null) {
       const br = this._enemyRect(e);
       const env = Math.min(1, Math.min(this.bloodMoonT / 0.1, (0.8 - this.bloodMoonT) / 0.15));
-      list.push({ text: 'Blood Moon!', x: (br.x + br.w / 2.0) * this.lastScale, y: this.lastTop + (br.y + DEFS[e.kind].headOffset - 17) * this.lastScale, alpha: Math.max(0, env), bubble: false, color: C(255, 96, 96) });
+      list.push({ text: t('Blood Moon!'), x: (br.x + br.w / 2.0) * this.lastScale, y: this.lastTop + (br.y + DEFS[e.kind].headOffset - 17) * this.lastScale, alpha: Math.max(0, env), bubble: false, color: C(255, 96, 96) });
     }
     if (e !== null && e.deathT < 0 && e.engaged) {
       const r = this._enemyRect(e);
-      list.push({ text: DEFS[e.kind].name, x: (r.x + r.w / 2.0) * this.lastScale, y: this.lastTop + (r.y + DEFS[e.kind].headOffset - 11) * this.lastScale, alpha: 0.85, bubble: false, color: C(226, 230, 246) });
+      list.push({ text: t(DEFS[e.kind].name), x: (r.x + r.w / 2.0) * this.lastScale, y: this.lastTop + (r.y + DEFS[e.kind].headOffset - 11) * this.lastScale, alpha: 0.85, bubble: false, color: C(226, 230, 246) });
     }
   };
 

@@ -4,6 +4,7 @@
 import { C, CA, withAlpha, rnd } from './util.js';
 import { Sprites } from './sprites.js';
 import { Sound } from './sfx.js';
+import { t } from './i18n.js';
 
 export const TRAIT_OF = { paca: 'ItemStorage', lightmage: 'Heal', firemage: 'Fireball', thief: 'LuckyCoins', warrior: 'Huzzah', fae: 'StarHat' };
 export const TRAIT_OWNER = { ItemStorage: 'paca', Heal: 'lightmage', Fireball: 'firemage', LuckyCoins: 'thief', Huzzah: 'warrior', StarHat: 'fae' };
@@ -40,12 +41,12 @@ export function traitInterval(trait, level) {
 /** A short line for the tavern's cards: the trait's name and what it does at `level`. */
 export function traitSummary(kind, level) {
   switch (TRAIT_OF[kind]) {
-    case 'ItemStorage': return 'Item Storage: +' + storageSlots(level) + ' slot' + (storageSlots(level) === 1 ? '' : 's') + ' for the party';
-    case 'Heal': return 'Heal: ' + healAmount(level) + ' HP to the weakest ally every ' + healInterval(level) + ' s';
-    case 'Fireball': return 'Fireball: casts one to the right every ' + fireballInterval(level) + ' s';
-    case 'LuckyCoins': return 'Lucky Coins: ' + Math.round(luckyCoinChance(level) * 100) + '% chance of ' + luckyCoinCount(level) + ' coins together';
-    case 'Huzzah': return 'Huzzah!: party damage x' + huzzahDamageMultiplier(level) + ' for ' + huzzahDuration(level) + ' s every ' + huzzahInterval(level) + ' s';
-    case 'StarHat': return 'Star Hat: party wears one for ' + (starHatDuration(level) / 60) + ' min every ' + (starHatInterval(level) / 60) + ' min';
+    case 'ItemStorage': return t(storageSlots(level) === 1 ? 'Item Storage: +{n} slot for the party' : 'Item Storage: +{n} slots for the party', { n: storageSlots(level) });
+    case 'Heal': return t('Heal: {hp} HP to the weakest ally every {s} s', { hp: healAmount(level), s: healInterval(level) });
+    case 'Fireball': return t('Fireball: casts one to the right every {s} s', { s: fireballInterval(level) });
+    case 'LuckyCoins': return t('Lucky Coins: {p}% chance of {n} coins together', { p: Math.round(luckyCoinChance(level) * 100), n: luckyCoinCount(level) });
+    case 'Huzzah': return t('Huzzah!: party damage x{m} for {d} s every {s} s', { m: huzzahDamageMultiplier(level), d: huzzahDuration(level), s: huzzahInterval(level) });
+    case 'StarHat': return t('Star Hat: party wears one for {d} min every {s} min', { d: starHatDuration(level) / 60, s: starHatInterval(level) / 60 });
   }
   return '';
 }
@@ -264,7 +265,7 @@ export function installTraits(P) {
     if (this.shoutAge >= 0 && this.party.indexOf('warrior') >= 0) {
       const r = this._rectOf('warrior');
       const a = Math.min(1, Math.min(this.shoutAge / 0.15, (SHOUT_SECONDS - this.shoutAge) / 0.4));
-      list.push({ text: 'Huzzah!', x: (r.x + r.w / 2.0) * this.lastScale, y: this.lastTop + (r.y - 3) * this.lastScale, alpha: Math.max(0, a), bubble: true, color: C(70, 24, 20) });
+      list.push({ text: t('Huzzah!'), x: (r.x + r.w / 2.0) * this.lastScale, y: this.lastTop + (r.y - 3) * this.lastScale, alpha: Math.max(0, a), bubble: true, color: C(70, 24, 20) });
     }
     this._appendEnemyText(list);
     this._appendItemText(list);
