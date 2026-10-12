@@ -1,4 +1,4 @@
-// Fantasy Music Companion for the web: the page, wiring the scene, the player, the music library and the popups together.
+// Fantasy Radio Companion for the web: the page, wiring the scene, the player, the music library and the popups together.
 
 import { PixelScene } from './scene.js';
 import { Sprites } from './sprites.js';

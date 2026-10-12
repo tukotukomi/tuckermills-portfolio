@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#14123a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Fantasy Radio">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="description" content="A pixel-art adventure that marches to your music: radio, local files, and a party that grows as you listen.">
+<title>Fantasy Radio Companion</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="assets/icon-192.png">
+<link rel="apple-touch-icon" href="assets/icon-180.png">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="app">
+  <header id="topbar">
+    <div class="brand"><img src="assets/icon-192.png" alt="" width="26" height="26"><span>Fantasy Radio Companion</span></div>
+    <nav id="tabs" role="tablist">
+      <button role="tab" data-tab="adventure" class="on">Adventure</button>
+      <button role="tab" data-tab="music">Music</button>
+      <button role="tab" data-tab="radio">Radio</button>
+    </nav>
+    <button id="menuBtn" class="plain" aria-label="Menu" title="Menu">&#8943;</button>
+  </header>
+
+  <main id="main">
+    <section id="stage"><canvas id="scene"></canvas><div id="tip" class="tip" role="status" aria-live="polite"></div></section>
+
+    <section id="musicPane" class="pane" hidden>
+      <div class="paneBar">
+        <button id="pickFolder" class="primary">Choose music folder&hellip;</button>
+        <button id="reopenFolder" hidden></button>
+        <span id="folderName" class="muted"></span>
+      </div>
+      <div class="paneBar">
+        <input id="musicSearch" type="search" placeholder="Search songs&hellip;" autocomplete="off">
+        <span id="musicCount" class="muted"></span>
+      </div>
+      <div id="musicList" class="vlist"></div>
+      <p id="musicEmpty" class="empty">Select your music folder of choice to play local music.</p>
+    </section>
+
+    <section id="radioPane" class="pane" hidden>
+      <div class="paneBar">
+        <button id="addPlaylist" class="primary">Add playlist&hellip;</button>
+        <input id="playlistFile" type="file" accept=".m3u,.m3u8,.pls" hidden>
+        <span class="muted">Stations from .m3u / .m3u8 / .pls files are kept in this browser.</span>
+      </div>
+      <div id="radioList" class="vlist"></div>
+    </section>
+  </main>
+
+  <footer id="transport">
+    <div id="nowPlaying"><span id="nowTitle">Nothing playing</span><span id="nowSub" class="muted"></span></div>
+    <div class="controls">
+      <button id="btnShuffle" class="icon" aria-label="Shuffle" title="Shuffle">&#8644;</button>
+      <button id="btnPrev" class="icon" aria-label="Previous">&#9198;&#xFE0E;</button>
+      <button id="btnPlay" class="icon big" aria-label="Play or pause">&#9654;&#xFE0E;</button>
+      <button id="btnNext" class="icon" aria-label="Next">&#9197;&#xFE0E;</button>
+      <button id="btnRepeat" class="icon" aria-label="Repeat" title="Repeat">&#8635;</button>
+    </div>
+    <div class="seek"><span id="timeNow" class="muted">0:00</span><input id="seek" type="range" min="0" max="1000" value="0"><span id="timeLen" class="muted">0:00</span></div>
+    <div class="vols">
+      <label title="Main volume">Vol <input id="volMain" type="range" min="0" max="100" value="100"></label>
+      <label title="Sound effects volume">FX <input id="volFx" type="range" min="0" max="100" value="70"></label>
+    </div>
+  </footer>
+</div>
+
+<!-- Popups: the tuner and the monster compendium, over the scene -->
+<div id="dim" hidden></div>
+
+<section id="tuner" class="popup" hidden role="dialog" aria-label="Tuner">
+  <div class="popTabs">
+    <button data-ttab="local" class="on">Local Music</button>
+    <button data-ttab="radio">Radio Stations</button>
+    <button id="tunerClose" class="plain close" aria-label="Close">&times;</button>
+  </div>
+  <div id="tunerLocal" class="popBody">
+    <div class="paneBar"><input id="tunerSearch" type="search" placeholder="Search songs&hellip;" autocomplete="off"><button id="tunerFolder">Choose folder&hellip;</button></div>
+    <p id="tunerNoFolder" class="notice" hidden>Select your music folder of choice to play local music.</p>
+    <div id="tunerList" class="vlist"></div>
+    <div id="tunerFoot" class="muted foot"></div>
+  </div>
+  <div id="tunerRadio" class="popBody" hidden>
+    <div id="tunerStations" class="vlist"></div>
+    <div class="muted foot">Tap a station to tune in and return to the party.</div>
+  </div>
+</section>
+
+<section id="compendium" class="popup pixel" hidden role="dialog" aria-label="Monster Compendium">
+  <header><span class="tome"></span><h2>MONSTER COMPENDIUM</h2><button id="compClose" class="plain close" aria-label="Close">&times;</button></header>
+  <div id="compCards"></div>
+  <footer id="compFoot"></footer>
+</section>
+
+<div id="menu" class="menu" hidden>
+  <button data-act="export">Export progress</button>
+  <button data-act="import">Import progress</button>
+  <button data-act="restart">Restart adventure</button>
+  <button data-act="about">About</button>
+</div>
+
+<dialog id="about">
+  <h3>Fantasy Radio Companion</h3>
+  <p>A pixel-art adventure that marches to your music. Your party grows as you listen to radio; local music makes camp.</p>
+  <p class="muted">All pixel art is original. Radio stations are independent third-party streams; no music is included or uploaded: the music folder is read in your browser only.</p>
+  <p class="muted">Radio: stations that allow it also drive the scene's reactions; others just play. Final Fantasy Radio is http-only and plays in the Windows app.</p>
+  <p class="muted">Sound effects: <span id="soundState">&hellip;</span> <button id="soundTest" type="button">Play test sound</button></p>
+  <form method="dialog"><button class="primary">Close</button></form>
+</dialog>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

@@ -1,6 +1,6 @@
-﻿{
-  "name": "Fantasy Music Companion",
-  "short_name": "Fantasy Music",
+{
+  "name": "Fantasy Radio Companion",
+  "short_name": "Fantasy Radio",
   "description": "A pixel-art adventure that marches to your music.",
   "start_url": ".",
   "scope": ".",
