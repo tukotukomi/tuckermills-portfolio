@@ -436,40 +436,64 @@ export class Visualizer {
     const k = Math.max(1.0, Math.min(2.2, this.height / 130.0));
     return Math.min(k, (this.width - 24.0) / designWidth);
   }
-  _cardScale() {
-    const k = Math.max(1.0, Math.min(2.2, this.height / 130.0));
-    return Math.min(k, (this.width - 40.0) / 660.0);
-  }
-
-  _cardRects() {
+  /**
+   * The tavern's banner and its cards are one block, centered on the page whatever its size. Wide screens put the two cards either
+   * side of the middle (so the tavern and the Paca at its door stay in view); on a narrow, tall screen (a phone upright) they would
+   * shrink to nothing side by side, so they stack instead, at a readable size.
+   */
+  _cardLayout() {
     const s = this.scene;
-    if (!s.isChoosing || !s.offer) return [];
-    const k = this._cardScale();
-    if (k < 0.5) return [];
-    const cw = Math.trunc(216 * k), ch = Math.trunc(96 * k), gap = Math.trunc(228 * k);
-    const top = Math.trunc(34 * k);
+    const n = s.offer ? s.offer.length : 0;
+    const out = { k: 0, stacked: false, rects: [], bannerY: 0, bannerH: 0 };
+    if (!s.isChoosing || n === 0) return out;
+    const bannerOf = k => Math.round(10.5 * PT * k + 6 * k + 4);
+    const k0 = Math.max(1.0, Math.min(2.2, this.height / 130.0));
+    const kSide = Math.min(k0, (this.width - 40.0) / 660.0);
+    let k, stacked = false;
+    if (kSide >= 0.85) k = kSide;
+    else {
+      stacked = true;
+      k = Math.min(1.6, (this.width - 24.0) / 216.0);
+      const fit = kk => bannerOf(kk) + Math.trunc(10 * kk) + n * Math.trunc(96 * kk) + (n - 1) * Math.trunc(10 * kk);
+      while (k > 0.5 && fit(k) > this.height - 16) k -= 0.05;
+    }
+    if (k < 0.5) return out;
+    const cw = Math.trunc(216 * k), ch = Math.trunc(96 * k), gap = Math.trunc(10 * k);
+    const bannerH = bannerOf(k);
+    const total = bannerH + gap + (stacked ? n * ch + (n - 1) * gap : ch);
+    const bannerY = Math.max(Math.trunc(5 * k), Math.trunc((this.height - total) / 2));
+    const top = bannerY + bannerH + gap;
     const cx = Math.trunc(this.width / 2);
-    const rects = [{ x: cx - Math.trunc(gap / 2) - cw, y: top, w: cw, h: ch }];
-    if (s.offer.length > 1) rects.push({ x: cx + Math.trunc(gap / 2), y: top, w: cw, h: ch });
-    return rects;
+    const rects = [];
+    if (stacked) {
+      for (let i = 0; i < n; i++) rects.push({ x: cx - Math.trunc(cw / 2), y: top + i * (ch + gap), w: cw, h: ch });
+    } else {
+      const mid = Math.trunc(228 * k);   // the clear middle for the tavern and the Paca at its door
+      rects.push({ x: cx - Math.trunc(mid / 2) - cw, y: top, w: cw, h: ch });
+      if (n > 1) rects.push({ x: cx + Math.trunc(mid / 2), y: top, w: cw, h: ch });
+    }
+    out.k = k; out.stacked = stacked; out.rects = rects; out.bannerY = bannerY; out.bannerH = bannerH;
+    return out;
   }
 
-  _banner(ctx, k, title, centered) {
-    const px = 10.5 * PT * k;
-    const tw = this._measure(ctx, title, px);
-    const pw = Math.round(tw + 28 * k), ph = Math.round(px + 6 * k + 4);
+  _cardRects() { return this._cardLayout().rects; }
+  _banner(ctx, k, title, centered, atY) {
+    let px = 10.5 * PT * k;
+    let tw = this._measure(ctx, title, px);
+    if (tw + 28 * k > this.width - 16) { const f = (this.width - 16) / (tw + 28 * k); px *= f; tw *= f; }   // never wider than the page
+    const pw = Math.round(tw + 28 * k * (px / (10.5 * PT * k))), ph = Math.round(px + 6 * k + 4);
     const x = centered ? Math.round((this.width - pw) / 2) : this._topPillX(ctx, pw);
-    const y = centered ? Math.round((this.height - ph) / 2) : Math.trunc(5 * k);
+    const y = atY !== undefined ? atY : (centered ? Math.round((this.height - ph) / 2) : Math.trunc(5 * k));
     this._pill(ctx, x, y, pw, ph, ph / 2, 'rgba(22,18,52,0.84)', 'rgba(255,214,120,0.9)', 1.5);
     this._text(ctx, title, x + pw / 2, y + ph / 2 + 0.5, { px: px, color: 'white', align: 'center' });
   }
 
   _drawEncounter(ctx) {
-    const rects = this._cardRects();
+    const lay = this._cardLayout(), rects = lay.rects;
     if (rects.length === 0) return;
-    const s = this.scene, k = this._cardScale();
+    const s = this.scene, k = lay.k;
     const title = s.offer.length === 1 ? 'A tavern! Your last companion is waiting.' : 'A tavern! Who joins the party?';
-    this._banner(ctx, k, title, false);
+    this._banner(ctx, k, title, true, lay.bannerY);   // centered above the cards, in the middle of the page
     for (let i = 0; i < rects.length && i < s.offer.length; i++) {
       const r = rects[i], hot = i === this.hover.card, kind = s.offer[i];
       roundRect(ctx, r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1, 9 * k);
