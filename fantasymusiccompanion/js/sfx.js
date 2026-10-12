@@ -65,6 +65,56 @@ function thump(seconds, f0, f1, noiseAmt, gain) {
 const RECIPES = {
   // The party.
   Peck() { let ph = 0; return make(0.09, t => { ph += (2300 - 9500 * t) / R; return sqr(ph, 0.3) * exp(t, 0.022) * 0.55 + noise() * 0.25 * exp(t, 0.004); }); },
+  GargogryphRoar() {
+    let ph = 0, gr = 0;
+    return make(0.75, t => {
+      const u = t / 0.75;
+      ph += (1500 - 700 * u + 120 * Math.sin(t * 60)) / R;
+      gr += (62 + 8 * Math.sin(t * 14)) / R;
+      const env = attack(t, 0.03) * Math.pow(1 - u, 0.8);
+      return (saw(ph) * 0.38 + sqr(ph * 0.5, 0.5) * 0.2 + noise() * 0.18 + saw(gr) * 0.35) * env * 0.8;
+    });
+  },
+  GargogryphFlap() {
+    const d = new Float32Array(Math.trunc(0.5 * R));
+    layer(d, whoosh(0.2, 0.05, 0.3, 1, 0.8, false), 0.0, 1);
+    layer(d, thump(0.16, 90, 40, 0.15, 0.7), 0.03, 1);
+    layer(d, whoosh(0.2, 0.05, 0.3, 1, 0.8, false), 0.22, 0.9);
+    layer(d, thump(0.16, 90, 40, 0.15, 0.7), 0.25, 0.8);
+    return d;
+  },
+  GargogryphShot() {
+    const d = new Float32Array(Math.trunc(0.45 * R));
+    for (let i = 0; i < 3; i++) layer(d, whoosh(0.12, 0.35, 0.9, 1, 0.6, true), i * 0.1, 1 - i * 0.15);
+    return d;
+  },
+  GargogryphShardHit() {
+    let ph = 0;
+    return make(0.1, t => { ph += (1800 - 8000 * t) / R; return sqr(ph, 0.25) * exp(t, 0.018) * 0.45 + noise() * 0.3 * exp(t, 0.006); });
+  },
+  GargogryphDeath() {
+    let ph = 0, lp = 0;
+    return make(1.1, t => {
+      const u = t / 1.1;
+      ph += (1400 * Math.exp(-u * 2.6) + 90) / R;
+      lp += (0.5 * Math.exp(-u * 3) + 0.04) * (noise() - lp);
+      const crumble = noise() > 0.9 ? noise() * 0.5 * exp(t, 0.3) : 0;
+      return (saw(ph) * 0.4 * Math.pow(1 - u, 1.4) + lp * 0.9 * exp(t, 0.4) + crumble) * 0.8;
+    });
+  },
+  BloodMoon() {
+    const d = new Float32Array(Math.trunc(3.2 * R));
+    let a = 0, b = 0;
+    layer(d, make(2.0, t => {
+      const u = t / 2.0;
+      a += (55 + 55 * u * u) / R; b += (55.7 + 55 * u * u) / R;
+      const env = Math.pow(u, 1.5) * (0.75 + 0.25 * sin(t * (3 + 6 * u)));
+      return (saw(a) * 0.3 + saw(b) * 0.3 + sin(a * 0.5) * 0.4) * env * 0.8;
+    }), 0.0, 1);
+    layer(d, thump(0.9, 80, 28, 0.9, 1), 1.6, 1);
+    layer(d, whoosh(1.2, 0.5, 0.05, 0, 0.9, false), 1.6, 0.8);
+    return d;
+  },
   AxeThrow() {
     let lp = 0, ph = 0;
     return make(0.32, t => {

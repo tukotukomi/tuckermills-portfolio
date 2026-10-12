@@ -35,6 +35,11 @@
   "enemy_nightmare_attack_a": [28, 30],
   "enemy_nightmare_attack_b": [28, 30],
   "enemy_nightmare_hurt": [28, 30],
+  "enemy_gargogryph_walk_a": [42, 33],
+  "enemy_gargogryph_walk_b": [42, 33],
+  "enemy_gargogryph_attack_a": [42, 33],
+  "enemy_gargogryph_attack_b": [42, 33],
+  "enemy_gargogryph_hurt": [42, 33],
   "dragon_0": [38, 24],
   "dragon_1": [38, 24]
 }

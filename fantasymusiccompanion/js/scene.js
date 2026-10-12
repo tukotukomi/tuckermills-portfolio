@@ -208,6 +208,7 @@ export class PixelScene {
     this._drawSky(g, lw);
     this._drawDragon(g);
     this._drawBirds(g);
+    this._drawBloodMoonSky(g, lw);   // the Gargogryph's red moon, behind the hills
     this._drawMountains(g, lw);
     this._drawTrees(g, lw);
     this._drawTavern(g, lw);
@@ -222,6 +223,7 @@ export class PixelScene {
     this._drawWeather(g, lw);
     this._drawNotes(g, lw);
     this._drawLightTint(g, lw);
+    this._drawBloodMoonTint(g, lw);
     this._drawGlowSpots(g);
     this._drawCampfireGlow(g, lw);
     this._drawCrystalLayer(g, lw);
@@ -1080,6 +1082,7 @@ export class PixelScene {
         if (this.peckAnim >= 0) xD += 2 * Math.sin(Math.PI * this.peckAnim);
         if (this.flinch > 0) xD -= 2;
       }
+      if (this.bloodMoonT >= 0.5 && this.bloodMoonT < 0.72 && !newcomer) xD += (Math.trunc(this.time * 24) % 2 === 0 ? 1 : -1);   // the whole party shudders under the Blood Moon
       const x = Math.round(xD);
 
       let hop = 0;

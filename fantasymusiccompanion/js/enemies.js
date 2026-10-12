@@ -7,27 +7,32 @@ import { Sprites } from './sprites.js';
 import { Sound } from './sfx.js';
 import { peckDamage, peckInterval, axeInterval } from './traits.js';
 
-export const ENEMY_KINDS = ['sheller', 'orc', 'nightmare'];
-export const ENEMY_ENUM = { sheller: 'Sheller', orc: 'Orc', nightmare: 'Nightmare' };
-const ENEMY_FROM_ENUM = { Sheller: 'sheller', Orc: 'orc', Nightmare: 'nightmare' };
+export const ENEMY_KINDS = ['sheller', 'orc', 'nightmare', 'gargogryph'];
+export const ENEMY_ENUM = { sheller: 'Sheller', orc: 'Orc', nightmare: 'Nightmare', gargogryph: 'Gargogryph' };
+const ENEMY_FROM_ENUM = { Sheller: 'sheller', Orc: 'orc', Nightmare: 'nightmare', Gargogryph: 'gargogryph' };
 
 const DEFS = {
   sheller: { name: 'Sheller', hp: 10, attackInterval: 2.0, walkSpeed: 20, nightOnly: false, headOffset: 0, habitat: 'Roams by day', note: 'A grumpy shell-back. Punches first, claws second.' },
   orc: { name: 'Orc', hp: 18, attackInterval: 3.0, walkSpeed: 15, nightOnly: false, headOffset: 7, habitat: 'Roams day and night', note: 'Fond of shiny earrings and swinging big sticks.' },
-  nightmare: { name: 'Nightmare', hp: 12, attackInterval: 2.5, walkSpeed: 24, nightOnly: true, headOffset: 0, habitat: 'Roams after dark', note: 'A cloaked drifter that only calls after dark.' },
+  nightmare: { name: 'Nightmare', hp: 12, attackInterval: 2.5, walkSpeed: 24, nightOnly: true, headOffset: 0, hover: 2, habitat: 'Roams after dark', note: 'A cloaked drifter that only calls after dark.' },
+  gargogryph: { name: 'Gargogryph', hp: 40, attackInterval: 3.5, walkSpeed: 18, nightOnly: true, headOffset: 4, hover: 5, standoff: 30, habitat: 'Only under a dark sky', note: 'Stone-faced, eagle-winged and hard to hurt. Wingbeats throw razor feathers, and it can call down a Blood Moon.' },
 };
 
 export function enemyDef(kind) { return DEFS[kind]; }
 
-const ROAR = { sheller: 'ShellerRoar', orc: 'OrcRoar', nightmare: 'NightmareRoar' };
-const DEATH = { sheller: 'ShellerDeath', orc: 'OrcDeath', nightmare: 'NightmareDeath' };
+const ROAR = { sheller: 'ShellerRoar', orc: 'OrcRoar', nightmare: 'NightmareRoar', gargogryph: 'GargogryphRoar' };
+const DEATH = { sheller: 'ShellerDeath', orc: 'OrcDeath', nightmare: 'NightmareDeath', gargogryph: 'GargogryphDeath' };
+const BLOOD_MOON_SECONDS = 3.2;
+const BLOOD_MOON_HP_FRACTION = 0.55;   // it is called down once, when the Gargogryph is hurt this badly
 function attackFx(kind, pose, hit) {
+  if (kind === 'gargogryph') return hit ? 'GargogryphShot' : 'GargogryphFlap';
   const p = kind === 'orc' ? (pose === 0 ? ['OrcSmashSwing', 'OrcSmashHit'] : ['OrcSweepSwing', 'OrcSweepHit'])
     : kind === 'nightmare' ? (pose === 0 ? ['NightmareSweepSwing', 'NightmareSweepHit'] : ['NightmareChopSwing', 'NightmareChopHit'])
       : (pose === 0 ? ['ShellerPunchSwing', 'ShellerPunchHit'] : ['ShellerClawSwing', 'ShellerClawHit']);
   return p[hit ? 1 : 0];
 }
 function strikeEffect(kind, pose) {
+  if (kind === 'gargogryph') return 'feathers';
   if (kind === 'nightmare') return 'scythe';
   if (kind === 'orc') return 'impact';
   return pose === 0 ? 'impact' : 'claws';
@@ -46,6 +51,9 @@ export function installEnemies(P) {
     this.bursts = [];
     this.peckAnim = -1;
     this.flinch = 0;
+    this.shots = [];   // the Gargogryph's feathers in flight
+    this.bloodMoonT = -1;   // 0..1 while the Blood Moon plays out, <0 otherwise
+    this.bloodMoonStruck = false;
     this.kills = {};   // a kind is "known" once it has an entry here
   };
 
@@ -53,11 +61,11 @@ export function installEnemies(P) {
 
   m._enemyRect = function (e) {
     const set = Sprites.enemy[e.kind];
-    return { x: Math.round(e.x), y: this.groundY + 1 - set.h, w: set.w, h: set.h };
+    return { x: Math.round(e.x), y: this.groundY + 1 - set.h - (DEFS[e.kind].hover || 0), w: set.w, h: set.h };
   };
 
   m._pickEnemyKind = function () {
-    const pool = this.isNight ? ['nightmare', 'nightmare', 'orc'] : ['sheller', 'sheller', 'orc'];
+    const pool = this.isNight ? ['nightmare', 'nightmare', 'orc', 'gargogryph'] : ['sheller', 'sheller', 'orc'];
     return pool[rnd(pool.length)];
   };
 
@@ -69,7 +77,7 @@ export function installEnemies(P) {
 
   m._spawnEnemy = function () {
     const kind = this._pickEnemyKind();
-    this.enemy = { kind: kind, x: this.lastLw + 6, hp: DEFS[kind].hp, maxHp: DEFS[kind].hp, engaged: false, walkT: 0, attackTimer: 0, attackAnim: -1, attackPose: 0, struck: false, peckTimer: 0, axeTimer: 0, hurtFlash: 0, deathT: -1 };
+    this.enemy = { kind: kind, x: this.lastLw + 6, hp: DEFS[kind].hp, maxHp: DEFS[kind].hp, engaged: false, walkT: 0, attackTimer: 0, attackAnim: -1, attackPose: 0, struck: false, peckTimer: 0, axeTimer: 0, bloodMoonUsed: false, hurtFlash: 0, deathT: -1 };
     this._noteSeen(kind);
     Sound.play(ROAR[kind]);   // a warning as it comes into view
   };
@@ -86,9 +94,11 @@ export function installEnemies(P) {
     const e = this.enemy;
     if (e.deathT >= 0) return;
     const front = this._rectOf(this.party[0]);
-    const stopX = front.x + front.w + 1;
-
-    if (!e.engaged) {
+    // Ranged enemies keep their distance, as far as there is room for them on screen.
+    const room = Math.max(0, this.lastLw - (front.x + front.w + 1) - Sprites.enemy[e.kind].w - 2);
+    let stopX = front.x + front.w + 1 + Math.min(DEFS[e.kind].standoff || 0, room);
+    if (DEFS[e.kind].standoff)   // on a very narrow view a flier hangs over the leader's shoulder rather than leave the screen
+      stopX = Math.max(front.x + front.w + 1 - 12, Math.min(stopX, this.lastLw - Sprites.enemy[e.kind].w - 1));    if (!e.engaged) {
       const roadSpeed = 12.0 * this.clock.bpm / 112.0 * this.move;   // the road is still scrolling past under the party
       e.x -= (DEFS[e.kind].walkSpeed + roadSpeed) * dt;
       e.walkT += dt;
@@ -97,8 +107,18 @@ export function installEnemies(P) {
     }
 
     e.x = stopX;
+
+    // The Gargogryph's special: once, when it is badly hurt, it calls down a Blood Moon in place of an attack.
+    if (e.kind === 'gargogryph' && !e.bloodMoonUsed && e.hp <= e.maxHp * BLOOD_MOON_HP_FRACTION && e.attackAnim < 0 && this.bloodMoonT < 0) {
+      e.bloodMoonUsed = true;
+      this.bloodMoonT = 0;
+      this.bloodMoonStruck = false;
+      e.attackTimer = 5.5;   // and a breather afterwards
+      Sound.play('BloodMoon');
+    }
+
     e.attackTimer -= dt;
-    if (e.attackTimer <= 0 && e.attackAnim < 0) {
+    if (e.attackTimer <= 0 && e.attackAnim < 0 && this.bloodMoonT < 0) {
       e.attackAnim = 0;
       e.struck = false;
       e.attackPose = this.enemyAttacks++ % 2;
@@ -158,11 +178,45 @@ export function installEnemies(P) {
     }
     for (let i = this.bursts.length - 1; i >= 0; i--) {
       const b = this.bursts[i];
-      b.age += dt / (b.kind === 'death' ? 0.8 : b.kind === 'fire' ? 0.4 : 0.3);
+      b.age += dt / (b.kind === 'death' ? 0.8 : b.kind === 'blood' ? 0.7 : b.kind === 'fire' ? 0.4 : 0.3);
       if (b.age >= 1) this.bursts.splice(i, 1);
     }
     if (this.peckAnim >= 0) { this.peckAnim += dt / 0.25; if (this.peckAnim >= 1) this.peckAnim = -1; }
     if (this.flinch > 0) this.flinch = Math.max(0, this.flinch - dt);
+
+    // Feathers in flight, from the Gargogryph's wings to the front of the party.
+    if (this.shots.length > 0) {
+      const fr = this._rectOf(this.party[0]);
+      const hitX = fr.x + fr.w * 0.8;
+      for (let i = this.shots.length - 1; i >= 0; i--) {
+        const s = this.shots[i];
+        if (s.delay > 0) { s.delay -= dt; continue; }
+        s.age += dt;
+        s.x -= dt * 78;
+        s.y += Math.max(-dt * 22, Math.min(dt * 22, s.targetY - s.y));
+        if (s.x <= hitX) {
+          this.bursts.push({ x: hitX, y: s.y, kind: 'feather', age: 0 });
+          Sound.play('GargogryphShardHit');
+          this.flinch = 0.14;
+          this.shots.splice(i, 1);
+        }
+      }
+    }
+
+    // The Blood Moon: a red moon rises, the sky bleeds, and at the peak a wave of red light breaks over the whole party.
+    if (this.bloodMoonT >= 0) {
+      this.bloodMoonT += dt / BLOOD_MOON_SECONDS;
+      if (this.enemy !== null && this.enemy.deathT >= 0) this.bloodMoonT = Math.max(this.bloodMoonT, 0.8);   // it ends with the Gargogryph
+      if (!this.bloodMoonStruck && this.bloodMoonT >= 0.5) {
+        this.bloodMoonStruck = true;
+        for (const k of this.party) {
+          const mr = this._rectOf(k);
+          this.bursts.push({ x: mr.x + mr.w / 2.0, y: mr.y + mr.h * 0.45, kind: 'blood', age: 0 });
+        }
+        this.flinch = 0.6;
+      }
+      if (this.bloodMoonT >= 1) this.bloodMoonT = -1;
+    }
 
     const e = this.enemy;
     if (e === null) return;
@@ -180,8 +234,16 @@ export function installEnemies(P) {
         e.struck = true;
         Sound.play(attackFx(e.kind, e.attackPose, true));   // the blow lands
         const r = this._rectOf(this.party[0]);
-        this.bursts.push({ x: r.x + r.w * 0.72, y: r.y + r.h * 0.45, kind: strikeEffect(e.kind, e.attackPose), age: 0 });
-        this.flinch = 0.18;
+        const effect = strikeEffect(e.kind, e.attackPose);
+        if (effect === 'feathers') {
+          // A ranged attack: the wingbeat throws a volley of feathers that arrive one after another.
+          const er = this._enemyRect(e);
+          for (let i = 0; i < 3; i++)
+            this.shots.push({ x: er.x + 6, y: er.y + er.h * (0.35 + 0.12 * i), targetY: r.y + r.h * (0.3 + 0.18 * ((i + e.attackPose) % 3)), delay: 0.1 + i * 0.16, age: 0 });
+        } else {
+          this.bursts.push({ x: r.x + r.w * 0.72, y: r.y + r.h * 0.45, kind: effect, age: 0 });
+          this.flinch = 0.18;
+        }
       }
       if (e.attackAnim >= 1) e.attackAnim = -1;
     }
@@ -195,6 +257,9 @@ export function installEnemies(P) {
     this.bursts.length = 0;
     this.peckAnim = -1;
     this.flinch = 0;
+    this.shots.length = 0;
+    this.bloodMoonT = -1;
+    this.bloodMoonStruck = false;
   };
 
   // ---- The compendium's data ----------------------------------------------------------------------------
@@ -237,6 +302,11 @@ export function installEnemies(P) {
       list.push({ text: d.text, x: d.x * this.lastScale, y: this.lastTop + (d.y - u * 8) * this.lastScale, alpha: Math.max(0, Math.min(1, 1.5 * (1 - u * u))), bubble: false, color: d.color });
     }
     const e = this.enemy;
+    if (this.bloodMoonT >= 0 && this.bloodMoonT < 0.8 && e !== null) {
+      const br = this._enemyRect(e);
+      const env = Math.min(1, Math.min(this.bloodMoonT / 0.1, (0.8 - this.bloodMoonT) / 0.15));
+      list.push({ text: 'Blood Moon!', x: (br.x + br.w / 2.0) * this.lastScale, y: this.lastTop + (br.y + DEFS[e.kind].headOffset - 17) * this.lastScale, alpha: Math.max(0, env), bubble: false, color: C(255, 96, 96) });
+    }
     if (e !== null && e.deathT < 0 && e.engaged) {
       const r = this._enemyRect(e);
       list.push({ text: DEFS[e.kind].name, x: (r.x + r.w / 2.0) * this.lastScale, y: this.lastTop + (r.y + DEFS[e.kind].headOffset - 11) * this.lastScale, alpha: 0.85, bubble: false, color: C(226, 230, 246) });
@@ -256,18 +326,26 @@ export function installEnemies(P) {
     if (e.deathT >= 0) frame = set.hurt;
     else {
       const walking = !e.engaged;
-      frame = walking ? ((Math.trunc(e.walkT * 5)) % 2 === 0 ? set.walkA : set.walkB) : ((Math.trunc(this.time * 2)) % 2 === 0 ? set.walkA : set.walkB);
+      const flier = e.kind === 'gargogryph';
+      frame = walking ? ((Math.trunc(e.walkT * (flier ? 7 : 5))) % 2 === 0 ? set.walkA : set.walkB) : ((Math.trunc(this.time * (flier ? 4 : 2))) % 2 === 0 ? set.walkA : set.walkB);
       if (e.attackAnim >= 0) {
         const u = e.attackAnim;
-        if (u < 0.3) lunge = 1.5 * (u / 0.3);
-        else if (u < 0.75) frame = e.attackPose === 0 ? set.attackA : set.attackB;
-        if (u >= 0.3 && u < 0.5) lunge = 1.5 - 5.5 * ((u - 0.3) / 0.2);
-        else if (u >= 0.5 && u < 0.75) lunge = -4 + 4 * ((u - 0.5) / 0.25);
+        if (flier) {   // wings high with the beak open, then thrust forward as the feathers fly; no lunge
+          if (u < 0.75) frame = u < 0.4 ? set.attackA : set.attackB;
+        } else {
+          if (u < 0.3) lunge = 1.5 * (u / 0.3);
+          else if (u < 0.75) frame = e.attackPose === 0 ? set.attackA : set.attackB;
+          if (u >= 0.3 && u < 0.5) lunge = 1.5 - 5.5 * ((u - 0.3) / 0.2);
+          else if (u >= 0.5 && u < 0.75) lunge = -4 + 4 * ((u - 0.5) / 0.25);
+        }
+      } else if (this.bloodMoonT >= 0 && flier) {   // calling the moon: wings raised, beak open, then the thrust that breaks it
+        frame = this.bloodMoonT < 0.5 ? set.attackA : (this.bloodMoonT < 0.75 ? set.attackB : set.walkA);
       }
       if (e.hurtFlash > 0) frame = set.hurt;
     }
 
-    const hover = e.kind === 'nightmare' ? 2 + Math.round(Math.sin(this.time * 3)) : 0;
+    // Floaters bob (the Nightmare drifts low, the Gargogryph hangs in the air; the base height is already in the rect).
+    const hover = (DEFS[e.kind].hover || 0) > 0 ? Math.round(Math.sin(this.time * 3)) : 0;
     const x = Math.round(e.x + lunge);
     const y = r.y - hover + (e.deathT >= 0 ? Math.trunc(e.deathT * 3) : 0);
     g.ellipse(x + Math.trunc((set.w - 14) / 2), this.groundY, 14, 2, CA(90, 20, 30, 20));
@@ -284,8 +362,51 @@ export function installEnemies(P) {
     }
   };
 
+  /** The Blood Moon's strength 0..1: it rises in the first moments, holds, then sinks away. */
+  m._bloodMoonEnv = function () {
+    if (this.bloodMoonT < 0) return 0;
+    const t = this.bloodMoonT;
+    return Math.max(0, Math.min(1, Math.min(t / 0.18, (1 - t) / 0.2)));
+  };
+
+  /** The red moon itself, hung in the sky behind the hills. */
+  m._drawBloodMoonSky = function (g, lw) {
+    const env = this._bloodMoonEnv();
+    if (env <= 0) return;
+    const rad = 9 + Math.trunc(env * 3);
+    const cx = Math.trunc(lw * 0.66), cy = Math.max(rad + 2, Math.trunc(this.groundY * 0.38)) + Math.trunc((1 - env) * 14);
+    g.ellipse(cx - rad - 8, cy - rad - 8, (rad + 8) * 2, (rad + 8) * 2, CA(Math.trunc(46 * env), 220, 30, 40));
+    g.ellipse(cx - rad - 3, cy - rad - 3, (rad + 3) * 2, (rad + 3) * 2, CA(Math.trunc(70 * env), 230, 40, 50));
+    const a = Math.trunc(255 * env);
+    g.ellipse(cx - rad, cy - rad, rad * 2, rad * 2, CA(a, 196, 24, 40));
+    g.ellipse(cx - rad + 3, cy - rad + 2, rad * 2 - 3, rad * 2 - 2, CA(a, 130, 10, 32));
+    g.ellipse(cx - rad, cy - rad, rad * 2 - 4, rad * 2 - 3, CA(a, 214, 40, 52));
+    const cr = CA(Math.trunc(230 * env), 150, 14, 34);
+    g.rect(cx - Math.trunc(rad / 2), cy - Math.trunc(rad / 3), 3, 2, cr);
+    g.rect(cx + Math.trunc(rad / 4), cy + Math.trunc(rad / 4), 4, 2, cr);
+    g.rect(cx - 1, cy - Math.trunc(rad / 2) - 1, 2, 2, cr);
+    g.rect(cx - rad + 2, cy - Math.trunc(rad / 2), 1, Math.trunc(rad / 2), CA(Math.trunc(200 * env), 255, 120, 100));
+  };
+
+  /** The whole scene bathed in red while the Blood Moon is up. */
+  m._drawBloodMoonTint = function (g, lw) {
+    const env = this._bloodMoonEnv();
+    if (env <= 0) return;
+    const pulse = 0.8 + 0.2 * Math.sin(this.time * 7);
+    g.rect(0, 0, lw, this.lh, CA(Math.trunc(78 * env * pulse), 190, 10, 24));
+    if (this.bloodMoonT >= 0.5 && this.bloodMoonT < 0.62)   // the flash as it breaks
+      g.rect(0, 0, lw, this.lh, CA(Math.trunc(120 * (1 - (this.bloodMoonT - 0.5) / 0.12)), 255, 60, 60));
+  };
+
   m._drawEnemyEffects = function (g) {
-    for (const b of this.bursts) {
+    // Feathers in flight: a bright slash with a crimson tip, pointing the way they fly.
+    for (const s of this.shots) {
+      if (s.delay > 0) continue;
+      const x = Math.round(s.x), y = Math.round(s.y);
+      g.rect(x + 3, y, 5, 1, CA(110, 214, 196, 255));
+      g.rect(x, y, 4, 1, CA(255, 236, 232, 255));
+      g.rect(x - 1, y, 2, 1, CA(255, 220, 50, 66));
+    }    for (const b of this.bursts) {
       const u = b.age;
       const x = Math.round(b.x), y = Math.round(b.y);
       const fade = Math.trunc(255 * Math.max(0, 1 - u));
@@ -335,6 +456,21 @@ export function installEnemies(P) {
             const steps = Math.trunc(14 * grow);
             for (let s = 0; s <= steps; s++) g.rect(ox + Math.trunc(6 * grow * s / Math.max(1, steps)), y - 7 + s, 1, 1, CA(fade, 255, 250, 235));
           }
+          break;
+        }
+        case 'feather': {   // a spray of pale slivers where a feather lands
+          for (let k = 0; k < 5; k++) {
+            const a = Math.PI + (k - 2) * 0.5;
+            const dd = 1 + Math.trunc(5 * u);
+            g.rect(x + Math.round(Math.cos(a) * dd), y + Math.round(Math.sin(a) * dd), 2, 1, CA(fade, 236, 232, 255));
+          }
+          g.rect(x, y, 2, 2, CA(fade, 220, 50, 66));
+          break;
+        }
+        case 'blood': {   // red light breaking over a party member
+          const rad = 3 + Math.trunc(12 * u);
+          g.ellipse(x - rad, y - rad, rad * 2, rad * 2, CA(Math.trunc(fade / 3), 220, 20, 40));
+          g.ring(x - rad, y - rad, rad * 2, rad * 2, CA(fade, 255, 70, 70));
           break;
         }
         case 'scythe': {
