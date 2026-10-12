@@ -76,17 +76,17 @@
 
 <section id="tuner" class="popup" hidden role="dialog" aria-label="Tuner">
   <div class="popTabs">
-    <button data-ttab="local" class="on">Local Music</button>
-    <button data-ttab="radio">Radio Stations</button>
+    <button data-ttab="radio" class="on">Radio Stations</button>
+    <button data-ttab="local">Local Music</button>
     <button id="tunerClose" class="plain close" aria-label="Close">&times;</button>
   </div>
-  <div id="tunerLocal" class="popBody">
+  <div id="tunerLocal" class="popBody" hidden>
     <div class="paneBar"><input id="tunerSearch" type="search" placeholder="Search songs&hellip;" autocomplete="off"><button id="tunerFolder">Choose folder&hellip;</button></div>
     <p id="tunerNoFolder" class="notice" hidden>Select your music folder of choice to play local music.</p>
     <div id="tunerList" class="vlist"></div>
     <div id="tunerFoot" class="muted foot"></div>
   </div>
-  <div id="tunerRadio" class="popBody" hidden>
+  <div id="tunerRadio" class="popBody">
     <div id="tunerStations" class="vlist"></div>
     <div class="muted foot">Tap a station to tune in and return to the party.</div>
   </div>

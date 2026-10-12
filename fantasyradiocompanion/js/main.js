@@ -372,7 +372,7 @@ async function main() {
   function openTuner() {
     Sound.unlock(); player.unlock();
     closePopups();
-    setTunerTab(player.mode === 'radio' ? 'radio' : 'local');
+    setTunerTab('radio');   // it always opens on the Radio Stations tab
     renderTunerLocalState();
     showPopup('tuner');
     tunerList.refresh(); tunerStations.refresh();
@@ -506,7 +506,8 @@ async function main() {
     if (!(el && el.closest && el.closest('input, textarea'))) e.preventDefault();
   });
 
-  // For the automated checks.  window.fmc = { scene, player, vis, library, Sound, setTab, openTuner, openCompendium, closePopups };
+  // For the automated checks.
+  window.fmc = { scene, player, vis, library, Sound, setTab, openTuner, openCompendium, closePopups };
 }
 
 main().catch(e => { console.error(e); document.body.insertAdjacentHTML('afterbegin', '<pre style="color:#f88;padding:12px">' + String(e && e.stack || e) + '</pre>'); });
