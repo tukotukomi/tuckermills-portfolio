@@ -59,9 +59,9 @@ export class Player {
     this.ctx = null;
     this.analyser = null;
     this.analysed = null;        // made by _newAnalysed(): a fresh element for every file or station
-    this._srcNode = null;
-    this.plain = new Audio();
-    this.plain.preload = 'none';
+    this.plain = null;           // made by _makePlain(): a fresh element for every station that can't be analysed
+    this._standby = null;        // a station being brought up silently behind the one that is playing: { el, kind, station }
+    this._fade = null;           // the overlap while it takes over: { timer }
     this.mode = 'none';          // 'none' | 'local' | 'radio'
     this.canAnalyse = false;     // the current source is being analysed
     this.station = null;
@@ -79,7 +79,7 @@ export class Player {
     this.songTitle = '';          // radio: what the station says is playing, when it publishes that (else '')
     this._metaTimer = 0;
 
-    this._wire(this.plain);
+    this.plain = this._makePlain();
     this.analysed = this._newAnalysed();
     this.active = this.analysed;
   }
@@ -96,32 +96,57 @@ export class Player {
   }
 
   /** A new element (and Web Audio source node) for every file or station. Safari can stop routing an element through Web Audio
-   *  once its source has been replaced, which left the music slider with no effect on the second and later things played. */
+   *  once its source has been replaced, which left the music slider with no effect on the second and later things played.
+   *  The previous analysed element is let go of (use _makeAnalysed to leave it playing). */
   _newAnalysed() {
     const old = this.analysed;
-    if (old) { try { old.pause(); old.removeAttribute('src'); old.load(); } catch (e) { /* */ } }
-    if (this._srcNode) { try { this._srcNode.disconnect(); } catch (e) { /* */ } this._srcNode = null; }
-    const a = new Audio();
-    a.preload = 'auto';
-    a.crossOrigin = 'anonymous';   // from the start, before the element is connected (local files are blob: URLs, same-origin anyway)
-    this._wire(a);
+    if (old) this._release(old);
+    const a = this._makeAnalysed();
     this.analysed = a;
-    this._attach(a);
     this._applyMute();
     this.routing = 'unknown';
     return a;
   }
 
-  /** Connects an element to the music gain stage and the analyser, once the graph exists. */
+  _makeAnalysed() {
+    const a = new Audio();
+    a.preload = 'auto';
+    a.crossOrigin = 'anonymous';   // from the start, before the element is connected (local files are blob: URLs, same-origin anyway)
+    this._wire(a);
+    this._attach(a);
+    return a;
+  }
+
+  /** A fresh element for a station the browser won't let us analyse (no CORS): it is never connected to Web Audio. */
+  _makePlain() {
+    const a = new Audio();
+    a.preload = 'none';
+    this._wire(a);
+    a.muted = this._volume <= 0;
+    a.volume = this._volume;
+    return a;
+  }
+
+  /** Connects an element to the music gain stage and the analyser, once the graph exists. Each element has a gain of its own, so a
+   *  station that is taking over from another can be faded in while the old one is faded out. */
   _attach(a) {
     if (!this.ctx || !this._music) { a.volume = this._volume; return; }
     try {
       const src = this.ctx.createMediaElementSource(a);
-      src.connect(this._music);     // what is heard
-      src.connect(this.analyser);   // what the scene reacts to (before the volume)
-      this._srcNode = src;
+      const g = this.ctx.createGain();
+      src.connect(g);
+      g.connect(this._music);     // what is heard
+      g.connect(this.analyser);   // what the scene reacts to (before the volume)
+      a._src = src; a._gain = g;
       a.volume = 1;
-    } catch (e) { this._srcNode = null; a.volume = this._volume; }
+    } catch (e) { a._src = null; a._gain = null; a.volume = this._volume; }
+  }
+
+  /** Lets go of an element: it stops, its source is dropped, and it leaves the graph. */
+  _release(a) {
+    if (!a) return;
+    try { a.pause(); a.removeAttribute('src'); a.load(); } catch (e) { /* */ }
+    for (const k of ['_gain', '_src']) { if (a[k]) { try { a[k].disconnect(); } catch (e) { /* */ } a[k] = null; } }
   }
 
   /** A few seconds into a stream: is audio actually flowing through the Web Audio graph? Some browsers play a live stream natively
@@ -235,6 +260,8 @@ export class Player {
   get radioBuffering() { return this.mode === 'radio' && (this.status === 'Connecting...' || this.status === 'Buffering...'); }
 
   _stopBoth() {
+    this._dropStandby();
+    this._endFade();
     for (const a of [this.analysed, this.plain]) { try { a.pause(); } catch (e) { /* */ } }
   }
 
@@ -263,9 +290,131 @@ export class Player {
     if (this.onStatus) this.onStatus();
   }
 
-  /** Tunes in to a station: tries it analysed (CORS), and falls back to plain playback if the stream won't allow that. */
+  /** Brings a station up silently behind the one that is playing and swaps once it is flowing, so switching leaves no gap. */
+  _switchStation(station) {
+    this._dropStandby();
+    this._endFade();
+    this.station = station;
+    this._startMeta(station);
+    const kind = (station.cors === false || !this.analyser) ? 'plain' : 'analysed';
+    const el = kind === 'analysed' ? this._makeAnalysed() : this._makePlain();
+    const standby = { el: el, kind: kind, station: station };
+    this._standby = standby;
+    this._setLevel(el, 0);
+    el.src = station.url;
+
+    const ready = () => {
+      el.removeEventListener('timeupdate', onTime);
+      if (this._standby === standby) this._commitStandby();
+    };
+    const onTime = () => { if (el.currentTime >= 0.35 && !el.paused) ready(); };
+    el.addEventListener('timeupdate', onTime);
+    const onError = () => {
+      el.removeEventListener('error', onError);
+      el.removeEventListener('timeupdate', onTime);
+      if (this._standby !== standby) return;
+      if (kind === 'analysed') {
+        // CORS refused: try the same station as a plain stream, still behind the old one
+        this._standby = null;
+        this._release(el);
+        const plain = this._makePlain();
+        const sb = { el: plain, kind: 'plain', station: station };
+        this._standby = sb;
+        plain.volume = 0;
+        plain.src = station.url;
+        const onTime2 = () => { if (plain.currentTime >= 0.35 && !plain.paused && this._standby === sb) { plain.removeEventListener('timeupdate', onTime2); this._commitStandby(); } };
+        plain.addEventListener('timeupdate', onTime2);
+        plain.addEventListener('error', () => { if (this._standby === sb) this._failSwitch(station, 'could not play'); });
+        plain.play().catch(() => { /* an error event follows if it really failed */ });
+      } else this._failSwitch(station, 'could not play');
+    };
+    el.addEventListener('error', onError);
+    // if it never starts, give up after a while rather than leave the old station playing under a station name that is not it
+    standby.timeout = setTimeout(() => { if (this._standby === standby) this._failSwitch(station, 'the station did not start playing'); }, 20000);
+    el.play().catch(() => { /* an error event follows if it really failed */ });
+  }
+
+  _failSwitch(station, why) {
+    this._dropStandby();
+    this._stopBoth();
+    this.mode = 'radio'; this.station = station; this.canAnalyse = false;
+    this._setStatus('Error: ' + why);
+  }
+
+  _dropStandby() {
+    const s = this._standby;
+    this._standby = null;
+    if (!s) return;
+    clearTimeout(s.timeout);
+    this._release(s.el);
+  }
+
+  /** Sets how loud a station element is within its own fade: through its own gain when it is on the Web Audio graph, else its element volume. */
+  _setLevel(el, level) {
+    if (el._gain) el._gain.gain.value = level;
+    else el.volume = level * this._volume;
+  }
+
+  /** The new station is flowing: it becomes the one playing, and the old one is faded out under it. */
+  _commitStandby() {
+    const s = this._standby;
+    this._standby = null;
+    if (!s) return;
+    clearTimeout(s.timeout);
+    const oldEl = this.active;
+    if (s.kind === 'analysed') this.analysed = s.el; else this.plain = s.el;
+    this.active = s.el;
+    this.station = s.station;
+    this.canAnalyse = s.kind === 'analysed';
+    this.mode = 'radio';
+    this.routing = 'unknown';
+    this._applyMute();
+    this._setStatus('Playing');
+    if (s.kind === 'analysed') this._checkRouting(s.el);
+
+    // Elements outside the graph can't be faded on iOS (it ignores the element volume), so the old one is simply stopped there.
+    const canFade = !IOS || (oldEl && oldEl._gain && s.el._gain);
+    if (!oldEl || oldEl === s.el || !canFade) {
+      this._setLevel(s.el, 1);
+      if (oldEl && oldEl !== s.el) this._retire(oldEl);
+      return;
+    }
+    const start = performance.now(), ms = 600;
+    const timer = setInterval(() => {
+      const f = Math.min(1, (performance.now() - start) / ms);
+      this._setLevel(s.el, f);
+      this._setLevel(oldEl, 1 - f);
+      if (f >= 1) { this._endFade(); }
+    }, 30);
+    this._fade = { timer: timer, from: oldEl, to: s.el };
+  }
+
+  /** Finishes any overlap at once: the new station at full level, the old one gone. */
+  _endFade() {
+    const f = this._fade;
+    this._fade = null;
+    if (!f) return;
+    clearInterval(f.timer);
+    this._setLevel(f.to, 1);
+    this._retire(f.from);
+  }
+
+  /** Releases an element that has been replaced, giving back a fresh idle one if it was the current analysed / plain element. */
+  _retire(el) {
+    this._release(el);
+    if (el === this.analysed) { this.analysed = this._makeAnalysed(); this._applyMute(); }
+    else if (el === this.plain) { this.plain = this._makePlain(); }
+  }
+
+  /** Tunes in to a station: tries it analysed (CORS), and falls back to plain playback if the stream won't allow that. When a station
+   *  is already playing, it keeps playing until the new one is ready (see _switchStation). */
   playStation(station) {
     this.unlock();
+    if (this.mode === 'radio' && this.station && this.playing && this.status === 'Playing' && station.cors !== 'blocked') {
+      this._switchStation(station);
+      if (this.onStatus) this.onStatus();
+      return;
+    }
     this._stopBoth();
     this.mode = 'radio'; this.station = station; this._setStatus('Connecting...');
     this._startMeta(station);
