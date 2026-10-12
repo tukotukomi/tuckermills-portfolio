@@ -62,6 +62,7 @@ export class Player {
     this.plain = null;           // made by _makePlain(): a fresh element for every station that can't be analysed
     this._standby = null;        // a station being brought up silently behind the one that is playing: { el, kind, station }
     this._fade = null;           // the overlap while it takes over: { timer }
+    this._wait = null;           // the playing station easing down while the next one buffers: { timer, start, el, level }
     this.mode = 'none';          // 'none' | 'local' | 'radio'
     this.canAnalyse = false;     // the current source is being analysed
     this.station = null;
@@ -261,6 +262,7 @@ export class Player {
 
   _stopBoth() {
     this._dropStandby();
+    this._endWait(true);
     this._endFade();
     for (const a of [this.analysed, this.plain]) { try { a.pause(); } catch (e) { /* */ } }
   }
@@ -301,6 +303,7 @@ export class Player {
     const standby = { el: el, kind: kind, station: station };
     this._standby = standby;
     this._setLevel(el, 0);
+    this._startWait();
     el.src = station.url;
 
     const ready = () => {
@@ -349,6 +352,30 @@ export class Player {
     this._release(s.el);
   }
 
+  /** While the next station buffers, the one playing eases down (to a fifth of its level, never to silence: a slow stream must not
+   *  leave a gap). A second request keeps the same ease-down going. */
+  _startWait() {
+    if (this._wait || !this.active) return;
+    const w = { start: performance.now(), el: this.active, level: 1, timer: 0 };
+    w.timer = setInterval(() => {
+      const x = Math.min(1, (performance.now() - w.start) / 3000);
+      const s = x * x * (3 - 2 * x);   // smooth start and end
+      w.level = 1 - 0.8 * s;
+      this._setLevel(w.el, w.level);
+    }, 40);
+    this._wait = w;
+  }
+
+  /** Stops the ease-down and returns the level it had reached; `restore` puts the element back to full. */
+  _endWait(restore) {
+    const w = this._wait;
+    this._wait = null;
+    if (!w) return 1;
+    clearInterval(w.timer);
+    if (restore) this._setLevel(w.el, 1);
+    return w.level;
+  }
+
   /** Sets how loud a station element is within its own fade: through its own gain when it is on the Web Audio graph, else its element volume. */
   _setLevel(el, level) {
     if (el._gain) el._gain.gain.value = level;
@@ -362,6 +389,7 @@ export class Player {
     if (!s) return;
     clearTimeout(s.timeout);
     const oldEl = this.active;
+    const fromLevel = this._endWait(false);   // the old station carries on from wherever its ease-down had got to
     if (s.kind === 'analysed') this.analysed = s.el; else this.plain = s.el;
     this.active = s.el;
     this.station = s.station;
@@ -379,11 +407,11 @@ export class Player {
       if (oldEl && oldEl !== s.el) this._retire(oldEl);
       return;
     }
-    const start = performance.now(), ms = 600;
+    const start = performance.now(), ms = 800;
     const timer = setInterval(() => {
       const f = Math.min(1, (performance.now() - start) / ms);
       this._setLevel(s.el, f);
-      this._setLevel(oldEl, 1 - f);
+      this._setLevel(oldEl, fromLevel * (1 - f));
       if (f >= 1) { this._endFade(); }
     }, 30);
     this._fade = { timer: timer, from: oldEl, to: s.el };
