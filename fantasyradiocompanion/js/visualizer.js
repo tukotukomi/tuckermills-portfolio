@@ -165,6 +165,7 @@ export class Visualizer {
     this._drawMultiplierPicker(ctx);
     this._drawDisc(ctx);
     this._drawSettingsMenu(ctx);
+    this._drawInnMenu(ctx);
     this._drawGameOver(ctx);
     ctx.restore();
     this._drawShop(ctx);
@@ -558,7 +559,7 @@ export class Visualizer {
     return { x: 6, y: y, w: size, h: size };
   }
   // The item button belongs to every view the party is shown in, not only the enlarged one.
-  get _hotVisible() { return !this.scene.isShopping && !this.scene.isGameOver && !this.scene.starting; }
+  get _hotVisible() { return !this.scene.isShopping && !this.scene.isGameOver && !this.scene.starting && !this.scene.isInnMenu; }
   get _discCenter() { return { x: 8 + 46 + 22 + 6, y: this._hotRect.y + 22 }; }   // the disc opens inward; its edge keeps the button's 8 px margin
 
   /** In a short view (the party strip under the Radio and Local Music tabs) the four-way disc would not fit, so the slots open as a row. */
@@ -596,6 +597,7 @@ export class Visualizer {
   /** Closes the disc menu or the shop if one is up (for Escape). True if something was closed. */
   dismissOverlay() {
     if (this.scene.isWaiting) { this.scene.cancelTargeting(); return true; }
+    if (this.scene.isSwapping) { this.scene.innCancel(); return true; }
     if (this._settingsOpen) { this._settingsOpen = false; return true; }
     if (this._discOpen) { this._discOpen = false; this._hotDown = false; return true; }
     if (this.scene.isShopping) { if (this._shopInfoId) this._shopInfoId = null; else this.scene.leaveShop(); return true; }
@@ -657,7 +659,9 @@ export class Visualizer {
     ctx.beginPath(); ctx.moveTo(cx - d, cy - d); ctx.lineTo(cx + d, cy + d); ctx.moveTo(cx - d, cy + d); ctx.lineTo(cx + d, cy - d); ctx.stroke();
     ctx.lineCap = 'butt';
     if (this.scene.isPicking && this.vh < 180) return;   // a short view has no room for the words beside the buttons
-    const label = t(this.scene.isPicking ? 'Monster damage multiplier' : 'Choose who to heal'), px = 8.5 * PT, w = Math.round(this._measure(ctx, label, px) + 20);
+    const label = t(this.scene.isPicking ? 'Monster damage multiplier'
+      : this.scene.isSwapping ? (this.scene.swapFirstKind ? 'Now choose who to swap with' : 'Choose two heroes to swap')
+        : 'Choose who to heal'), px = 8.5 * PT, w = Math.round(this._measure(ctx, label, px) + 20);
     let x = r.x + r.w + 8, y = r.y + (r.h - 24) / 2;
     if (this.scene.isPicking) {   // over the middle of the buttons rather than beside the cross, where it would run into them
       const mr = this._multiplierRects(), mid = Math.trunc((mr[0].x + mr[4].x + mr[4].w) / 2);
@@ -665,6 +669,72 @@ export class Visualizer {
     }
     this._pill(ctx, x, y, w, 24, 6, 'rgba(22,18,52,0.88)', 'rgba(150,255,190,0.9)', 1.2);
     this._text(ctx, label, x + w / 2, y + 12.5, { px: px, color: 'white', align: 'center' });
+  }
+
+  // ---- The inn: Need to rest and reorganize? --------------------------------------------------------------
+
+  /** The banner and the three buttons (Rest, Reorganize, Not now), under the HUD in a short view and centred in a tall one. */
+  _innLayout() {
+    let top = 40;
+    const L = this._hudLayout(this.ctx);
+    for (const r of [L.day, L.gold, L.storage, L.berserk, L.np]) if (r) top = Math.max(top, r.y + r.h + 4);
+    const text = t('Need to rest and reorganize?');
+    const bw = Math.min(this.vw - 16, Math.round(this._measure(this.ctx, text, 10.5 * PT) + 32)), bh = 24;
+    if (this.vh < 190) {
+      const banner = { x: Math.trunc((this.vw - bw) / 2), y: top, w: bw, h: bh };
+      const h = Math.max(30, Math.min(40, this.vh - (banner.y + bh) - 8)), w = Math.trunc((this.vw - 24 - 16) / 3), y = banner.y + bh + 6;
+      return { banner, rest: { x: 12, y, w, h }, reorg: { x: 12 + w + 8, y, w, h }, leave: { x: 12 + 2 * (w + 8), y, w, h } };
+    }
+    const side = this.vw >= 470, bwid = side ? 190 : Math.min(this.vw - 32, 260), bhgt = 74;
+    const blockH = bh + 10 + (side ? bhgt : 2 * bhgt + 8) + 10 + 34;
+    const y0 = Math.max(top, Math.trunc((this.vh - blockH) / 2));
+    const banner = { x: Math.trunc((this.vw - bw) / 2), y: y0, w: bw, h: bh }, by = y0 + bh + 10;
+    if (side) {
+      return { banner, rest: { x: Math.trunc(this.vw / 2) - bwid - 6, y: by, w: bwid, h: bhgt }, reorg: { x: Math.trunc(this.vw / 2) + 6, y: by, w: bwid, h: bhgt },
+        leave: { x: Math.trunc((this.vw - 150) / 2), y: by + bhgt + 10, w: 150, h: 34 } };
+    }
+    const rest = { x: Math.trunc((this.vw - bwid) / 2), y: by, w: bwid, h: bhgt };
+    const reorg = { x: rest.x, y: by + bhgt + 8, w: bwid, h: bhgt };
+    return { banner, rest, reorg, leave: { x: Math.trunc((this.vw - 150) / 2), y: reorg.y + reorg.h + 10, w: 150, h: 34 } };
+  }
+
+  _innButtonAt(h) {
+    const L = this._innLayout();
+    if (this._inRect(h, L.rest)) return 0;
+    if (this._inRect(h, L.reorg)) return 1;
+    if (this._inRect(h, L.leave)) return 2;
+    return -1;
+  }
+
+  _drawInnMenu(ctx) {
+    if (!this.scene.isInnMenu) return;
+    const L = this._innLayout(), s = this.scene, compact = this.vh < 190;
+    this._pill(ctx, L.banner.x, L.banner.y, L.banner.w, L.banner.h, L.banner.h / 2, 'rgba(22,18,52,0.88)', 'rgba(255,214,120,0.92)', 1.5);
+    this._text(ctx, t('Need to rest and reorganize?'), L.banner.x + L.banner.w / 2, L.banner.y + L.banner.h / 2 + 0.5, { px: 10.5 * PT, color: 'white', align: 'center' });
+    const coin = Sprites.coin;
+    const button = (r, idx, title, sub, cost, enabled) => {
+      const hot = this._innHover === idx && enabled;
+      const g = ctx.createLinearGradient(0, r.y, 0, r.y + r.h);
+      g.addColorStop(0, !enabled ? 'rgba(52,54,74,0.6)' : hot ? 'rgb(255,226,130)' : 'rgb(255,204,82)');
+      g.addColorStop(1, !enabled ? 'rgba(34,36,54,0.6)' : hot ? 'rgb(236,160,40)' : 'rgb(214,124,24)');
+      this._pill(ctx, r.x, r.y, r.w, r.h, 9, g, enabled ? 'rgb(255,244,190)' : 'rgba(130,136,160,0.63)', 1.6);
+      const ink = enabled ? 'rgb(70,36,8)' : 'rgb(170,176,190)';
+      this._text(ctx, title, r.x + r.w / 2, r.y + (compact ? r.h * 0.28 : 18) + 0.5, { px: (compact ? 9 : 11.5) * PT, color: ink, align: 'center', weight: 700 });
+      const cs = compact ? 1 : 2, num = String(cost), npx = (compact ? 8.5 : 10) * PT, nw = this._measure(ctx, num, npx, 700);
+      const total = coin.width * cs + 4 + nw, x0 = r.x + (r.w - total) / 2, cy = r.y + (compact ? r.h * 0.72 : 39);
+      ctx.save(); ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(coin, Math.round(x0), Math.round(cy - coin.height * cs / 2), coin.width * cs, coin.height * cs);
+      ctx.restore();
+      this._text(ctx, num, x0 + coin.width * cs + 4, cy + 0.5, { px: npx, color: ink, weight: 700 });
+      if (!compact) this._text(ctx, sub, r.x + r.w / 2, r.y + r.h - 13, { px: 8.5 * PT, color: ink, align: 'center', weight: 400 });
+    };
+    const restSub = s.canRest ? t('Heal the whole party') : (s.anyoneHurt ? t('Not enough gold') : t('Everyone is fine'));
+    const reorgSub = s.canReorganize ? t('Swap two heroes') : t('Not enough gold');
+    button(L.rest, 0, t('Rest'), restSub, 10, s.canRest);
+    button(L.reorg, 1, t('Reorganize'), reorgSub, 30, s.canReorganize);
+    const lv = L.leave, hotLeave = this._innHover === 2;
+    this._pill(ctx, lv.x, lv.y, lv.w, lv.h, 8, hotLeave ? 'rgba(26,22,60,0.92)' : 'rgba(26,22,60,0.8)', hotLeave ? 'rgb(255,214,120)' : 'rgba(170,186,240,0.78)', 1.5);
+    this._text(ctx, t('Not now'), lv.x + lv.w / 2, lv.y + lv.h / 2 + 0.5, { px: (compact ? 9 : 10.5) * PT, color: 'white', align: 'center', weight: 700 });
   }
 
   // ---- Game over: the score and a Start Over button ----------------------------------------------------------
@@ -781,7 +851,7 @@ export class Visualizer {
 
   _drawHotButton(ctx) {
     if (!this._hotVisible) return;
-    if (this.scene.isWaiting) { this._drawTargetUi(ctx); return; }
+    if (this.scene.isWaiting || this.scene.isSwapping) { this._drawTargetUi(ctx); return; }
     const r = this._hotRect, hot = this._overHot || this._hotDown;
     const s = this.scene, id = s.hotItem, n = s.itemCount(id);
     ctx.beginPath(); ctx.arc(r.x + r.w / 2, r.y + r.h / 2, (r.w - 1) / 2, 0, Math.PI * 2);
@@ -1166,6 +1236,20 @@ export class Visualizer {
     const p = this._point(e);
     const h = { x: p.x / this.hud, y: p.y / this.hud };
     const s = this.scene;
+    if (s.isInn) {
+      if (s.isSwapping) {
+        const overCancel = this._inHot(h), member = overCancel ? null : s.memberAt(p.x, p.y);
+        s.targetHover = member;
+        this._overHot = overCancel;
+        this.canvas.style.cursor = overCancel || member ? 'pointer' : 'default';
+      } else {
+        const b = this._innButtonAt(h);
+        const usable = b === 0 ? s.canRest : b === 1 ? s.canReorganize : b === 2;
+        this._innHover = b >= 0 && usable ? b : -1;
+        this.canvas.style.cursor = this._innHover >= 0 ? 'pointer' : 'default';
+      }
+      return;
+    }
     if (s.isGameOver) {
       this._overStartOver = this._inRect(h, this._startOverRect());
       if (this._overStartOver) { this.canvas.style.cursor = 'pointer'; return; }
@@ -1221,6 +1305,18 @@ export class Visualizer {
     const p = this._point(e);
     const h = { x: p.x / this.hud, y: p.y / this.hud };
     const s = this.scene;
+    if (s.isInn) {
+      if (s.isSwapping) {   // tap two heroes to swap them; the cross, or a tap anywhere else, backs out
+        if (this._inHot(h)) s.innCancel();
+        else { const who = s.memberAt(p.x, p.y); if (who) s.innPick(who); else s.innCancel(); }
+        this._overHot = false;
+      } else {
+        const b = this._innButtonAt(h);
+        if (b === 0) s.innRest(); else if (b === 1) s.innReorganize(); else if (b === 2) s.innLeave();
+        this._innHover = -1;
+      }
+      return;
+    }
     if (s.isGameOver && this._inRect(h, this._startOverRect())) {
       this._overStartOver = false;
       this.host.startOver && this.host.startOver();   // no confirmation: the adventure is already over

@@ -279,6 +279,7 @@ export function installTraits(P) {
     this._appendItemText(list);
     this._appendHpText(list);
     this._appendStartText(list);
+    this._appendSwapText(list);
     return list;
   };
 

@@ -207,13 +207,13 @@ export function installItems(P) {
   /** While a healing item waits for its target: most of the scene goes dark, and the members glow so they read as the thing to tap. */
   m._drawTargetOverlay = function (g, lw) {
     g.rect(0, 0, lw, this.lh, CA(170, 0, 0, 0));
-    if (!this.isTargeting) return;   // picking a multiplier: just the dark, the page draws the buttons
+    if (!this.isTargeting && !this.isSwapping) return;   // picking a multiplier: just the dark, the page draws the buttons
     const pulse = 0.5 + 0.5 * Math.sin(this.targetT * 5);
     if (!this._glowCache) this._glowCache = new WeakMap();
     for (const kind of this.party) {
       const r = this.memberRects[kind], frame = this.memberFrames[kind];
       if (!r || !frame) continue;
-      const hover = this.targetHover === kind;
+      const hover = this.targetHover === kind || (this.isSwapping && this.swapFirstKind === kind);   // (the first hero picked while swapping stays lit)
       const k = hover ? 1.0 : 0.65 + 0.35 * pulse;
       const cx = r.x + Math.trunc(r.w / 2), cy = r.y + Math.trunc(r.h / 2);
       for (let i = 3; i >= 0; i--) {   // a soft halo behind

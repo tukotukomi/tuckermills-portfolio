@@ -123,7 +123,7 @@ export class PixelScene {
 
     this.onProgress = null;   // callback: the saved progress changed
 
-    this._initCoins(); this._initStory(); this._initTraits(); this._initEnemies(); this._initHealth(); this._initItems();
+    this._initCoins(); this._initStory(); this._initTraits(); this._initEnemies(); this._initHealth(); this._initItems(); this._initInn();
     this.starting = false; this.startRects = []; this.signRect = null; this.startHover = -1;
     // The furthest the player has got across all adventures (finished days; the page keeps it) and whether this defeat beat it.
     this.bestDays = 0; this.onBest = null; this.newRecord = false; this.deathCounted = false;
@@ -247,7 +247,7 @@ export class PixelScene {
     this._drawGlowSpots(g);
     this._drawCampfireGlow(g, lw);
     this._drawCrystalLayer(g, lw);
-    if (this.targetItem !== null || this.isGameOver) this._drawTargetOverlay(g, lw);
+    if (this.targetItem !== null || this.isGameOver || this.isSwapping) this._drawTargetOverlay(g, lw);
     this._drawHpBars(g);   // on top of everything, so a night tint or the dimmed overlay doesn't hide it
     return this.canvas;
   }
@@ -932,7 +932,10 @@ export class PixelScene {
 
   get isChoosing() { return this.enc === 'Waiting' && this.offer !== null; }
 
-  _needsTavern() {
+  _needsTavern() { return this._recruitDue() || this._yearTavernDay(); }
+
+  /** Whether a companion (or, with a full party, the Old Man) is due at this day's tavern. */
+  _recruitDue() {
     if (this.party.length >= 6) return !this.oldManMet;
     return this.daysCompleted + 1 >= ENCOUNTER_DAY[this.party.length - 1];
   }
@@ -961,13 +964,7 @@ export class PixelScene {
       if (this.joinT >= 1) {
         this.joinT = 1;
         if (this.party.length >= 6 && !this.oldManMet) this._startOldMan();
-        else {
-          this.enc = 'None';
-          this.arrived = false;
-          this.daysCompleted++;
-          this.dayPhase = 0;
-          this.raiseProgress();
-        }
+        else this._beginInn();   // everyone's together: the inn, and then the day is done
       }
     }
     if (this.enc === 'Story') this._advanceStory(dt);
@@ -1123,6 +1120,7 @@ export class PixelScene {
   }
 
   _beginChoosing() {
+    if (!this._recruitDue()) { this._beginInn(); return; }   // nobody to recruit today (a yearly tavern): straight to the inn
     if (this.party.length >= 6) { this._startOldMan(); return; }
     this.enc = 'Waiting';
     if (this.offer === null) {
@@ -1323,8 +1321,10 @@ import { installTraits } from './traits.js';
 import { installEnemies } from './enemies.js';
 import { installItems } from './items.js';
 import { installHealth, setKindNames } from './health.js';
+import { installInn } from './inn.js';
 setKindNames(k => PARTY_ENUM[k], n => KIND_FROM_ENUM[n]);
 installHealth(PixelScene);
+installInn(PixelScene);
 installCoins(PixelScene);
 installStory(PixelScene);
 installTraits(PixelScene);

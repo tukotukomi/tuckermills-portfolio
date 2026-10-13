@@ -188,19 +188,22 @@ export function installStory(P) {
   };
 
   m._finishEncounter = function () {
-    if (this.storyFromOldMan) {
-      this.oldManMet = true;
-      this.daysCompleted++;
-      this.dayPhase = 0;
-    }
+    const fromTavern = this.storyFromOldMan;
+    if (fromTavern) this.oldManMet = true;
     this.oldManVisible = false;
     this.crystalActive = false;
     Sound.stopLoop('crystal');
     this.story = 'None';
-    this.enc = 'None';
-    this.arrived = false;
     this.selected = -1;
     this.fxMember = -1;
+    if (fromTavern) {
+      // The Old Man's visit ends the tavern's business, but not the visit: the inn comes last, and finishing there completes the day.
+      this.innAfterOldMan = true;
+      this._beginInn();
+      return;
+    }
+    this.enc = 'None';
+    this.arrived = false;
     this.nextCrystalDay = (Math.trunc(this.daysCompleted / 2) + 1) * 2;
     this.raiseProgress();
   };
