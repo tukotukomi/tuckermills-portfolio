@@ -35,7 +35,7 @@ const VARIANT_OF = { sheller: 'spikedsheller', orc: 'bassorc', nightmare: 'slash
 /** HP an attack takes off the member it lands on: 2 for most (doubled from 1), 4 for the Gargogryph (a whole volley of feathers counts as one attack); the variants hit twice as hard again. */
 const enemyDamage = kind => (baseOf(kind) === 'gargogryph' ? 4 : 2) * (isVariant(kind) ? 2 : 1);
 /** HP the Blood Moon takes off every member of the party when it breaks (a Wickedgryph's takes twice as much). */
-const bloodMoonDamage = kind => (isVariant(kind) ? 20 : 10);
+const bloodMoonDamage = kind => (isVariant(kind) ? 10 : 5);   // the Gargogryph's Blood Moon 5, the Wickedgryph's (Blood Moon II) 10
 
 export function enemyDef(kind) { return DEFS[kind]; }
 
@@ -262,7 +262,7 @@ export function installEnemies(P) {
           const mr = this._rectOf(k);
           this.bursts.push({ x: mr.x + mr.w / 2.0, y: mr.y + mr.h * 0.45, kind: 'blood', age: 0 });
         }
-        for (const k of this.party.slice()) this.damageMember(k, (this.bloodMoonDamage || 10) * this.monsterDamageMultiplier);   // the wave of red light hurts everyone
+        for (const k of this.party.slice()) this.damageMember(k, (this.bloodMoonDamage || 5) * this.monsterDamageMultiplier);   // the wave of red light hurts everyone
         this.flinch = 0.6;
       }
       if (this.bloodMoonT >= 1) this.bloodMoonT = -1;
