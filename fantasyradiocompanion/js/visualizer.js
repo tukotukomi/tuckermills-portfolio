@@ -671,38 +671,106 @@ export class Visualizer {
 
   get _compactGameOver() { return this.vh < 180; }
 
-  /** The panel: a card in the middle of a tall view, a slim banner under the HUD pills in a short one. */
-  _gameOverPanel() {
+  /** Where the pieces of the defeat screen go (HUD units): the big title, the score, the record to beat, the button. */
+  _gameOverLayout() {
     if (this._compactGameOver) {
-      const w = Math.min(this.vw - 16, 420), h = 54;
-      return { x: Math.trunc((this.vw - w) / 2), y: Math.max(40, this.vh - h - 8), w: w, h: h };
+      const btnW = 112, left = 14;
+      let top = 36;
+      const L = this._hudLayout(this.ctx);
+      for (const r of [L.day, L.gold, L.storage, L.berserk, L.np]) if (r) top = Math.max(top, r.y + r.h + 2);   // below the HUD pills, which may have wrapped
+      const th = Math.max(26, Math.min(46, this.vh - top - 22));
+      const title = { x: left, y: top, w: this.vw - left - btnW - 26, h: th };
+      const score = { x: left, y: title.y + title.h, w: title.w, h: 18 };
+      return { title: title, score: score, record: null, button: { x: this.vw - 12 - btnW, y: top + 4 + Math.trunc((th + 18 - 32) / 2), w: btnW, h: 32 } };
     }
-    const cw = Math.min(this.vw - 24, 340), ch = 138;
-    return { x: Math.trunc((this.vw - cw) / 2), y: Math.max(44, Math.trunc((this.vh - ch) / 2)), w: cw, h: ch };
+    const titleH = Math.trunc(Math.max(64, Math.min(150, Math.min(this.vh * 0.30, this.vw * 0.18))));
+    const cy = Math.max(44 + titleH, Math.trunc(this.vh * 0.52 - 28));
+    const title = { x: 0, y: cy - titleH, w: this.vw, h: titleH };
+    const score = { x: 0, y: cy + 4, w: this.vw, h: 28 };
+    const record = { x: 0, y: score.y + score.h, w: this.vw, h: 22 };
+    return { title: title, score: score, record: record, button: { x: Math.trunc((this.vw - 170) / 2), y: record.y + record.h + 12, w: 170, h: 40 } };
   }
 
-  _startOverRect() {
-    const p = this._gameOverPanel();
-    if (this._compactGameOver) return { x: p.x + p.w - 12 - 112, y: p.y + Math.trunc((p.h - 32) / 2), w: 112, h: 32 };
-    return { x: p.x + Math.trunc((p.w - 150) / 2), y: p.y + p.h - 16 - 36, w: 150, h: 36 };
+  _startOverRect() { return this._gameOverLayout().button; }
+
+  _yearsDays(y, d) {
+    return t(y === 1 ? '{n} year' : '{n} years', { n: y }) + ', ' + t(d === 1 ? '{n} day' : '{n} days', { n: d });
   }
 
-  _survivedText() {
-    const y = this.scene.survivedYears, d = this.scene.survivedDays;
-    const years = t(y === 1 ? '{n} year' : '{n} years', { n: y }), days = t(d === 1 ? '{n} day' : '{n} days', { n: d });
-    return t('Survived: {s}', { s: years + ', ' + days });
+  _survivedText() { return t('Survived: {s}', { s: this._yearsDays(this.scene.survivedYears, this.scene.survivedDays) }); }
+
+  /** The quest lettering. The medieval face comes from Google Fonts, asked for only once a defeat has been shown (the rest of the
+   *  time the page makes no third-party request); until it arrives, or without a connection, the machine's own medieval-looking
+   *  faces and then a serif stand in. */
+  _ensureQuestFont() {
+    if (this._questFontAsked) return;
+    this._questFontAsked = true;
+    try {
+      const link = document.createElement('link');
+      link.rel = 'stylesheet'; link.href = 'https://fonts.googleapis.com/css2?family=MedievalSharp&display=swap';
+      document.head.appendChild(link);
+      if (document.fonts && document.fonts.load) document.fonts.load('48px "MedievalSharp"').catch(() => { });
+    } catch (x) { /* fine: the fallbacks do */ }
+  }
+
+  _questFace() {
+    return isCjk() ? FONT : '"MedievalSharp", "Blackadder ITC", "Old English Text MT", "Lucida Calligraphy", Gabriola, "Palatino Linotype", "Book Antiqua", Georgia, serif';
+  }
+
+  /** The big word: filled with a gradient, edged in dark, with a soft halo, scaled down to fit the width available. */
+  _drawQuestTitle(ctx, text, box, record) {
+    let px = box.h * 0.9;
+    ctx.save();
+    ctx.font = px + 'px ' + this._questFace();
+    const w = ctx.measureText(text).width;
+    if (w > box.w - 24) { px *= (box.w - 24) / w; ctx.font = px + 'px ' + this._questFace(); }
+    const cx = this._compactGameOver ? box.x + Math.min(box.w, ctx.measureText(text).width) / 2 : box.x + box.w / 2;
+    const cy = box.y + box.h / 2;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+    const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 1000 * 3);
+    ctx.lineWidth = Math.max(2, px * 0.22);
+    ctx.strokeStyle = record ? 'rgba(255,214,90,' + (0.28 + 0.2 * pulse).toFixed(2) + ')' : 'rgba(200,30,40,0.28)';
+    ctx.strokeText(text, cx, cy);
+    ctx.lineWidth = Math.max(2, px * 0.13);
+    ctx.strokeStyle = 'rgba(10,6,14,0.9)';
+    ctx.strokeText(text, cx, cy);
+    const g = ctx.createLinearGradient(0, cy - px * 0.5, 0, cy + px * 0.5);
+    if (record) { g.addColorStop(0, 'rgb(255,248,176)'); g.addColorStop(1, 'rgb(236,118,26)'); }
+    else { g.addColorStop(0, 'rgb(255,132,112)'); g.addColorStop(1, 'rgb(140,16,34)'); }
+    ctx.fillStyle = g;
+    ctx.fillText(text, cx, cy);
+    ctx.lineWidth = Math.max(1, px * 0.025);
+    ctx.strokeStyle = record ? 'rgb(255,240,160)' : 'rgb(255,170,150)';
+    ctx.strokeText(text, cx, cy);
+    if (record) {   // sparkles drifting round the lettering
+      const tw = ctx.measureText(text).width, tm = performance.now() / 1000;
+      ctx.fillStyle = 'rgb(255,252,220)';
+      for (let i = 0; i < 9; i++) {
+        const ph = (tm * 0.55 + i * 0.37) % 1.0;
+        const sx = cx - tw / 2 + (((i * 0.137 + 0.05 * Math.sin(tm + i)) % 1 + 1) % 1) * tw;
+        const sy = cy - px * 0.4 + ((i * 0.61) % 1) * px * 0.8;
+        const a = Math.max(0, Math.sin(Math.PI * ph)), r = 2 + 4 * a;
+        ctx.globalAlpha = a;
+        ctx.fillRect(sx - 0.5, sy - r, 1.5, r * 2);
+        ctx.fillRect(sx - r, sy - 0.5, r * 2, 1.5);
+      }
+    }
+    ctx.restore();
   }
 
   _drawGameOver(ctx) {
     if (!this.scene.isGameOver) return;
-    const p = this._gameOverPanel(), b = this._startOverRect(), compact = this._compactGameOver;
-    this._pill(ctx, p.x, p.y, p.w, p.h, 10, 'rgba(18,14,40,0.93)', 'rgba(255,214,120,0.94)', 1.8);
-    if (compact) {
-      this._text(ctx, t('The party has fallen'), p.x + 12, p.y + 17, { px: 10 * PT, color: 'rgb(255,214,120)', weight: 700 });
-      this._text(ctx, this._survivedText(), p.x + 12, p.y + 39, { px: 9 * PT, color: 'white', weight: 400 });
-    } else {
-      this._text(ctx, t('The party has fallen'), p.x + p.w / 2, p.y + 30, { px: 13 * PT, color: 'rgb(255,214,120)', align: 'center', weight: 700 });
-      this._text(ctx, this._survivedText(), p.x + p.w / 2, p.y + 62, { px: 11 * PT, color: 'white', align: 'center', weight: 400 });
+    this._ensureQuestFont();
+    const L = this._gameOverLayout(), b = L.button, compact = this._compactGameOver, rec = this.scene.newRecord;
+    this._drawQuestTitle(ctx, t(rec ? 'NEW RECORD' : 'DEFEAT'), L.title, rec);
+    const sx = compact ? L.score.x : this.vw / 2, sy = L.score.y + L.score.h / 2 + 0.5, al = compact ? 'left' : 'center';
+    this._text(ctx, this._survivedText(), sx + 1, sy + 1, { px: (compact ? 9.5 : 13) * PT, color: 'rgba(0,0,0,0.78)', align: al, weight: 700 });
+    this._text(ctx, this._survivedText(), sx, sy, { px: (compact ? 9.5 : 13) * PT, color: 'white', align: al, weight: 700 });
+    if (L.record && !rec && this.scene.bestDays > 0) {
+      const text = t('Furthest: {s}', { s: this._yearsDays(Math.floor(this.scene.bestDays / 20), this.scene.bestDays % 20) });
+      const ry = L.record.y + L.record.h / 2 + 0.5;
+      this._text(ctx, text, this.vw / 2 + 1, ry + 1, { px: 10 * PT, color: 'rgba(0,0,0,0.78)', align: 'center', weight: 400 });
+      this._text(ctx, text, this.vw / 2, ry, { px: 10 * PT, color: 'rgb(214,220,244)', align: 'center', weight: 400 });
     }
     const g = ctx.createLinearGradient(0, b.y, 0, b.y + b.h);
     g.addColorStop(0, this._overStartOver ? 'rgb(255,232,130)' : 'rgb(255,206,80)');

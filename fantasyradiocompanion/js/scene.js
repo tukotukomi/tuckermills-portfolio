@@ -125,6 +125,8 @@ export class PixelScene {
 
     this._initCoins(); this._initStory(); this._initTraits(); this._initEnemies(); this._initHealth(); this._initItems();
     this.starting = false; this.startRects = []; this.signRect = null; this.startHover = -1;
+    // The furthest the player has got across all adventures (finished days; the page keeps it) and whether this defeat beat it.
+    this.bestDays = 0; this.onBest = null; this.newRecord = false; this.deathCounted = false;
     // Once the hero is picked, the fire and the sign stay where they are in the world, like any scenery, and scroll away as the party walks on.
     this.startCampActive = false; this.startFireWorld = 0; this.startSignWorld = 0; this.signW = 0; this.startHeroSide = 1;
     this._beginStart();
@@ -146,6 +148,7 @@ export class PixelScene {
     if (this.isGameOver) {
       // Everyone is down in the cart: no more time passes and the monsters wander off, but the music plays on.
       this.time += dt;
+      this._countDeath();   // is this the furthest they have got?
       if (this.enemy !== null || this.shots.length > 0 || this.bloodMoonT >= 0) this._resetEnemies();
       this._advanceParty(dt);
       return;
@@ -1108,6 +1111,17 @@ export class PixelScene {
     }
   }
 
+  /** Settles the verdict once, the first time the party is found fallen: did this run get further than any before it? */
+  _countDeath() {
+    if (this.deathCounted) return;
+    this.deathCounted = true;
+    this.newRecord = this.daysCompleted > this.bestDays;
+    if (this.newRecord) {
+      this.bestDays = this.daysCompleted;
+      if (this.onBest) this.onBest(this.bestDays);
+    }
+  }
+
   _beginChoosing() {
     if (this.party.length >= 6) { this._startOldMan(); return; }
     this.enc = 'Waiting';
@@ -1157,6 +1171,7 @@ export class PixelScene {
     this.notes.length = 0;
     this._resetStory(); this._resetCoins(); this._resetTraits(); this._resetItems();
     this.kills = {};
+    this.newRecord = false; this.deathCounted = false;
     this._beginStart();   // and the adventure begins again at the campfire, with a new pair to pick from
     this.raiseProgress();
   }
@@ -1166,7 +1181,7 @@ export class PixelScene {
   saveState() {
     const f5 = this.dayPhase.toFixed(5);
     return ['3', this.party.map(k => PARTY_ENUM[k]).join(','), f5, String(this.daysCompleted), this.offer ? this.offer.map(k => PARTY_ENUM[k]).join(',') : '',
-      this._saveStoryFields(), String(this.gold), this._saveTraitFields(), this._saveBestiaryFields()].concat(this._saveItemFields(), [this._saveHpFields(), this._saveBerserkFields(), this.starting ? '1' : '']).join('|');
+      this._saveStoryFields(), String(this.gold), this._saveTraitFields(), this._saveBestiaryFields()].concat(this._saveItemFields(), [this._saveHpFields(), this._saveBerserkFields(), this.starting ? '1' : '', this.newRecord ? '1' : '']).join('|');
   }
 
   loadState(state) {
@@ -1213,7 +1228,9 @@ export class PixelScene {
       this._loadItemFields(p.length > 12 ? p[12] : null, p.length > 13 ? p[13] : null, p.length > 14 ? p[14] : null);   // the bag, the hot slots, the Merchant's last day
       if (startFlag && this.offer !== null && this.party.length === 1) { this.starting = true; this.enc = 'Waiting'; this.camp = 1; }   // saved at the campfire, before a hero was picked
       this._loadBerserkFields(p.length > 16 ? p[16] : null);   // the Monster Berserker's multiplier and time left (absent in older saves)
-      this._loadHpFields(p.length > 15 ? p[15] : null);   // members below full health (absent in older saves: everyone is at full)
+      this._loadHpFields(p.length > 15 ? p[15] : null);
+      this.newRecord = p.length > 18 && p[18] === '1';   // a reload on the defeat screen keeps its verdict
+      this.deathCounted = this.isGameOver;   // members below full health (absent in older saves: everyone is at full)
     } catch (e) { /* a bad save just starts a fresh party */ }
   }
 

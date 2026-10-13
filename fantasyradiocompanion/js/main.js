@@ -23,6 +23,8 @@ async function main() {
 
   const scene = new PixelScene();
   scene.loadState(store.get('save', ''));
+  scene.bestDays = parseInt(store.get('best', '0'), 10) || 0;   // the furthest travelled, kept across restarts
+  scene.onBest = n => store.set('best', String(n));
   const player = new Player();
   const canvas = $('scene');
 

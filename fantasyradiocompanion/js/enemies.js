@@ -165,10 +165,11 @@ export function installEnemies(P) {
     }
 
     // The Thief, Fae, Light Mage and Fire Mage have a basic attack of their own, but only while they lead the line and stand right
-    // next to the enemy (a Gargogryph hovering at its standoff is out of reach).
+    // next to the enemy. A flier that hangs back at its standoff (the Gargogryph and its variant) can still be struck: otherwise
+    // the melee fighters would be useless against it.
     {
       const lead = this._frontKind();
-      const rr = this._rectOf(lead), adjacent = e.deathT < 0 && e.x - (rr.x + rr.w) <= 4;
+      const rr = this._rectOf(lead), adjacent = e.deathT < 0 && (!!DEFS[e.kind].standoff || e.x - (rr.x + rr.w) <= 4);
       for (const who of BASIC_ATTACKERS) {
         const interval = basicInterval(who);
         if (who !== lead || !this._active(who) || !adjacent) { this.basicTimer[who] = interval; continue; }
