@@ -16,18 +16,20 @@ const ENEMY_FROM_ENUM = { Sheller: 'sheller', Orc: 'orc', Nightmare: 'nightmare'
 const DEFS = {
   sheller: { name: 'Sheller', hp: 10, attackInterval: 2.0, walkSpeed: 20, nightOnly: false, headOffset: 0, habitat: 'Roams by day', note: 'A grumpy shell-back. Punches first, claws second.' },
   orc: { name: 'Orc', hp: 18, attackInterval: 3.0, walkSpeed: 15, nightOnly: false, headOffset: 7, habitat: 'Roams day and night', note: 'Fond of shiny earrings and swinging big sticks.' },
-  nightmare: { name: 'Nightmare', hp: 12, attackInterval: 2.5, walkSpeed: 24, nightOnly: true, headOffset: 0, hover: 2, habitat: 'Roams after dark', note: 'A cloaked drifter that only calls after dark.' },
+  nightmare: { name: 'Nightmare', hp: 12, attackInterval: 2.5, walkSpeed: 24, nightOnly: true, headOffset: 4, hover: 2, habitat: 'Roams after dark', note: 'A cloaked drifter that only calls after dark. Its scythe cuts through the first two in line.' },
   gargogryph: { name: 'Gargogryph', hp: 40, attackInterval: 3.5, walkSpeed: 18, nightOnly: true, headOffset: 4, hover: 5, standoff: 30, habitat: 'Only under a dark sky', note: 'A stone lion-ox with eagle wings, hard to hurt. Wingbeats throw razor feathers, and it can call down a Blood Moon.' },
 };
 
 DEFS.spikedsheller = Object.assign({}, DEFS.sheller, { base: 'sheller', name: 'Spiked Sheller', habitat: 'Roams by day, from Year 2', note: 'A Sheller that grew spikes over the winter. Hits twice as hard.' });
 DEFS.bassorc = Object.assign({}, DEFS.orc, { base: 'orc', name: 'Bass Orc', habitat: 'Roams day and night, from Year 2', note: 'Plays its orcish bass guitar at the party, and swings it, too. Hits twice as hard.' });
-DEFS.slasher = Object.assign({}, DEFS.nightmare, { base: 'nightmare', name: 'Slasher', habitat: 'Roams after dark, from Year 2', note: 'A Nightmare that traded its scythe for a horror knife. Hits twice as hard.' });
+DEFS.slasher = Object.assign({}, DEFS.nightmare, { base: 'nightmare', name: 'Slasher', habitat: 'Roams after dark, from Year 2', headOffset: 0, note: 'A Nightmare that traded its scythe for a horror knife. Hits twice as hard, and still cuts through the first two in line.' });
 DEFS.wickedgryph = Object.assign({}, DEFS.gargogryph, { base: 'gargogryph', name: 'Wickedgryph', habitat: 'Only under a dark sky, from Year 2', note: 'A Gargogryph with big fangs and a worse temper. Hits twice as hard, and so does its Blood Moon.' });
 
 /** The original a variant is built on (an original is its own): a variant behaves, sounds and moves like it. */
 const baseOf = kind => DEFS[kind].base || kind;
 const isVariant = kind => baseOf(kind) !== kind;
+/** How many members of the party one of its blows reaches: the Nightmare's scythe cuts through the first two in the line. */
+const reachOf = kind => (baseOf(kind) === 'nightmare' ? 2 : 1);
 const VARIANT_OF = { sheller: 'spikedsheller', orc: 'bassorc', nightmare: 'slasher', gargogryph: 'wickedgryph' };
 
 /** HP an attack takes off the member it lands on: 1 for everyone for now, 2 for the Gargogryph (a whole volley of feathers counts as one attack); the variants hit twice as hard. */
@@ -288,9 +290,15 @@ export function installEnemies(P) {
           for (let i = 0; i < 3; i++)
             this.shots.push({ x: er.x + 6, y: er.y + er.h * (0.35 + 0.12 * i), targetY: r.y + r.h * (0.3 + 0.18 * ((i + e.attackPose) % 3)), delay: 0.1 + i * 0.16, age: 0, damage: i === 0 ? enemyDamage(e.kind) : 0 });
         } else {
-          this.bursts.push({ x: r.x + r.w * 0.72, y: r.y + r.h * 0.45, kind: effect, age: 0 });
+          // A blow lands on the front member, and on the next one behind them if it reaches that far (the scythe).
+          const hit = this._lineOrder().filter(k => this.hpOf(k) > 0).slice(0, reachOf(e.kind));
+          if (hit.length === 0) hit.push(this._frontKind());
+          for (const k of hit) {
+            const hr = this._rectOf(k);
+            this.bursts.push({ x: hr.x + hr.w * 0.72, y: hr.y + hr.h * 0.45, kind: effect, age: 0 });
+          }
           this.flinch = 0.18;
-          this.damageMember(this._frontKind(), enemyDamage(e.kind) * this.monsterDamageMultiplier);
+          for (const k of hit) this.damageMember(k, enemyDamage(e.kind) * this.monsterDamageMultiplier);
         }
       }
       if (e.attackAnim >= 1) e.attackAnim = -1;

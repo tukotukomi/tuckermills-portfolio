@@ -96,12 +96,12 @@ const ES = {
   'Roams by day, from Year 2': 'Merodea de día, desde el Año 2', 'Roams day and night, from Year 2': 'Merodea de día y de noche, desde el Año 2', 'Roams after dark, from Year 2': 'Merodea al anochecer, desde el Año 2', 'Only under a dark sky, from Year 2': 'Solo bajo un cielo oscuro, desde el Año 2',
   'A Sheller that grew spikes over the winter. Hits twice as hard.': 'Un Caparazón al que le crecieron púas durante el invierno. Golpea el doble de fuerte.',
   'Plays its orcish bass guitar at the party, and swings it, too. Hits twice as hard.': 'Toca su bajo orco para el grupo, y también lo blande. Golpea el doble de fuerte.',
-  'A Nightmare that traded its scythe for a horror knife. Hits twice as hard.': 'Una Pesadilla que cambió su guadaña por un cuchillo de terror. Golpea el doble de fuerte.',
+  'A Nightmare that traded its scythe for a horror knife. Hits twice as hard, and still cuts through the first two in line.': 'Una Pesadilla que cambió su guadaña por un cuchillo de terror. Golpea el doble de fuerte y sigue atravesando a los dos primeros de la fila.',
   'A Gargogryph with big fangs and a worse temper. Hits twice as hard, and so does its Blood Moon.': 'Un Gargogrifo con grandes colmillos y peor carácter. Golpea el doble de fuerte, y su Luna de Sangre también.',
   'Roams by day': 'Merodea de día', 'Roams day and night': 'Merodea de día y de noche', 'Roams after dark': 'Merodea al anochecer', 'Only under a dark sky': 'Solo bajo un cielo oscuro',
   'A grumpy shell-back. Punches first, claws second.': 'Un gruñón con caparazón. Primero puñetazos, luego zarpazos.',
   'Fond of shiny earrings and swinging big sticks.': 'Aficionado a los pendientes brillantes y a blandir grandes garrotes.',
-  'A cloaked drifter that only calls after dark.': 'Un errante encapuchado que solo aparece al anochecer.',
+  'A cloaked drifter that only calls after dark. Its scythe cuts through the first two in line.': 'Un errante encapuchado que solo aparece al anochecer. Su guadaña atraviesa a los dos primeros de la fila.',
   'A stone lion-ox with eagle wings, hard to hurt. Wingbeats throw razor feathers, and it can call down a Blood Moon.': 'Un león-buey de piedra con alas de águila, difícil de herir. Sus aletazos lanzan plumas afiladas y puede invocar una Luna de Sangre.',
 };
 
@@ -193,12 +193,12 @@ const ZH = {
   'Roams by day, from Year 2': '第2年起白天出没', 'Roams day and night, from Year 2': '第2年起昼夜出没', 'Roams after dark, from Year 2': '第2年起夜间出没', 'Only under a dark sky, from Year 2': '第2年起仅在夜空下出现',
   'A Sheller that grew spikes over the winter. Hits twice as hard.': '一只在冬天长出尖刺的龟壳兽，攻击力翻倍。',
   'Plays its orcish bass guitar at the party, and swings it, too. Hits twice as hard.': '对着队伍弹奏兽人贝斯，还会抡起来砸人，攻击力翻倍。',
-  'A Nightmare that traded its scythe for a horror knife. Hits twice as hard.': '把镰刀换成恐怖尖刀的梦魇，攻击力翻倍。',
+  'A Nightmare that traded its scythe for a horror knife. Hits twice as hard, and still cuts through the first two in line.': '把镰刀换成恐怖尖刀的梦魇，攻击力翻倍，仍会同时砍中队伍里的前两人。',
   'A Gargogryph with big fangs and a worse temper. Hits twice as hard, and so does its Blood Moon.': '长着巨大獠牙、脾气更坏的石像鹫。攻击力翻倍，它的血月也一样。',
   'Roams by day': '白天出没', 'Roams day and night': '昼夜出没', 'Roams after dark': '夜间出没', 'Only under a dark sky': '仅在夜空下出现',
   'A grumpy shell-back. Punches first, claws second.': '脾气暴躁的龟壳兽，先出拳，再挥爪。',
   'Fond of shiny earrings and swinging big sticks.': '喜欢闪亮的耳环和挥舞大木棒。',
-  'A cloaked drifter that only calls after dark.': '披着斗篷的游荡者，只在天黑后现身。',
+  'A cloaked drifter that only calls after dark. Its scythe cuts through the first two in line.': '披着斗篷的游荡者，只在天黑后现身。它的镰刀会同时砍中队伍里的前两人。',
   'A stone lion-ox with eagle wings, hard to hurt. Wingbeats throw razor feathers, and it can call down a Blood Moon.': '长着鹰翼的石头狮牛，难以伤害。拍动翅膀会射出锋利的羽毛，还能召唤血月。',
 };
 
