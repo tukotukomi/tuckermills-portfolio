@@ -1,5 +1,5 @@
 // The tavern's inn. Every tavern visit ends with it (after any hero to pick, the Old Man's talk, a Fantasy Crystal...), and a tavern now
-// stands on the first day of every year from Year 2. "Need to rest and reorganize?": 10 gold heals and wakes the whole party, 30 gold
+// stands on the last day of every year, at the end of the day (Day 20 of Year 1, of Year 2, ...). "Need to rest and reorganize?": 10 gold heals and wakes the whole party, 30 gold
 // swaps the places of two heroes (chosen on a dimmed screen with the party glowing, like the Healing Potion's). A port of src\PixelInn.cs.
 
 import { C } from './util.js';
@@ -28,8 +28,9 @@ export function installInn(P) {
     canReorganize: { get() { return this.gold >= INN_REORGANIZE_COST && this.party.length >= 2; } },
   });
 
-  /** The first day of every year from Year 2 has a tavern on it, whether or not a companion is due. */
-  m._yearTavernDay = function () { return this.daysCompleted >= 20 && this.daysCompleted % 20 === 0; };
+  /** The last day of every year ends at a tavern, whether or not a companion is due. (When one is, it is the same visit, so the inn
+   *  never comes on two days in a row.) */
+  m._yearTavernDay = function () { return this.daysCompleted % 20 === 19; };
 
   m._beginInn = function () {
     this.enc = 'Inn';
