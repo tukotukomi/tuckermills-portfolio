@@ -163,6 +163,15 @@ const RECIPES = {
       return ((noise() - lp) * 0.8 + tri(ph) * 0.18) * spin * env * 0.8;
     });
   },
+  BowShot() {   // a crossbow's release: a click, the taut string's twang, and the bolt's short hiss
+    let ph = 0, lp = 0;
+    return make(0.3, t => {
+      ph += (230 + 90 * Math.exp(-t * 45)) / R;
+      lp += 0.35 * (noise() - lp);
+      return tri(ph) * exp(t, 0.085) * 0.6 + sin(ph * 2) * exp(t, 0.05) * 0.2
+        + noise() * 0.45 * exp(t, 0.005) + (noise() - lp) * 0.22 * exp(t, 0.05);
+    });
+  },
   AxeHit() {
     let ph = 0;
     return make(0.22, t => {

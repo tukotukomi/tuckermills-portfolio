@@ -5,7 +5,9 @@
 import { C, CA, withAlpha, rnd } from './util.js';
 import { Sprites } from './sprites.js';
 import { Sound } from './sfx.js';
-import { peckDamage, peckInterval, axeInterval, BASIC_ATTACKERS, BASIC_DAMAGE, basicInterval } from './traits.js';
+import { peckDamage, peckInterval, axeInterval, axeRangeBlocks, BLOCK_PIXELS, crossbowInterval, BASIC_ATTACKERS, BASIC_DAMAGE, basicInterval } from './traits.js';
+
+const BOW_FIRST_DELAY = 1.5;   // seconds from the Thief first being able to shoot to his first bolt
 import { t } from './i18n.js';
 
 // The four originals, then the variant of each that takes over half the spawns from Year 2 (same moves, twice the damage).
@@ -77,6 +79,7 @@ export function installEnemies(P) {
     this.bloodMoonStruck = false;
     this.kills = {};   // a kind is "known" once it has an entry here
     this.basicTimer = {};   // seconds to each basic attack of the Thief, Fae, Light Mage and Fire Mage
+    this.bowTimer = BOW_FIRST_DELAY;   // seconds to the Thief's next crossbow bolt
   };
 
   Object.defineProperty(m, 'inCombat', { get() { return this.enemy !== null && this.enemy.deathT < 0; } });
@@ -102,8 +105,9 @@ export function installEnemies(P) {
 
   m._spawnEnemy = function () {
     const kind = this._pickEnemyKind();
-    this.enemy = { kind: kind, x: this.lastLw + 6, hp: DEFS[kind].hp, maxHp: DEFS[kind].hp, engaged: false, walkT: 0, attackTimer: 0, attackAnim: -1, attackPose: 0, struck: false, peckTimer: 0, axeTimer: 0, bloodMoonUsed: false, hurtFlash: 0, deathT: -1 };
+    this.enemy = { kind: kind, x: this.lastLw + 6, hp: DEFS[kind].hp, maxHp: DEFS[kind].hp, engaged: false, walkT: 0, attackTimer: 0, attackAnim: -1, attackPose: 0, struck: false, peckTimer: 0, axeTimer: 0, axeStarted: false, bloodMoonUsed: false, hurtFlash: 0, deathT: -1 };
     this.basicTimer = {};
+    this.bowTimer = BOW_FIRST_DELAY;
     this._noteSeen(kind);
     Sound.play(ROAR[baseOf(kind)]);   // a warning as it comes into view
   };
@@ -128,7 +132,12 @@ export function installEnemies(P) {
       const roadSpeed = 12.0 * this.clock.bpm / 112.0 * this.move;   // the road is still scrolling past under the party
       e.x -= (DEFS[e.kind].walkSpeed + roadSpeed) * dt;
       e.walkT += dt;
-      if (e.x <= stopX) { e.x = stopX; e.engaged = true; e.attackTimer = 1.0; e.peckTimer = 0.6; e.axeTimer = 1.5; }
+      this._warriorAxeOnApproach(e, dt);   // his axe flies as soon as it is within reach, not only when it has arrived
+      this._thiefCrossbow(e, dt);
+      if (e.x <= stopX) {
+        e.x = stopX; e.engaged = true; e.attackTimer = 1.0; e.peckTimer = 0.6;
+        if (!e.axeStarted) e.axeTimer = 1.5;   // (otherwise the axes already in the air keep their rhythm)
+      }
       return;
     }
 
@@ -185,6 +194,8 @@ export function installEnemies(P) {
       }
     }
 
+    this._thiefCrossbow(e, dt);
+
     // The Warrior throws an axe every few seconds while there is a fight.
     if (this._active('warrior') && e.deathT < 0) {
       const level = this.levelOf('warrior');
@@ -193,6 +204,33 @@ export function installEnemies(P) {
         e.axeTimer += axeInterval(level);
         this._throwAxe(e, level);
       }
+    }
+  };
+
+  /** The Thief's crossbow: whenever he cannot make his basic melee attack (he is not leading the line, or the enemy is still
+   *  walking in) and the enemy is on screen, a bolt for 2 damage every 5 seconds. */
+  m._thiefCrossbow = function (e, dt) {
+    const rr = this._rectOf('thief');
+    const melee = this._frontKind() === 'thief' && (!!DEFS[e.kind].standoff || e.x - (rr.x + rr.w) <= 4);
+    if (!this._active('thief') || e.deathT >= 0 || e.x >= this.lastLw || melee) { this.bowTimer = BOW_FIRST_DELAY; return; }
+    this.bowTimer -= dt;
+    if (this.bowTimer > 0) return;
+    this.bowTimer += crossbowInterval(this.levelOf('thief'));
+    this._fireBolt(e);
+  };
+
+  /** While an enemy is still walking in, the Warrior starts throwing axes once it is on screen and within the axe's reach. */
+  m._warriorAxeOnApproach = function (e, dt) {
+    if (!this._active('warrior') || e.deathT >= 0) return;
+    const level = this.levelOf('warrior');
+    const reach = axeRangeBlocks(level) * BLOCK_PIXELS;
+    const wr = this._rectOf('warrior'), hand = wr.x + wr.w - 2;
+    if (e.x >= this.lastLw || e.x - hand > reach) { if (!e.axeStarted) e.axeTimer = 0.4; return; }   // not yet: the first axe leaves a moment after it comes within reach
+    e.axeTimer -= dt;
+    if (e.axeTimer <= 0) {
+      e.axeTimer += axeInterval(level);
+      e.axeStarted = true;
+      this._throwAxe(e, level);
     }
   };
 

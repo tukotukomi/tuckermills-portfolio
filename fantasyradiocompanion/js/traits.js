@@ -31,6 +31,8 @@ export function axeDamage(level) { return 3; }          // the Warrior's thrown 
 export function axeInterval(level) { return 3.0; }
 export function axeRangeBlocks(level) { return 10; }   // blocks of grass it travels
 export const BLOCK_PIXELS = 8;                          // one block of grass = one repeat of the ground's pattern
+export function crossbowDamage(level) { return 2; }    // the Thief's crossbow bolt, for when he is out of melee reach
+export function crossbowInterval(level) { return 5.0; }
 
 export function traitInterval(trait, level) {
   switch (trait) {
@@ -57,6 +59,8 @@ export function traitSummary(kind, level) {
 
 const AXE_SPEED = 90;   // scene pixels per second
 const AXE_ARC = 11;     // how high the lob rises above the straight line
+const BOLT_SPEED = 170;  // the Thief's crossbow bolt, scene pixels per second
+const BOLT_ARC = 4;      // a slight lob, enough to clear the heads in front
 const AXE_COLORS = { n: C(158, 100, 58), w: C(250, 250, 255), g: C(206, 212, 226), G: C(126, 134, 160) };
 // The axe's four spin positions (5x5): one picture turned a quarter turn at a time.
 const AXE_FRAMES = (() => {
@@ -84,6 +88,7 @@ export function installTraits(P) {
     this.memberRects = {};
     this.fireballs = [];
     this.axes = [];
+    this.bolts = [];
     this.heals = [];
     this.inspireLeft = 0; this.hatLeft = 0; this.shoutAge = -1; this.castFlash = 0; this.luckyFlash = 0;
     this.headSpots = new Map();
@@ -214,6 +219,20 @@ export function installTraits(P) {
       }
       Sound.play('AxeHit');
     }
+    // Bolts fly straight on to where the enemy was and hit it if it is still there (it only ever walks towards them).
+    for (let i = this.bolts.length - 1; i >= 0; i--) {
+      const b = this.bolts[i];
+      b.travel = Math.min(b.range, b.travel + dt * BOLT_SPEED);
+      const u = b.range > 0 ? b.travel / b.range : 1;
+      b.x = b.startX + b.travel;
+      b.y = b.startY + (b.endY - b.startY) * u - BOLT_ARC * Math.sin(Math.PI * u);
+      if (b.travel < b.range) continue;
+      this.bolts.splice(i, 1);
+      if (this.enemy !== null && this.enemy.deathT < 0 && b.x >= this.enemy.x - 0.5) {
+        this._damageEnemy(this.enemy, this._withHuzzah(crossbowDamage(this.levelOf('thief'))), false, b.x, b.y);
+        Sound.play('Peck');
+      }
+    }
     if (this.castFlash > 0) this.castFlash = Math.max(0, this.castFlash - dt);
     if (this.luckyFlash > 0) this.luckyFlash = Math.max(0, this.luckyFlash - dt);
     if (this.shoutAge >= 0) { this.shoutAge += dt; if (this.shoutAge > SHOUT_SECONDS) this.shoutAge = -1; }
@@ -235,9 +254,27 @@ export function installTraits(P) {
     Sound.play('AxeThrow');
   };
 
+  /** The Thief's crossbow: looses a bolt at the enemy. */
+  m._fireBolt = function (e) {
+    const r = this._rectOf('thief');
+    const sx = r.x + r.w - 1, sy = r.y + r.h * 0.45;
+    const er = this._enemyRect(e);
+    this.bolts.push({ startX: sx, startY: sy, endY: er.y + er.h * 0.45, range: Math.max(6, e.x - sx), travel: 0, x: sx, y: sy });
+    Sound.play('BowShot');
+  };
+
+  m._drawBolts = function (g) {
+    for (const b of this.bolts) {
+      const x = Math.round(b.x), y = Math.round(b.y);
+      g.rect(x - 4, y, 4, 1, C(176, 128, 74));
+      g.rect(x - 5, y, 1, 1, C(210, 70, 60));
+      g.rect(x, y, 2, 1, C(232, 236, 244));
+    }
+  };
+
   m._resetTraits = function () {
     this.traitTimer = {};
-    this.fireballs.length = 0; this.axes.length = 0; this.heals.length = 0;
+    this.fireballs.length = 0; this.axes.length = 0; this.bolts.length = 0; this.heals.length = 0;
     this.hp = {}; this.memberClip = {};
     this.inspireLeft = 0; this.hatLeft = 0; this.shoutAge = -1; this.castFlash = 0; this.luckyFlash = 0;
     this._resetEnemies();
@@ -291,6 +328,7 @@ export function installTraits(P) {
     this._drawCastFlash(g);
     this._drawFireballs(g);
     this._drawAxes(g);
+    this._drawBolts(g);
     this._drawLuckyFlash(g);
   };
 
