@@ -34,7 +34,7 @@ export function installItems(P) {
     this.merchantActive = false;      // on the road, drifting in with it
     this.merchantWorldX = 0;
     this.merchantMet = false;         // the party has reached him this visit
-    this.merchantDay = -1;            // the day (days finished) he last came on, so he comes once on each of his days
+    this.merchantDay = -1;            // the day (days finished) he last came on, so he comes once on his day
     this.shopT = 0;
     this.itemTexts = [];
     this.synergyFlash = 0;
@@ -72,8 +72,8 @@ export function installItems(P) {
   m.isInfinite = function (id) { return !!ITEM_DEFS[id].infinite; };
   m.hotItems = function () { return this.hot.slice(); };
 
-  /** The Merchant comes on the second and fourth day of each season. */
-  m._isMerchantDay = function () { return (this.daysCompleted % SEASON_DAYS) % 2 === 1; };
+  /** The Merchant comes on the second day of each season, and only that one. */
+  m._isMerchantDay = function () { return this.daysCompleted % SEASON_DAYS === 1; };
 
   // ---- Items -----------------------------------------------------------------------------------------------
 
