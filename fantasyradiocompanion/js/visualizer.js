@@ -138,6 +138,11 @@ export class Visualizer {
     const scale = this.sceneScale;
     const sc = this.scene.render(w, h, scale);
     ctx.drawImage(sc, 0, h - sc.height * scale, sc.width * scale, sc.height * scale);
+    const front = this.scene.frontCanvas;
+    if (front) {   // the start sign is in view: its words go on the board, and the party and the rest of the scene over them
+      this._drawOneSceneText(ctx, this.scene.signTextItem());
+      ctx.drawImage(front, 0, h - front.height * scale, front.width * scale, front.height * scale);
+    }
 
     this.summon.render(ctx, w, h, timeSeconds, this.summonAlpha, this.zoomed ? scale : 3, this.bufferingName, this.hud);
     this._drawSceneText(ctx);
@@ -496,9 +501,13 @@ export class Visualizer {
   // ---- Scene text, camp hint ---------------------------------------------------------------------------------------
 
   _drawSceneText(ctx) {
+    for (const t of this.scene.textOverlays()) this._drawOneSceneText(ctx, t);
+  }
+
+  _drawOneSceneText(ctx, t) {
     const px = Math.round(11 * PT * this.hud), pxSmall = Math.round(8.25 * PT * this.hud);
-    for (const t of this.scene.textOverlays()) {
-      if (t.alpha <= 0.01) continue;
+    {
+      if (t.alpha <= 0.01) return;
       const a = Math.min(1, t.alpha);
       let fpx = t.small ? pxSmall : px;
       const lines = String(t.text).split('\n');

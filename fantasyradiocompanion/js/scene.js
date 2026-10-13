@@ -91,6 +91,8 @@ export class PixelScene {
     this.canvas = document.createElement('canvas');
     this.canvas.width = 160; this.canvas.height = DESIGN_HEIGHT;
     this.g = new Pix(this.canvas);
+    // While the start sign is on screen, the frame is built in two layers with its words lettered between them (see render).
+    this.frontCanvas = null; this._frontG = null; this.signLayered = false;
 
     this.lh = DESIGN_HEIGHT; this.groundY = 27; this.lastLw = 160; this.lastScale = 3; this.lastTop = 0;
     this.clock = new BeatClock();
@@ -234,6 +236,24 @@ export class PixelScene {
     this._drawMerchant(g, lw);
     this._drawCampfire(g, lw);
     this._drawPersistentSign(g, lw);
+    // The sign's words are lettered onto the board at screen resolution, between the world and the party: while it is in view the
+    // front of the scene (the party, effects, light tint, overlays) goes on a transparent layer of its own, drawn over the words.
+    this.signLayered = this._signLayered(lw);
+    if (!this.signLayered) {
+      this.frontCanvas = null;
+      this._drawFront(g, lw);
+    } else {
+      if (!this._frontG) { this._frontG = new Pix(document.createElement('canvas')); }
+      this._frontG.resize(lw, lh);
+      this._frontG.clear();
+      this._drawFront(this._frontG, lw);
+      this.frontCanvas = this._frontG.canvas;
+    }
+    return this.canvas;
+  }
+
+  /** Everything in front of the ground scenery: enemies, the party, effects, weather, the light tint and the overlays. */
+  _drawFront(g, lw) {
     this._drawEnemies(g);
     this._drawParty(g, lw);
     this._drawCoins(g);
@@ -249,7 +269,23 @@ export class PixelScene {
     this._drawCrystalLayer(g, lw);
     if (this.targetItem !== null || this.isGameOver || this.isSwapping) this._drawTargetOverlay(g, lw);
     this._drawHpBars(g);   // on top of everything, so a night tint or the dimmed overlay doesn't hide it
-    return this.canvas;
+  }
+
+  /** Whether the sign left at the start of the adventure is on screen. */
+  _signLayered(lw) {
+    if (this.starting || !this.startCampActive) return false;
+    const bx = Math.round(this.startSignWorld - this.scroll);
+    return !(bx + this.signW < -2 || bx > lw + 2);
+  }
+
+  /** The sign's words as a label (control pixels), both lines as one so they shrink to fit together and stay the same size. */
+  signTextItem() {
+    const lines = PixelScene._signLines(t('START THE RADIO,\nSTART YOUR ADVENTURE!'));
+    return {
+      text: lines[0] + '\n' + lines[1], x: (this.signRect.x + this.signRect.w / 2) * this.lastScale,
+      y: this.lastTop + (this.signRect.y + this.signRect.h * 0.5) * this.lastScale,
+      alpha: 1, bubble: false, small: this.lastScale < 5, maxWidth: (this.signRect.w - 5) * this.lastScale, color: C(255, 244, 214)
+    };
   }
 
   // ---- Audio signals ----------------------------------------------------------------------------------
@@ -1086,19 +1122,8 @@ export class PixelScene {
     const pick = this.starting && !!this.offer;
     const left = !pick && this.startCampActive && !!this.signRect && this.signRect.h > 0 && this.signRect.x + this.signRect.w > 0 && this.signRect.x < this.lastLw;
     if (!pick && !left) return;
-    if (left) {
-      // The sign passes behind the party as the road scrolls: the words wait until nobody is in front of the board.
-      for (const k of this.party) {
-        const r = this.memberRects[k];
-        if (r && r.x + r.w >= this.signRect.x - 1 && r.x <= this.signRect.x + this.signRect.w + 1) return;
-      }
-    }
-    const lines = PixelScene._signLines(t('START THE RADIO,\nSTART YOUR ADVENTURE!')), small = this.lastScale < 5;
-    const cx = (this.signRect.x + this.signRect.w / 2) * this.lastScale;
-    list.push({   // both lines as one label, so they shrink to fit together and stay the same size
-      text: lines[0] + '\n' + lines[1], x: cx, y: this.lastTop + (this.signRect.y + this.signRect.h * 0.5) * this.lastScale,
-      alpha: 1, bubble: false, small: small, maxWidth: (this.signRect.w - 5) * this.lastScale, color: C(255, 244, 214)
-    });
+    if (left && this.signLayered) return;   // lettered on the board inside the scene (see render), under the party
+    list.push(this.signTextItem());
     for (let i = 0; pick && i < this.startRects.length && i < this.offer.length; i++) {
       const r = this.startRects[i];
       list.push({
