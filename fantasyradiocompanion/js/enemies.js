@@ -17,7 +17,7 @@ export const ENEMY_ENUM = { sheller: 'Sheller', orc: 'Orc', nightmare: 'Nightmar
 const ENEMY_FROM_ENUM = { Sheller: 'sheller', Orc: 'orc', Nightmare: 'nightmare', Gargogryph: 'gargogryph', SpikedSheller: 'spikedsheller', BassOrc: 'bassorc', Slasher: 'slasher', Wickedgryph: 'wickedgryph', Toucan: 'toucan' };
 
 const DEFS = {
-  toucan: { name: 'Toucan', hp: 16, attackInterval: 1.0, walkSpeed: 22, nightOnly: false, headOffset: 0, hover: 6, habitat: 'Roams day and night', note: 'A purple toucan made of two tin cans, with metal talons. It slings a can tab that slices through the whole party.' },
+  toucan: { name: 'Toucan', hp: 24, attackInterval: 1.0, walkSpeed: 22, nightOnly: false, headOffset: 0, hover: 6, habitat: 'Roams day and night', note: 'A purple toucan made of two tin cans, with metal talons. It slings a can tab that slices through the whole party.' },
   sheller: { name: 'Sheller', hp: 10, attackInterval: 2.0, walkSpeed: 20, nightOnly: false, headOffset: 0, habitat: 'Roams by day', note: 'A grumpy shell-back. Punches first, claws second.' },
   orc: { name: 'Orc', hp: 18, attackInterval: 3.0, walkSpeed: 15, nightOnly: false, headOffset: 7, habitat: 'Roams day and night', note: 'Fond of shiny earrings and swinging big sticks.' },
   nightmare: { name: 'Nightmare', hp: 12, attackInterval: 2.5, walkSpeed: 24, nightOnly: true, headOffset: 4, hover: 2, habitat: 'Roams after dark', note: 'A cloaked drifter that only calls after dark. Its scythe cuts through the first two in line.' },
