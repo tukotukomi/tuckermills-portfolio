@@ -38,8 +38,8 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x2f6e3a);
 const camera = new THREE.OrthographicCamera(-5, 5, 5, -5, -60, 120);
 
-scene.add(new THREE.HemisphereLight(0xffffff, 0x9aa6b8, 1.7));
-const sun = new THREE.DirectionalLight(0xfff6e8, 2.1);
+scene.add(new THREE.HemisphereLight(0xfff4ec, 0x7d6fa8, 1.15));
+const sun = new THREE.DirectionalLight(0xfff3dc, 2.9);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
 Object.assign(sun.shadow.camera, { left: -18, right: 18, top: 18, bottom: -18, near: 1, far: 60 });
@@ -47,6 +47,84 @@ sun.shadow.bias = -0.0006;
 sun.shadow.normalBias = 0.02;
 scene.add(sun, sun.target);
 const SUN_OFF = new THREE.Vector3(-5, 12, 4);
+
+// ---------- cel shading ----------
+// Lighting snaps to three flat bands via a toon gradient, then a screen-space
+// pass draws ink outlines wherever depth or surface direction jumps.
+const TOON_RAMP = (() => {
+  const t = new THREE.DataTexture(new Uint8Array([95, 175, 255]), 3, 1, THREE.RedFormat);
+  t.minFilter = t.magFilter = THREE.NearestFilter;
+  t.needsUpdate = true;
+  return t;
+})();
+const toon = opts => new THREE.MeshToonMaterial({ gradientMap: TOON_RAMP, ...opts });
+
+const INK = new THREE.Color(0x2b1d33);
+const rtColor = new THREE.WebGLRenderTarget(1, 1, { samples: 4 });
+rtColor.texture.colorSpace = THREE.SRGBColorSpace;
+const rtNormal = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType });
+rtNormal.depthTexture = new THREE.DepthTexture(1, 1);
+const normalMat = new THREE.MeshNormalMaterial();
+const postCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+const postMat = new THREE.ShaderMaterial({
+  uniforms: {
+    tColor: { value: rtColor.texture },
+    tNormal: { value: rtNormal.texture },
+    tDepth: { value: rtNormal.depthTexture },
+    texel: { value: new THREE.Vector2() },
+    depthRange: { value: camera.far - camera.near },
+    ink: { value: INK },
+  },
+  vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0., 1.); }',
+  fragmentShader: `
+    uniform sampler2D tColor, tNormal, tDepth;
+    uniform vec2 texel;
+    uniform float depthRange;
+    uniform vec3 ink;
+    varying vec2 vUv;
+    float D(vec2 uv) { return texture2D(tDepth, uv).x * depthRange; }
+    vec3 N(vec2 uv) { return texture2D(tNormal, uv).xyz; }
+    void main() {
+      vec3 col = texture2D(tColor, vUv).rgb;
+      vec2 dx = vec2(texel.x, 0.), dy = vec2(0., texel.y);
+      float dc = D(vUv);
+      // second difference: flat (even sloped) ground cancels out, steps don't
+      float de = max(abs(D(vUv - dx) + D(vUv + dx) - 2. * dc), abs(D(vUv - dy) + D(vUv + dy) - 2. * dc));
+      vec3 nc = N(vUv);
+      float ne = max(max(distance(nc, N(vUv + dx)), distance(nc, N(vUv - dx))),
+                     max(distance(nc, N(vUv + dy)), distance(nc, N(vUv - dy))));
+      float edge = max(smoothstep(0.04, 0.09, de), smoothstep(0.25, 0.45, ne));
+      gl_FragColor = vec4(mix(col, ink, edge * 0.9), 1.);
+      #include <colorspace_fragment>
+    }`,
+  depthTest: false,
+  depthWrite: false,
+});
+const postQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), postMat);
+renderer.shadowMap.autoUpdate = false;
+
+function renderCel() {
+  renderer.shadowMap.needsUpdate = true;
+  renderer.setRenderTarget(rtColor);
+  renderer.render(scene, camera);
+  const bg = scene.background;
+  scene.overrideMaterial = normalMat;
+  scene.background = null;
+  renderer.setRenderTarget(rtNormal);
+  renderer.render(scene, camera);
+  scene.overrideMaterial = null;
+  scene.background = bg;
+  renderer.setRenderTarget(null);
+  renderer.render(postQuad, postCam);
+}
+function resizeCel() {
+  const size = renderer.getDrawingBufferSize(new THREE.Vector2());
+  rtColor.setSize(size.x, size.y);
+  rtNormal.setSize(size.x, size.y);
+  // lines about 2 CSS px wide on phones, never thinner than one pixel
+  const px = Math.max(1, renderer.getPixelRatio());
+  postMat.uniforms.texel.value.set(px / size.x, px / size.y);
+}
 
 // ---------- voxel builder: many boxes -> one vertex-coloured mesh ----------
 const FACES = [
@@ -59,7 +137,7 @@ const FACES = [
 ];
 const _v = new THREE.Vector3(), _n = new THREE.Vector3(), _c = new THREE.Color();
 const _q = new THREE.Quaternion(), _e = new THREE.Euler();
-const VMAT = new THREE.MeshLambertMaterial({ vertexColors: true });
+const VMAT = toon({ vertexColors: true });
 
 class VB {
   constructor() { this.p = []; this.n = []; this.c = []; this.i = []; }
@@ -281,7 +359,7 @@ const COIN_GEO = new VB()
   .box(0.42, 0.42, 0.1, 0, 0, 0, 0xffc21a)
   .box(0.26, 0.26, 0.12, 0, 0, 0, 0xffe680)
   .geometry();
-const COIN_MAT = new THREE.MeshLambertMaterial({ vertexColors: true, emissive: 0x4a3000 });
+const COIN_MAT = toon({ vertexColors: true, emissive: 0x4a3000 });
 
 function buildHawk() {
   const group = new THREE.Group();
@@ -382,7 +460,7 @@ const sfx = (() => {
 // ---------- particles ----------
 const PGEO = new THREE.BoxGeometry(1, 1, 1);
 const pmats = {};
-const pmat = c => (pmats[c] ||= new THREE.MeshLambertMaterial({ color: c }));
+const pmat = c => (pmats[c] ||= toon({ color: c }));
 const parts = [];
 function burst(x, y, z, colors, n, spd = 3, up = 4, size = 0.12, life = 0.7) {
   for (let i = 0; i < n; i++) {
@@ -451,8 +529,8 @@ function pumpkin(vb, x) {
 function flowers(vb, x) {
   for (let i = 0; i < ri(1, 3); i++) {
     const fx = x + rand(-0.35, 0.35), fz = rand(-0.35, 0.35);
-    vb.box(0.03, 0.12, 0.03, fx, 0.06, fz, 0x3f8f2f);
-    vb.box(0.1, 0.06, 0.1, fx, 0.14, fz, pick([0xff6fae, 0xffd93b, 0xffffff, 0xb48cff]));
+    vb.box(0.04, 0.12, 0.04, fx, 0.06, fz, 0x3f8f2f);
+    vb.box(0.15, 0.07, 0.15, fx, 0.15, fz, pick([0xff6fae, 0xffd93b, 0xffffff, 0xb48cff]));
   }
 }
 function blocker(vb, x, outer) {
@@ -615,7 +693,7 @@ function addLane(r) {
       vb.box(2 * COLS + 1, 0.012, 0.07, 0, 0.006, z, 0x9a5434);
       for (const s of [-1, 1]) vb.box(VIS - COLS, 0.012, 0.07, s * (COLS + 0.5 + (VIS - COLS) / 2), 0.006, z, 0x6e3c25);
     }
-    lane.lightMat = new THREE.MeshLambertMaterial({ color: 0x661111, emissive: 0x000000 });
+    lane.lightMat = toon({ color: 0x661111, emissive: 0x000000 });
     for (const s of [-1, 1]) {
       const x = s * (COLS + 0.85);
       vb.box(0.1, 1.15, 0.1, x, 0.575, 0.44, 0xdddddd);
@@ -944,6 +1022,7 @@ function updatePlayer(dt) {
 function resize() {
   const w = window.innerWidth, h = window.innerHeight, a = w / h;
   renderer.setSize(w, h, false);
+  resizeCel();
   let halfW, halfH;
   if (a < 1) { halfW = 4.7; halfH = halfW / a; }
   else { halfH = 6.2; halfW = Math.min(halfH * a, 11); halfH = halfW / a; }
@@ -1073,7 +1152,7 @@ function step(dt) {
   updateCamera(dt);
   ensureLanes();
   updateParts(dt);
-  renderer.render(scene, camera);
+  renderCel();
 }
 function frame(now) {
   step(Math.min(0.05, (now - last) / 1000));
