@@ -38,7 +38,8 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x2f6e3a);
 const camera = new THREE.OrthographicCamera(-5, 5, 5, -5, -60, 120);
 
-scene.add(new THREE.HemisphereLight(0xfff4ec, 0x7d6fa8, 1.15));
+const hemi = new THREE.HemisphereLight(0xfff4ec, 0x7d6fa8, 1.15);
+scene.add(hemi);
 const sun = new THREE.DirectionalLight(0xfff3dc, 2.9);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
@@ -49,15 +50,27 @@ scene.add(sun, sun.target);
 const SUN_OFF = new THREE.Vector3(-5, 12, 4);
 
 // ---------- cel shading ----------
-// Lighting snaps to three flat bands via a toon gradient, then a screen-space
-// pass draws ink outlines wherever depth or surface direction jumps.
-const TOON_RAMP = (() => {
-  const t = new THREE.DataTexture(new Uint8Array([95, 175, 255]), 3, 1, THREE.RedFormat);
+// Lighting snaps to flat bands via a toon gradient, then a screen-space pass
+// draws ink outlines wherever depth or surface direction jumps.
+function ramp(levels) {
+  const t = new THREE.DataTexture(new Uint8Array(levels), levels.length, 1, THREE.RedFormat);
   t.minFilter = t.magFilter = THREE.NearestFilter;
   t.needsUpdate = true;
   return t;
-})();
-const toon = opts => new THREE.MeshToonMaterial({ gradientMap: TOON_RAMP, ...opts });
+}
+// Two looks: "cel" (soft three-band toon, plum ink) and "bold" (hard two-tone
+// shadows that match the unlit sides, thick black ink, punchier colour).
+const LOOKS = {
+  cel: { ramp: ramp([95, 175, 255]), sky: 0xfff4ec, ground: 0x7d6fa8, hemi: 1.15, sun: 2.9, ink: 0x2b1d33, inkMix: 0.9, line: 1, sat: 1 },
+  bold: { ramp: ramp([0, 255]), sky: 0xfff6f0, ground: 0xfff6f0, hemi: 2.1, sun: 1.5, ink: 0x000000, inkMix: 1, line: 1.6, sat: 1.3 },
+};
+const toons = [];
+let look = LOOKS.cel;
+const toon = opts => {
+  const m = new THREE.MeshToonMaterial({ gradientMap: look.ramp, ...opts });
+  toons.push(m);
+  return m;
+};
 
 const INK = new THREE.Color(0x2b1d33);
 const rtColor = new THREE.WebGLRenderTarget(1, 1, { samples: 4 });
@@ -72,29 +85,35 @@ const postMat = new THREE.ShaderMaterial({
     tNormal: { value: rtNormal.texture },
     tDepth: { value: rtNormal.depthTexture },
     texel: { value: new THREE.Vector2() },
+    texelN: { value: new THREE.Vector2() },
     depthRange: { value: camera.far - camera.near },
     ink: { value: INK },
+    inkMix: { value: 0.9 },
+    sat: { value: 1 },
   },
   vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0., 1.); }',
   fragmentShader: `
     uniform sampler2D tColor, tNormal, tDepth;
-    uniform vec2 texel;
+    uniform vec2 texel, texelN;  // silhouette lines vs thinner interior lines
     uniform float depthRange;
     uniform vec3 ink;
+    uniform float inkMix, sat;
     varying vec2 vUv;
     float D(vec2 uv) { return texture2D(tDepth, uv).x * depthRange; }
     vec3 N(vec2 uv) { return texture2D(tNormal, uv).xyz; }
     void main() {
       vec3 col = texture2D(tColor, vUv).rgb;
+      col = max(mix(vec3(dot(col, vec3(0.2126, 0.7152, 0.0722))), col, sat), 0.);
       vec2 dx = vec2(texel.x, 0.), dy = vec2(0., texel.y);
       float dc = D(vUv);
       // second difference: flat (even sloped) ground cancels out, steps don't
       float de = max(abs(D(vUv - dx) + D(vUv + dx) - 2. * dc), abs(D(vUv - dy) + D(vUv + dy) - 2. * dc));
       vec3 nc = N(vUv);
-      float ne = max(max(distance(nc, N(vUv + dx)), distance(nc, N(vUv - dx))),
-                     max(distance(nc, N(vUv + dy)), distance(nc, N(vUv - dy))));
+      vec2 nx = vec2(texelN.x, 0.), ny = vec2(0., texelN.y);
+      float ne = max(max(distance(nc, N(vUv + nx)), distance(nc, N(vUv - nx))),
+                     max(distance(nc, N(vUv + ny)), distance(nc, N(vUv - ny))));
       float edge = max(smoothstep(0.04, 0.09, de), smoothstep(0.25, 0.45, ne));
-      gl_FragColor = vec4(mix(col, ink, edge * 0.9), 1.);
+      gl_FragColor = vec4(mix(col, ink, edge * inkMix), 1.);
       #include <colorspace_fragment>
     }`,
   depthTest: false,
@@ -117,13 +136,29 @@ function renderCel() {
   renderer.setRenderTarget(null);
   renderer.render(postQuad, postCam);
 }
+let lineScale = 1;
 function resizeCel() {
   const size = renderer.getDrawingBufferSize(new THREE.Vector2());
   rtColor.setSize(size.x, size.y);
   rtNormal.setSize(size.x, size.y);
   // lines about 2 CSS px wide on phones, never thinner than one pixel
-  const px = Math.max(1, renderer.getPixelRatio());
+  const dpr = renderer.getPixelRatio();
+  const px = Math.max(1, dpr * lineScale), pn = Math.max(1, dpr * Math.min(lineScale, 1));
   postMat.uniforms.texel.value.set(px / size.x, px / size.y);
+  postMat.uniforms.texelN.value.set(pn / size.x, pn / size.y);
+}
+function applyLook(name) {
+  const L = look = LOOKS[name] || LOOKS.cel;
+  for (const m of toons) m.gradientMap = L.ramp;
+  hemi.color.setHex(L.sky);
+  hemi.groundColor.setHex(L.ground);
+  hemi.intensity = L.hemi;
+  sun.intensity = L.sun;
+  INK.setHex(L.ink);
+  postMat.uniforms.inkMix.value = L.inkMix;
+  postMat.uniforms.sat.value = L.sat;
+  lineScale = L.line;
+  resizeCel();
 }
 
 // ---------- voxel builder: many boxes -> one vertex-coloured mesh ----------
@@ -340,26 +375,141 @@ function buildLog(len) {
   return b.geometry();
 }
 
+// A mother goose leading three goslings, all one mover.
+function buildGeese() {
+  const b = new VB();
+  const goose = (x, s, body, bill) => {
+    b.box(0.42 * s, 0.3 * s, 0.3 * s, x, 0.26 * s, 0, body);
+    b.box(0.14 * s, 0.1 * s, 0.26 * s, x - 0.22 * s, 0.33 * s, 0, body);   // tail
+    b.box(0.1 * s, 0.34 * s, 0.1 * s, x + 0.17 * s, 0.52 * s, 0, body);    // neck
+    b.box(0.18 * s, 0.14 * s, 0.13 * s, x + 0.2 * s, 0.7 * s, 0, body);    // head
+    b.box(0.12 * s, 0.05 * s, 0.07 * s, x + 0.33 * s, 0.68 * s, 0, bill);
+    for (const z of [-1, 1]) {
+      b.box(0.03 * s, 0.03 * s, 0.02 * s, x + 0.25 * s, 0.73 * s, z * 0.066 * s, 0x111111);
+      b.box(0.05 * s, 0.12 * s, 0.05 * s, x, 0.06 * s, z * 0.08 * s, 0xff9a2e);
+      b.box(0.3 * s, 0.14 * s, 0.03 * s, x - 0.02 * s, 0.3 * s, z * 0.16 * s, shade(body, 0.85)); // wings
+    }
+  };
+  goose(0.75, 1.15, 0xffffff, 0xff9a2e);
+  goose(0.05, 0.62, 0xffe46b, 0xff9a2e);
+  goose(-0.4, 0.62, 0xffe46b, 0xff9a2e);
+  goose(-0.85, 0.62, 0xffe46b, 0xff9a2e);
+  return b.geometry();
+}
+
+function buildCombine() {
+  const b = new VB();
+  const R = 0x2f9a3a, Y = 0xffd23f, dark = 0x2a2a2a;
+  b.box(1.5, 0.75, 0.82, -0.25, 0.7, 0, R);               // body
+  b.box(0.6, 0.12, 0.84, -0.25, 1.1, 0, Y);               // stripe
+  b.box(0.52, 0.5, 0.6, 0.25, 1.32, 0, 0xbfe9ff);         // cab glass
+  b.box(0.6, 0.07, 0.68, 0.25, 1.6, 0, 0xffffff);
+  b.box(0.42, 0.42, 0.42, -0.65, 1.28, 0, R);             // grain tank
+  b.box(0.9, 0.12, 0.12, -0.75, 1.55, 0.3, Y, 0, 0, 0.35); // unloading auger
+  for (const s of [-1, 1]) {
+    b.box(0.66, 0.66, 0.2, 0.15, 0.33, s * 0.44, dark);
+    b.box(0.28, 0.28, 0.04, 0.15, 0.33, s * 0.55, Y);
+    b.box(0.4, 0.4, 0.16, -0.75, 0.2, s * 0.4, dark);
+  }
+  b.box(0.12, 0.3, 1.9, 0.75, 0.32, 0, Y);                // header bar, wider than the lane
+  b.box(0.32, 0.06, 1.9, 0.86, 0.12, 0, Y);
+  for (let z = -0.85; z <= 0.86; z += 0.17) b.box(0.18, 0.04, 0.05, 1.06, 0.12, z, 0xb0b0b0); // teeth
+  b.box(0.06, 0.4, 0.06, -0.2, 1.35, -0.25, 0x555555);    // exhaust
+  const g = b.geometry();
+  g.translate(-0.05, 0, 0);
+  return g;
+}
+function buildReel() {
+  const b = new VB();
+  b.box(0.06, 0.06, 1.8, 0, 0, 0, 0xd63a2f);
+  for (let i = 0; i < 4; i++) b.box(0.05, 0.42, 0.05, 0, 0, 0, 0xd63a2f, i * Math.PI / 4, 0, 0);
+  for (let i = 0; i < 4; i++) {
+    const a = i * Math.PI / 2;
+    b.box(0.05, 0.05, 1.8, 0, Math.sin(a) * 0.2, 0, 0xffd23f);
+    b.box(0.05, 0.05, 1.8, Math.cos(a) * 0.2, 0, 0, 0xffd23f);
+  }
+  return b.geometry();
+}
+
+// Crop duster biplane: flies low along its lane, wings overhang the lanes either side.
+function buildPlane() {
+  const b = new VB();
+  const Y = 0xffcf2a, R = 0xe2412f;
+  b.box(1.3, 0.3, 0.32, 0, 0.75, 0, Y);                   // fuselage
+  b.box(0.3, 0.26, 0.3, 0.6, 0.75, 0, R);                 // cowling
+  b.box(0.42, 0.06, 2.1, 0.2, 0.62, 0, Y);                // lower wing
+  b.box(0.42, 0.06, 2.1, 0.25, 1.08, 0, R);               // upper wing
+  for (const s of [-1, 1]) {
+    b.box(0.04, 0.42, 0.04, 0.25, 0.85, s * 0.85, 0x8a5a33);
+    b.box(0.12, 0.12, 0.08, 0.3, 0.28, s * 0.22, 0x2a2a2a); // wheels
+    b.box(0.04, 0.3, 0.04, 0.3, 0.45, s * 0.18, 0x555555);
+  }
+  b.box(0.32, 0.08, 0.7, -0.55, 0.82, 0, R);              // tail plane
+  b.box(0.3, 0.32, 0.06, -0.58, 0.98, 0, R);              // fin
+  b.box(0.22, 0.16, 0.24, 0.05, 0.96, 0, 0x6b4a8a);       // pilot (goggles)
+  b.box(0.06, 0.06, 0.26, 0.15, 0.99, 0, 0x111111);
+  b.box(0.5, 0.06, 0.2, -0.1, 0.56, 0, 0xbfbfbf);         // spray boom
+  return b.geometry();
+}
+function buildProp() {
+  const b = new VB();
+  b.box(0.04, 0.6, 0.08, 0, 0, 0, 0x333333);
+  b.box(0.05, 0.1, 0.1, 0, 0, 0, 0xcccccc);
+  return b.geometry();
+}
+
+const KAYAKS = [0xff4b4b, 0xffcf2a, 0x46a6ff, 0xff8fc8];
+function buildKayak(len, col) {
+  const b = new VB();
+  b.box(len, 0.22, 0.5, 0, 0, 0, col);
+  for (const s of [-1, 1]) b.box(0.3, 0.16, 0.3, s * (len / 2 + 0.12), -0.02, 0, col); // pointed ends
+  b.box(len - 0.3, 0.03, 0.34, 0, 0.115, 0, shade(col, 1.15));
+  for (let i = 0; i < len - 1; i++) {                     // cockpits
+    const x = -(len - 2) / 2 + i;
+    b.box(0.5, 0.04, 0.32, x, 0.125, 0, 0x4a3a66);
+  }
+  b.box(0.06, 0.04, 0.9, 0.15, 0.16, 0, 0x8a5a33, 0, 0.5, 0); // paddle across the deck
+  for (const s of [-1, 1]) b.box(0.14, 0.03, 0.2, 0.15 + s * 0.22, 0.16, s * 0.4, 0xffffff, 0, 0.5, 0);
+  return b.geometry();
+}
+
 const GEO = {};
-const LEN = { cow: 1.35, bull: 1.45, log2: 2, log3: 3, log4: 4 };
+const LEN = { cow: 1.35, bull: 1.45, log2: 2, log3: 3, log4: 4, geese: 2.2, combine: 2.6, plane: 1.6 };
 const TRACTORS = [[0xd63a2f, 0xffd23f], [0x3aa340, 0xffd23f], [0x3b7be0, 0xffffff], [0xff8a2a, 0x333333]];
 TRACTORS.forEach((_, i) => { LEN['tractor' + i] = 1.7; LEN['wagon' + i] = 3.15; });
+KAYAKS.forEach((_, i) => { LEN['kayak2_' + i] = 2.2; LEN['kayak3_' + i] = 3.2; });
 function geo(kind) {
   if (GEO[kind]) return GEO[kind];
   let g;
   if (kind.startsWith('tractor')) { const [c, h] = TRACTORS[+kind.slice(7)]; g = buildTractor(c, h, false); }
   else if (kind.startsWith('wagon')) { const [c, h] = TRACTORS[+kind.slice(5)]; g = buildTractor(c, h, true); }
+  else if (kind.startsWith('kayak')) g = buildKayak(+kind[5], KAYAKS[+kind.slice(7)]);
   else if (kind === 'cow') g = buildCow();
   else if (kind === 'bull') g = buildBull();
+  else if (kind === 'geese') g = buildGeese();
+  else if (kind === 'combine') g = buildCombine();
+  else if (kind === 'plane') g = buildPlane();
+  else if (kind === 'reel') g = buildReel();
+  else if (kind === 'prop') g = buildProp();
   else g = buildLog(LEN[kind]);
   return (GEO[kind] = g);
 }
+// Spinning parts attached to some movers: [geometry kind, x, y, axis]
+const SPINNERS = { combine: ['reel', 0.9, 0.5, 'z'], plane: ['prop', 0.77, 0.75, 'x'] };
 
-const COIN_GEO = new VB()
-  .box(0.42, 0.42, 0.1, 0, 0, 0, 0xffc21a)
-  .box(0.26, 0.26, 0.12, 0, 0, 0, 0xffe680)
-  .geometry();
-const COIN_MAT = toon({ vertexColors: true, emissive: 0x4a3000 });
+// Sunflowers are the collectible. Built standing on the ground at the origin.
+const FLOWER_GEO = (() => {
+  const b = new VB();
+  b.box(0.06, 0.5, 0.06, 0, 0.25, 0, 0x3f8f2f);
+  b.box(0.18, 0.04, 0.1, 0.1, 0.22, 0, 0x4faa38, 0, 0, 0.4);
+  b.box(0.18, 0.04, 0.1, -0.1, 0.32, 0, 0x4faa38, 0, 0, -0.4);
+  b.box(0.42, 0.42, 0.06, 0, 0.66, 0.02, 0xffcc1a);
+  b.box(0.42, 0.42, 0.06, 0, 0.66, 0.02, 0xffb000, 0, 0, Math.PI / 4);
+  b.box(0.2, 0.2, 0.1, 0, 0.66, 0.04, 0x7a4a1c);
+  b.box(0.08, 0.08, 0.02, -0.03, 0.69, 0.095, 0x5a3412);
+  return b.geometry();
+})();
+const FLOWER_MAT = toon({ vertexColors: true, emissive: 0x3a2400 });
 
 function buildHawk() {
   const group = new THREE.Group();
@@ -454,6 +604,9 @@ const sfx = (() => {
     snort() { noise(0.35, 0.35, 'bandpass', 500); tone(90, 60, 0.3, 'sawtooth', 0.1); },
     screech() { tone(2300, 1200, 0.55, 'sawtooth', 0.05); tone(2000, 1400, 0.45, 'square', 0.03, 0.05); },
     launch() { tone(300, 1200, 0.4, 'square', 0.07); },
+    honk() { tone(420, 330, 0.18, 'sawtooth', 0.09); tone(430, 340, 0.2, 'sawtooth', 0.09, 0.2); },
+    buzz() { tone(110, 120, 0.45, 'sawtooth', 0.025); },
+    chomp() { noise(0.4, 0.4, 'bandpass', 900); tone(140, 70, 0.35, 'square', 0.08); },
   };
 })();
 
@@ -494,7 +647,7 @@ function strip(vb, top, color, dark) {
   vb.box(inner, 1, 1, 0, top - 0.5, 0, color);
   for (const s of [-1, 1]) vb.box(outer, 1, 1, s * (COLS + 0.5 + outer / 2), top - 0.5, 0, dark);
 }
-const LANE_Y = { grass: 0, forest: 0, road: -0.02, pasture: 0, bull: 0, water: 0.05, pads: -0.15 };
+const LANE_Y = { grass: 0, forest: 0, road: -0.02, pasture: 0, bull: 0, wheat: 0, crops: 0, water: 0.05, pads: -0.15 };
 
 function tree(vb, x) {
   const h = pick([0.5, 0.8, 1.1, 1.4]), g = pick(GREENS);
@@ -564,9 +717,9 @@ function reachOf(blocked, prev) {
   return reach;
 }
 
-function addCoin(lane, c) {
-  const m = new THREE.Mesh(COIN_GEO, COIN_MAT);
-  m.position.set(c, 0.45 + LANE_Y[lane.type], 0);
+function addSunflower(lane, c) {
+  const m = new THREE.Mesh(FLOWER_GEO, FLOWER_MAT);
+  m.position.set(c, LANE_Y[lane.type], 0);
   m.castShadow = true;
   lane.group.add(m);
   lane.coins.push({ c, m });
@@ -589,8 +742,17 @@ function spawnMover(lane, kind, x, y = 0) {
   mesh.receiveShadow = true;
   mesh.position.set(x, y, 0);
   if (lane.dir < 0) mesh.rotation.y = Math.PI;
+  let spin = null;
+  if (SPINNERS[kind]) {
+    const [part, px, py, axis] = SPINNERS[kind];
+    spin = new THREE.Mesh(geo(part), VMAT);
+    spin.position.set(px, py, 0);
+    spin.castShadow = true;
+    spin.userData.axis = axis;
+    mesh.add(spin);
+  }
   lane.group.add(mesh);
-  return { kind, len: LEN[kind], x, y, mesh, active: true, bob: 0, phase: rand(0, 6) };
+  return { kind, len: LEN[kind], x, y, mesh, spin, active: true, bob: 0, phase: rand(0, 6), buzz: 0 };
 }
 function wrap(m) {
   const half = SPAN / 2;
@@ -604,7 +766,8 @@ function nextType(r, prev) {
     let t;
     if (last !== 'grass' && Math.random() < 0.45) t = 'grass';
     else {
-      const w = [['grass', 0.2], ['road', 0.28 + 0.05 * d], ['pasture', 0.17], ['water', 0.2], ['bull', 0.1 + 0.06 * d]];
+      const w = [['grass', 0.2], ['road', 0.24 + 0.05 * d], ['pasture', 0.16], ['water', 0.2], ['bull', 0.08 + 0.05 * d],
+        ['wheat', 0.1], ['crops', r > 15 ? 0.07 + 0.05 * d : 0]];
       let k = Math.random() * w.reduce((s, x) => s + x[1], 0);
       t = w.find(x => (k -= x[1]) < 0)[0];
       if (t === last && t !== 'grass') t = 'grass';
@@ -613,6 +776,8 @@ function nextType(r, prev) {
     else if (t === 'road') queue = Array(ri(1, 2 + Math.round(2 * d))).fill('road');
     else if (t === 'pasture') queue = Array(ri(1, 2)).fill('pasture');
     else if (t === 'bull') queue = Array(ri(1, d > 0.4 ? 2 : 1)).fill('bull');
+    else if (t === 'wheat') queue = Array(ri(1, 2)).fill('wheat');
+    else if (t === 'crops') queue = ['crops'];
     else if (last === 'grass' && Math.random() < 0.3) queue = ['pads', 'grass'];
     else queue = Array(ri(1, 2 + Math.round(d))).fill('water');
   }
@@ -661,7 +826,7 @@ function addLane(r) {
         if (blocked.has(x)) blocker(vb, x, false);
         else if (Math.random() < 0.18) flowers(vb, x);
       }
-      if (r > 3 && Math.random() < 0.16 && reach.size) addCoin(lane, pick([...reach]));
+      if (r > 3 && Math.random() < 0.16 && reach.size) addSunflower(lane, pick([...reach]));
     }
   } else if (type === 'road') {
     strip(vb, -0.02, 0x5f5c66, shade(0x5f5c66, 0.72));
@@ -673,16 +838,20 @@ function addLane(r) {
     lane.speed = rand(1.5, 2.9) * (1 + 0.7 * d);
     const color = ri(0, TRACTORS.length - 1);
     addMovers(lane, () => (Math.random() < 0.25 ? 'wagon' : 'tractor') + (Math.random() < 0.5 ? color : ri(0, TRACTORS.length - 1)), 3, 7.5 - 2 * d);
-    if (Math.random() < 0.1) addCoin(lane, ri(-COLS, COLS));
+    if (Math.random() < 0.1) addSunflower(lane, ri(-COLS, COLS));
   } else if (type === 'pasture') {
     strip(vb, 0, 0xcfa66b, shade(0xcfa66b, 0.72));
     for (let i = 0; i < 14; i++) {
       const x = rand(-VIS, VIS);
       vb.box(0.14, 0.01, 0.1, x, 0.005, rand(-0.35, 0.35), Math.abs(x) <= COLS + 0.5 ? 0xb58e58 : 0x8a6c43);
     }
-    if (d > 0.2 && Math.random() < 0.3) {
+    const k = Math.random();
+    if (d > 0.2 && k < 0.3) {
       lane.speed = rand(5, 6.5) * (1 + 0.3 * d);
       addMovers(lane, () => 'bull', 9, 15);
+    } else if (k < 0.62) {
+      lane.speed = rand(1.1, 1.7) * (1 + 0.4 * d);
+      addMovers(lane, () => 'geese', 2.8, 6);
     } else {
       lane.speed = rand(0.6, 1.15) * (1 + 0.4 * d);
       addMovers(lane, () => 'cow', 2.4, 5.5);
@@ -714,13 +883,43 @@ function addLane(r) {
       lane.movers.push(m);
     }
     lane.stamp = { state: 'wait', t: rand(1.5, 4), ding: 0 };
+  } else if (type === 'wheat') {
+    strip(vb, 0, 0xe9c46a, shade(0xe9c46a, 0.74));
+    for (let x = -VIS; x <= VIS; x++) {                   // stubble tufts, purely decoration
+      for (let i = 0; i < 2; i++) {
+        const tx = x + rand(-0.4, 0.4), tz = rand(-0.38, 0.38);
+        vb.box(0.05, rand(0.08, 0.16), 0.05, tx, 0.06, tz, Math.abs(tx) <= COLS + 0.5 ? 0xd4a83f : 0xa88430);
+      }
+    }
+    lane.speed = rand(0.9, 1.5) * (1 + 0.5 * d);
+    addMovers(lane, () => 'combine', 5, 9 - 2 * d);
+    if (Math.random() < 0.12) addSunflower(lane, ri(-COLS, COLS));
+  } else if (type === 'crops') {
+    strip(vb, 0, 0x8a5e3c, shade(0x8a5e3c, 0.72));
+    for (const z of [-0.3, 0.3]) {
+      vb.box(2 * VIS + 1, 0.03, 0.18, 0, 0.015, z, 0x6e4a2e);  // furrows
+      for (let x = -VIS; x <= VIS; x++) {
+        const out = Math.abs(x) > COLS;
+        vb.box(0.26, 0.18, 0.2, x + 0.25, 0.09, z, out ? 0x3f8a33 : 0x5cbf48);  // cabbages
+        vb.box(0.16, 0.06, 0.12, x + 0.25, 0.2, z, out ? 0x56a845 : 0x8fe070);
+      }
+    }
+    lane.speed = rand(6.5, 8.5) * (1 + 0.25 * d);
+    addMovers(lane, () => 'plane', 14, 24);
   } else if (type === 'water' || type === 'pads') {
     strip(vb, -0.22, 0x56c3ee, shade(0x56c3ee, 0.74));
     if (type === 'water') {
       if (prev && prev.type === 'water') lane.dir = -prev.dir;
-      lane.speed = rand(0.9, 1.9) * (1 + 0.45 * d);
-      const lens = d > 0.5 ? ['log2', 'log2', 'log3'] : ['log2', 'log3', 'log3', 'log4'];
-      addMovers(lane, () => pick(lens), 1.2, 2.4 + d, -0.1);
+      if (Math.random() < 0.35) {
+        // a flotilla of kayaks: quicker than logs, and shorter
+        lane.speed = rand(1.4, 2.3) * (1 + 0.4 * d);
+        const col = ri(0, KAYAKS.length - 1);
+        addMovers(lane, () => 'kayak' + (Math.random() < 0.6 ? 2 : 3) + '_' + (Math.random() < 0.5 ? col : ri(0, KAYAKS.length - 1)), 1.3, 2.4 + d, -0.1);
+      } else {
+        lane.speed = rand(0.9, 1.9) * (1 + 0.45 * d);
+        const lens = d > 0.5 ? ['log2', 'log2', 'log3'] : ['log2', 'log3', 'log3', 'log4'];
+        addMovers(lane, () => pick(lens), 1.2, 2.4 + d, -0.1);
+      }
     } else {
       const cands = [...prev.reach];
       lane.padCols = new Set();
@@ -743,7 +942,10 @@ function addLane(r) {
 function removeLane(lane) {
   scene.remove(lane.group);
   lane.static.geometry.dispose();
-  if (lane.lightMat) lane.lightMat.dispose();
+  if (lane.lightMat) {
+    lane.lightMat.dispose();
+    toons.splice(toons.indexOf(lane.lightMat), 1);
+  }
   lanes.delete(lane.r);
 }
 
@@ -753,8 +955,22 @@ function updateLane(lane, dt, time) {
     m.x += lane.dir * lane.speed * dt;
     wrap(m);
     m.mesh.position.x = m.x;
+    if (m.spin) m.spin.rotation[m.spin.userData.axis] += dt * (m.kind === 'plane' ? 40 : -5);
     if (m.kind === 'cow' || m.kind === 'bull') {
       m.mesh.position.y = Math.abs(Math.sin(time * lane.speed * 5 + m.phase)) * 0.05;
+    } else if (m.kind === 'geese') {
+      m.mesh.rotation.x = Math.sin(time * 14 + m.phase) * 0.08;   // waddle
+      m.mesh.position.y = Math.abs(Math.sin(time * 14 + m.phase)) * 0.03;
+    } else if (m.kind === 'plane') {
+      m.mesh.position.y = Math.sin(time * 3 + m.phase) * 0.05;
+      if (Math.abs(m.x) < VIS && Math.random() < dt * 25) {
+        burst(m.x - lane.dir * 0.4, 0.5, -lane.r + rand(-0.5, 0.5), [0xf3f0d0, 0xdff5c8], 1, 0.4, 0.3, 0.18, 0.9);
+      }
+      m.buzz -= dt;
+      if (m.buzz <= 0 && game.state === 'play' && Math.abs(lane.r - P.r) < 4 && Math.abs(m.x - P.x) < 9) {
+        m.buzz = 0.45;
+        sfx.buzz();
+      }
     } else if (lane.type === 'water') {
       m.bob = Math.max(0, m.bob - dt * 0.6);
       m.mesh.position.y = m.y - Math.sin(m.bob * 40) * m.bob * 0.6 + Math.sin(time * 2 + m.phase) * 0.012;
@@ -890,7 +1106,13 @@ const DEATH_MSG = {
   splash: "Splash! Betty Lou can't swim!",
   swept: 'Swept down the creek!',
   hawk: 'Snatched by a hawk!',
+  goose: 'Chased off by geese!',
+  harvest: 'Baled up by a combine!',
+  dusted: 'Buzzed by a crop duster!',
 };
+// Which death each moving thing causes, and which animation each death uses.
+const HIT_BY = { bull: 'launch', cow: 'bonk', geese: 'goose', combine: 'harvest', plane: 'dusted' };
+const FLAT = new Set(['squash', 'harvest']), KNOCK = new Set(['bonk', 'goose']), FLY = new Set(['launch', 'dusted']);
 
 function die(kind, mover, lane) {
   if (!P.alive) return;
@@ -902,20 +1124,36 @@ function die(kind, mover, lane) {
   P.log = null;
   game.state = 'dead';
   const { inner } = P.model;
-  if (kind === 'squash') {
-    P.y = LANE_Y.road;
+  if (FLAT.has(kind)) {
+    P.y = LANE_Y[lane.type];
     inner.scale.set(1.35, 0.12, 1.35);
-    sfx.squash();
-    burst(P.x, 0.2, P.z, [0xff8fc8, 0x3e6fd8, ...RAINBOW], 14, 2.5, 3, 0.1, 0.6);
-  } else if (kind === 'bonk') {
+    if (kind === 'harvest') {
+      sfx.chomp();
+      burst(P.x, 0.3, P.z, [0xe9c46a, 0xf2d37a, 0xc9a23e, ...RAINBOW], 22, 2.5, 5, 0.1, 0.8);
+    } else {
+      sfx.squash();
+      burst(P.x, 0.2, P.z, [0xff8fc8, 0x3e6fd8, ...RAINBOW], 14, 2.5, 3, 0.1, 0.6);
+    }
+  } else if (KNOCK.has(kind)) {
     P.y = 0;
     P.vx = lane.dir;
-    sfx.moo();
-    burst(P.x, 1.1, P.z, [0xffd93b, 0xffffff], 8, 1.2, 3, 0.1, 0.8);
-  } else if (kind === 'launch') {
-    P.vx = lane.dir * 7; P.vy = 11; P.vz = rand(-1.5, 1.5);
-    sfx.launch();
-    burst(P.x, 0.3, P.z, [0xc89a6a, 0xa87a4a], 12, 2, 3, 0.15, 0.7);
+    if (kind === 'goose') {
+      sfx.honk();
+      burst(P.x, 0.6, P.z, [0xffffff, 0xf2f2f2, 0xffe46b], 14, 1.5, 3, 0.09, 1.0);
+    } else {
+      sfx.moo();
+      burst(P.x, 1.1, P.z, [0xffd93b, 0xffffff], 8, 1.2, 3, 0.1, 0.8);
+    }
+  } else if (FLY.has(kind)) {
+    if (kind === 'dusted') {
+      P.vx = lane.dir * 5; P.vy = 7; P.vz = rand(-1, 1);
+      sfx.launch();
+      burst(P.x, 0.7, P.z, [0xf3f0d0, 0xdff5c8, 0xffffff], 18, 2, 2, 0.2, 1.0);
+    } else {
+      P.vx = lane.dir * 7; P.vy = 11; P.vz = rand(-1.5, 1.5);
+      sfx.launch();
+      burst(P.x, 0.3, P.z, [0xc89a6a, 0xa87a4a], 12, 2, 3, 0.15, 0.7);
+    }
   } else if (kind === 'splash' || kind === 'swept') {
     sfx.splash();
     burst(P.x, 0, P.z, [0xffffff, 0xbfe9ff, 0x56c3ee], 18, 1.8, 5, 0.12, 0.7);
@@ -954,13 +1192,13 @@ function updatePlayer(dt) {
   if (P.alive && game.state === 'play') {
     const row = P.hop ? (P.hop.t > 0.5 ? P.hop.toR : P.hop.fromR) : P.r;
     const lane = laneAt(row);
-    if (lane && (lane.type === 'road' || lane.type === 'pasture' || lane.type === 'bull')) {
+    if (lane && (lane.movers.length && lane.type !== 'water')) {
       for (const m of lane.movers) {
         if (!m.active) continue;
         if (Math.abs(m.x - P.x) < m.len / 2 + 0.2) {
           if (P.hop) { P.x = Math.round(P.hop.t > 0.5 ? P.hop.tx : P.hop.fx); P.z = -row; }
           P.r = row;
-          die(m.kind === 'bull' ? 'launch' : m.kind === 'cow' ? 'bonk' : 'squash', m, lane);
+          die(HIT_BY[m.kind] || 'squash', m, lane);
           break;
         }
       }
@@ -972,12 +1210,12 @@ function updatePlayer(dt) {
   if (!P.alive) {
     P.deathT += dt;
     const t = P.deathT;
-    if (P.death === 'launch') {
+    if (FLY.has(P.death)) {
       P.vy -= 22 * dt;
       P.x += P.vx * dt; P.y += P.vy * dt; P.z += P.vz * dt;
       inner.rotation.x += 13 * dt;
       inner.rotation.z += 7 * dt;
-    } else if (P.death === 'bonk') {
+    } else if (KNOCK.has(P.death)) {
       inner.rotation.z = lerp(inner.rotation.z, -P.vx * Math.PI / 2, Math.min(1, dt * 14));
       if (t < 0.35) P.x += P.vx * 2.5 * dt;
     } else if (P.death === 'splash' || P.death === 'swept') {
@@ -1001,8 +1239,8 @@ function updatePlayer(dt) {
   }
 
   // squash & stretch, facing, pigtail bounce
-  const syT = !P.alive && P.death === 'squash' ? 0.12 : P.held && P.alive ? 0.78 : P.hop && !P.hop.bump ? 1.12 : 1;
-  if (P.death !== 'squash') {
+  const syT = !P.alive && FLAT.has(P.death) ? 0.12 : P.held && P.alive ? 0.78 : P.hop && !P.hop.bump ? 1.12 : 1;
+  if (!FLAT.has(P.death)) {
     P.sy = lerp(P.sy, syT, Math.min(1, dt * 25));
     inner.scale.set(1 + (1 - P.sy) * 0.5, P.sy, 1 + (1 - P.sy) * 0.5);
   }
@@ -1133,6 +1371,18 @@ window.addEventListener('keydown', e => {
 });
 
 $('play').addEventListener('click', () => { sfx.ensure(); restart(); });
+// Look: ?look=bold in the URL wins, otherwise the last one picked on this device.
+let lookName = new URLSearchParams(location.search).get('look') || store.get('bl-look', 'cel');
+if (!LOOKS[lookName]) lookName = 'cel';
+applyLook(lookName);
+const lookBtn = $('look');
+lookBtn.classList.toggle('bold', lookName === 'bold');
+lookBtn.addEventListener('click', () => {
+  lookName = lookName === 'bold' ? 'cel' : 'bold';
+  store.set('bl-look', lookName);
+  applyLook(lookName);
+  lookBtn.classList.toggle('bold', lookName === 'bold');
+});
 const soundBtn = $('sound');
 soundBtn.classList.toggle('muted', sfx.muted);
 soundBtn.addEventListener('click', () => { sfx.ensure(); soundBtn.classList.toggle('muted', sfx.toggle()); });
@@ -1144,8 +1394,8 @@ function step(dt) {
   for (const lane of lanes.values()) {
     updateLane(lane, dt, game.time);
     for (const c of lane.coins) {
-      c.m.rotation.y += dt * 3;
-      c.m.position.y = 0.45 + LANE_Y[lane.type] + Math.sin(game.time * 3 + c.c) * 0.05;
+      c.m.rotation.y = Math.sin(game.time * 1.6 + c.c) * 0.7;
+      c.m.position.y = LANE_Y[lane.type] + Math.abs(Math.sin(game.time * 3 + c.c)) * 0.06;
     }
   }
   updatePlayer(dt);
