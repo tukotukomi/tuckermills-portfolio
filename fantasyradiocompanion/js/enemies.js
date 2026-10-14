@@ -5,7 +5,7 @@
 import { C, CA, withAlpha, rnd } from './util.js';
 import { Sprites } from './sprites.js';
 import { Sound } from './sfx.js';
-import { peckDamage, peckInterval, axeInterval, axeRangeBlocks, BLOCK_PIXELS, crossbowInterval, BASIC_ATTACKERS, BASIC_DAMAGE, basicInterval } from './traits.js';
+import { peckDamage, peckInterval, axeInterval, axeRangeBlocks, BLOCK_PIXELS, crossbowInterval, toxinDamage, BASIC_ATTACKERS, BASIC_DAMAGE, basicInterval } from './traits.js';
 
 const BOW_FIRST_DELAY = 1.5;   // seconds from the Thief first being able to shoot to his first bolt
 import { t } from './i18n.js';
@@ -66,6 +66,23 @@ function strikeEffect(kind, pose) {
 }
 
 const FIRST_ENEMY_SECONDS = 12;
+
+/** A poisoned enemy's frame: the same picture washed a little green (made once per frame image and kept). */
+const POISONED = new WeakMap();
+function poisonedFrame(img) {
+  let c = POISONED.get(img);
+  if (!c) {
+    c = document.createElement('canvas');
+    c.width = img.width; c.height = img.height;
+    const x = c.getContext('2d');
+    x.drawImage(img, 0, 0);
+    x.globalCompositeOperation = 'source-atop';
+    x.fillStyle = 'rgba(70,255,70,0.22)';
+    x.fillRect(0, 0, c.width, c.height);
+    POISONED.set(img, c);
+  }
+  return c;
+}
 const TAB_SPEED = 140;   // the Toucan's can tab, scene pixels per second
 // Its four spin positions (6x6): a ring seen flat, edge-on, and turning.
 const TAB_SHAPES = [
@@ -123,7 +140,7 @@ export function installEnemies(P) {
 
   m._spawnEnemy = function () {
     const kind = this._pickEnemyKind();
-    this.enemy = { kind: kind, x: this.lastLw + 6, hp: DEFS[kind].hp, maxHp: DEFS[kind].hp, engaged: false, walkT: 0, attackTimer: 0, attackAnim: -1, attackPose: 0, struck: false, peckTimer: 0, axeTimer: 0, axeStarted: false, bloodMoonUsed: false, hurtFlash: 0, deathT: -1 };
+    this.enemy = { kind: kind, x: this.lastLw + 6, hp: DEFS[kind].hp, maxHp: DEFS[kind].hp, engaged: false, walkT: 0, attackTimer: 0, attackAnim: -1, attackPose: 0, struck: false, peckTimer: 0, axeTimer: 0, axeStarted: false, poisonTicks: 0, poisonTick: 0, bloodMoonUsed: false, hurtFlash: 0, deathT: -1 };
     this.basicTimer = {};
     this.bowTimer = BOW_FIRST_DELAY;
     this._noteSeen(kind);
@@ -141,6 +158,18 @@ export function installEnemies(P) {
     }
     const e = this.enemy;
     if (e.deathT >= 0) return;
+
+    // The Druid's Natural Toxin: a tick of damage every second until it has run its course.
+    if (e.poisonTicks > 0) {
+      e.poisonTick -= dt;
+      if (e.poisonTick <= 0) {
+        e.poisonTick += 1.0;
+        e.poisonTicks--;
+        this._damageEnemy(e, this._withHuzzah(toxinDamage(this.levelOf('druid'))), false, e.x, 0, true);
+        if (e.deathT >= 0) return;
+      }
+    }
+
     const front = this._rectOf(this._frontKind());
     // Ranged enemies keep their distance, as far as there is room for them on screen.
     const room = Math.max(0, this.lastLw - (front.x + front.w + 1) - Sprites.enemy[e.kind].w - 2);
@@ -252,17 +281,17 @@ export function installEnemies(P) {
     }
   };
 
-  m._damageEnemy = function (e, amount, fire, fx, fy) {
+  m._damageEnemy = function (e, amount, fire, fx, fy, toxin) {
     if (e.deathT >= 0) return;
     e.hp = Math.max(0, e.hp - amount);
-    e.hurtFlash = 0.14;
+    if (!toxin) e.hurtFlash = 0.14;   // (a poison tick doesn't blanch it, so the green shows)
     if (fire) Sound.play('FireImpact');
     const r = this._enemyRect(e);
     this.damageTexts.push({
       x: r.x + r.w / 2.0 + (fire ? 0 : 2), y: r.y + DEFS[e.kind].headOffset - 4, age: 0, text: String(amount),
-      color: fire ? C(255, 176, 64) : (this.partyInspired ? C(255, 226, 90) : C(255, 255, 255))
+      color: toxin ? C(150, 240, 100) : fire ? C(255, 176, 64) : (this.partyInspired ? C(255, 226, 90) : C(255, 255, 255))
     });
-    this.bursts.push({ x: fire ? Math.min(fx, r.x + r.w / 2.0) : r.x + 2, y: fire ? r.y + r.h * 0.4 : r.y + r.h * 0.35, kind: fire ? 'fire' : 'peck', age: 0 });
+    this.bursts.push({ x: fire ? Math.min(fx, r.x + r.w / 2.0) : r.x + 2, y: fire ? r.y + r.h * 0.4 : r.y + r.h * 0.35, kind: toxin ? 'toxin' : fire ? 'fire' : 'peck', age: 0 });
     if (e.hp <= 0) {
       e.deathT = 0;
       Sound.play(DEATH[baseOf(e.kind)]);
@@ -282,7 +311,7 @@ export function installEnemies(P) {
     }
     for (let i = this.bursts.length - 1; i >= 0; i--) {
       const b = this.bursts[i];
-      b.age += dt / (b.kind === 'death' ? 0.8 : b.kind === 'blood' ? 0.7 : b.kind === 'fire' ? 0.4 : 0.3);
+      b.age += dt / (b.kind === 'death' ? 0.8 : b.kind === 'blood' ? 0.7 : b.kind === 'fire' ? 0.4 : b.kind === 'toxin' ? 0.55 : 0.3);
       if (b.age >= 1) this.bursts.splice(i, 1);
     }
     if (this.peckAnim >= 0) { this.peckAnim += dt / 0.25; if (this.peckAnim >= 1) this.peckAnim = -1; }
@@ -490,7 +519,16 @@ export function installEnemies(P) {
     if (e.deathT >= 0) {
       g.image(frame, x, y, false, Math.max(0, 1 - e.deathT));
     } else {
-      g.image(frame, x, y);
+      if (e.poisonTicks > 0) {
+        // Poisoned: washed green, with bubbles rising off it.
+        g.image(poisonedFrame(frame), x, y);
+        for (let i = 0; i < 3; i++) {
+          const ph = (this.time * 0.9 + i / 3) % 1;
+          const bx2 = x + Math.trunc(set.w * (0.25 + 0.25 * i) + Math.sin(this.time * 3 + i * 2) * 1.5);
+          const by2 = y + Math.trunc(set.h * 0.8 - ph * set.h * 0.8);
+          g.rect(bx2, by2, 2, 2, CA(Math.trunc(220 * (1 - ph)), 150, 240, 110));
+        }
+      } else g.image(frame, x, y);
       const ratio = Math.max(0, Math.min(1, e.hp / e.maxHp));
       const bw = 16, bx = r.x + Math.trunc((set.w - bw) / 2), by = y + DEFS[e.kind].headOffset - 5;
       g.rect(bx - 1, by - 1, bw + 2, 4, CA(220, 30, 22, 40));
@@ -566,6 +604,10 @@ export function installEnemies(P) {
             const sx = x + Math.round(Math.cos(a) * (rad + 3)), sy = y + Math.round(Math.sin(a) * (rad + 3));
             g.rect(sx, sy, 2, 2, k % 2 === 0 ? CA(fade, 255, 226, 120) : CA(fade, 255, 120, 40));
           }
+          break;
+        }
+        case 'toxin': {   // a few green bubbles lifting off where the poison bites
+          for (let k = 0; k < 4; k++) g.rect(x - 3 + k * 2, y - Math.trunc(7 * u) - (k % 2) * 2, 2, 2, CA(fade, 140, 236, 100));
           break;
         }
         case 'peck': {

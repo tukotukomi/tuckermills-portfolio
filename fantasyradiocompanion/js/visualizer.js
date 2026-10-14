@@ -27,6 +27,7 @@ const BLURB = {
   lightmage: 'Keeps the whole party hale and humming.',
   firemage: 'A short fuse and a flair for the dramatic.',
   fae: 'A glimmering lucky charm who never tires.',
+  druid: 'Tends the wild, and the wild answers.',
   paca: 'Fast, loyal and always out front.',
 };
 const FONT = '"Segoe UI", "Microsoft YaHei", "PingFang SC", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif';

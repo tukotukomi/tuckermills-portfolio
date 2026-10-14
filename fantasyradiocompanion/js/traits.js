@@ -6,8 +6,8 @@ import { Sprites } from './sprites.js';
 import { Sound } from './sfx.js';
 import { t } from './i18n.js';
 
-export const TRAIT_OF = { paca: 'ItemStorage', lightmage: 'Heal', firemage: 'Fireball', thief: 'LuckyCoins', warrior: 'Huzzah', fae: 'StarHat' };
-export const TRAIT_OWNER = { ItemStorage: 'paca', Heal: 'lightmage', Fireball: 'firemage', LuckyCoins: 'thief', Huzzah: 'warrior', StarHat: 'fae' };
+export const TRAIT_OF = { paca: 'ItemStorage', lightmage: 'Heal', firemage: 'Fireball', thief: 'LuckyCoins', warrior: 'Huzzah', fae: 'StarHat', druid: 'NaturalToxin' };
+export const TRAIT_OWNER = { ItemStorage: 'paca', Heal: 'lightmage', Fireball: 'firemage', LuckyCoins: 'thief', Huzzah: 'warrior', StarHat: 'fae', NaturalToxin: 'druid' };
 
 export function storageSlots(level) { return 1; }
 export function healInterval(level) { return 10; }
@@ -33,6 +33,9 @@ export function axeRangeBlocks(level) { return 10; }   // blocks of grass it tra
 export const BLOCK_PIXELS = 8;                          // one block of grass = one repeat of the ground's pattern
 export function crossbowDamage(level) { return 2; }    // the Thief's crossbow bolt, for when he is out of melee reach
 export function crossbowInterval(level) { return 5.0; }
+export function toxinInterval(level) { return 10; }   // seconds of adventuring between the Druid's casts
+export function toxinDamage(level) { return 2; }       // taken off the enemy at every tick
+export function toxinTicks(level) { return 5; }        // one tick a second, so 5 seconds
 
 export function traitInterval(trait, level) {
   switch (trait) {
@@ -40,6 +43,7 @@ export function traitInterval(trait, level) {
     case 'Fireball': return fireballInterval(level);
     case 'Huzzah': return huzzahInterval(level);
     case 'StarHat': return starHatInterval(level);
+    case 'NaturalToxin': return toxinInterval(level);
   }
   return 0;
 }
@@ -53,6 +57,7 @@ export function traitSummary(kind, level) {
     case 'LuckyCoins': return t('Lucky Coins: {p}% chance of {n} coins together', { p: Math.round(luckyCoinChance(level) * 100), n: luckyCoinCount(level) });
     case 'Huzzah': return t('Huzzah!: party damage x{m} for {d} s every {s} s', { m: huzzahDamageMultiplier(level), d: huzzahDuration(level), s: huzzahInterval(level) });
     case 'StarHat': return t('Star Hat: party wears one for {d} min every {s} min', { d: starHatDuration(level) / 60, s: starHatInterval(level) / 60 });
+    case 'NaturalToxin': return t('Natural Toxin: {d} damage a second for {n} s, every {s} s', { d: toxinDamage(level), n: toxinTicks(level), s: toxinInterval(level) });
   }
   return '';
 }
@@ -74,7 +79,9 @@ const AXE_FRAMES = (() => {
   }
   return frames;
 })();
-const TIMED_TRAITS = ['Heal', 'Fireball', 'Huzzah', 'StarHat'];
+const TIMED_TRAITS = ['Heal', 'Fireball', 'Huzzah', 'StarHat', 'NaturalToxin'];
+const GLOB_SPEED = 100;  // the Druid's toxin glob, scene pixels per second
+const GLOB_ARC = 8;      // how high the lob rises above the straight line
 const SHOUT_SECONDS = 2.2;
 const HAT_ROWS = ['...y...', '..bbb..', '..byb..', '.bbybb.', 'BBBBBBB'];
 
@@ -89,6 +96,8 @@ export function installTraits(P) {
     this.fireballs = [];
     this.axes = [];
     this.bolts = [];
+    this.globs = [];
+    this.toxinFlash = 0;
     this.heals = [];
     this.inspireLeft = 0; this.hatLeft = 0; this.shoutAge = -1; this.castFlash = 0; this.luckyFlash = 0;
     this.headSpots = new Map();
@@ -118,7 +127,10 @@ export function installTraits(P) {
       let left = this.traitTimer[trait];
       if (left === undefined) left = traitInterval(trait, level);
       left -= dt;
-      if (left <= 0) { this._fireTrait(trait, level); left = traitInterval(trait, level); }
+      if (left <= 0) {
+        if (trait === 'NaturalToxin' && !this._toxinTargetReady()) left = 0;   // ready, and waiting for something to cast it on
+        else { this._fireTrait(trait, level); left = traitInterval(trait, level); }
+      }
       this.traitTimer[trait] = left;
     }
     if (this.berserkLeft > 0) this.berserkLeft = Math.max(0, this.berserkLeft - dt);   // the Monster Berserker runs in adventuring time too
@@ -151,6 +163,9 @@ export function installTraits(P) {
       case 'StarHat':
         this.hatLeft = starHatDuration(level);
         Sound.play('StarHat');
+        break;
+      case 'NaturalToxin':
+        this._castToxin();
         break;
     }
   };
@@ -233,6 +248,25 @@ export function installTraits(P) {
         Sound.play('Peck');
       }
     }
+    // Toxin globs lob over the party to the enemy and, where they land, the poison takes hold (a new one renews it).
+    for (let i = this.globs.length - 1; i >= 0; i--) {
+      const gl = this.globs[i];
+      gl.age += dt;
+      gl.travel = Math.min(gl.range, gl.travel + dt * GLOB_SPEED);
+      const u = gl.range > 0 ? gl.travel / gl.range : 1;
+      gl.x = gl.startX + gl.travel;
+      gl.y = gl.startY + (gl.endY - gl.startY) * u - GLOB_ARC * Math.sin(Math.PI * u);
+      if (gl.travel < gl.range) continue;
+      this.globs.splice(i, 1);
+      if (this.enemy !== null && this.enemy.deathT < 0 && gl.x >= this.enemy.x - 0.5) {
+        this.enemy.poisonTicks = toxinTicks(this.levelOf('druid'));
+        this.enemy.poisonTick = 1.0;
+        this.bursts.push({ x: gl.x, y: gl.y, kind: 'toxin', age: 0 });
+        Sound.play('ToxinTick');
+      }
+    }
+    if (this.toxinFlash > 0) this.toxinFlash = Math.max(0, this.toxinFlash - dt);
+
     if (this.castFlash > 0) this.castFlash = Math.max(0, this.castFlash - dt);
     if (this.luckyFlash > 0) this.luckyFlash = Math.max(0, this.luckyFlash - dt);
     if (this.shoutAge >= 0) { this.shoutAge += dt; if (this.shoutAge > SHOUT_SECONDS) this.shoutAge = -1; }
@@ -263,6 +297,38 @@ export function installTraits(P) {
     Sound.play('BowShot');
   };
 
+  /** The toxin only goes off with something to cast it on: an enemy that is alive and on screen. */
+  m._toxinTargetReady = function () { return this.enemy !== null && this.enemy.deathT < 0 && this.enemy.x < this.lastLw; };
+
+  /** The Druid's Natural Toxin: a glob of venom is lobbed at the enemy. */
+  m._castToxin = function () {
+    const e = this.enemy;
+    if (e === null) return;
+    const r = this._rectOf('druid'), er = this._enemyRect(e);
+    const sx = r.x + r.w - 2, sy = r.y + 5;
+    this.globs.push({ startX: sx, startY: sy, endY: er.y + er.h * 0.45, range: Math.max(6, e.x - sx), travel: 0, x: sx, y: sy, age: 0 });
+    this.toxinFlash = 0.35;
+    Sound.play('ToxinCast');
+  };
+
+  m._drawToxin = function (g) {
+    for (const gl of this.globs) {
+      const x = Math.round(gl.x), y = Math.round(gl.y);
+      g.rect(x + 3, y + 1, 1, 1, CA(130, 110, 220, 80));
+      g.rect(x + 5, y, 1, 1, CA(130, 110, 220, 80));
+      g.rect(x - 1, y - 1, 4, 4, C(30, 100, 50));
+      g.rect(x, y, 2, 2, C(124, 232, 84));
+      g.rect(x, y, 1, 1, C(220, 255, 170));
+    }
+    if (this.toxinFlash > 0 && this.party.indexOf('druid') >= 0) {
+      const r = this._rectOf('druid');
+      const u = 1 - this.toxinFlash / 0.35;
+      const rad = 2 + Math.trunc(7 * u), cx = r.x + r.w - 1, cy = r.y + 5;
+      g.ring(cx - rad, cy - rad, rad * 2, rad * 2, CA(Math.trunc(230 * (1 - u)), 110, 230, 90));
+      g.rect(cx - 1, cy - 1, 3, 3, CA(Math.trunc(255 * (1 - u)), 200, 255, 150));
+    }
+  };
+
   m._drawBolts = function (g) {
     for (const b of this.bolts) {
       const x = Math.round(b.x), y = Math.round(b.y);
@@ -274,7 +340,7 @@ export function installTraits(P) {
 
   m._resetTraits = function () {
     this.traitTimer = {};
-    this.fireballs.length = 0; this.axes.length = 0; this.bolts.length = 0; this.heals.length = 0;
+    this.fireballs.length = 0; this.axes.length = 0; this.bolts.length = 0; this.globs.length = 0; this.toxinFlash = 0; this.heals.length = 0;
     this.hp = {}; this.memberClip = {};
     this.inspireLeft = 0; this.hatLeft = 0; this.shoutAge = -1; this.castFlash = 0; this.luckyFlash = 0;
     this._resetEnemies();
@@ -329,6 +395,7 @@ export function installTraits(P) {
     this._drawFireballs(g);
     this._drawAxes(g);
     this._drawBolts(g);
+    this._drawToxin(g);
     this._drawLuckyFlash(g);
   };
 

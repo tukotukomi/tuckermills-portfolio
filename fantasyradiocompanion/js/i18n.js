@@ -52,12 +52,14 @@ const ES = {
   'RESTART': 'REINICIAR',
   'This resets your adventure: your party goes back to just the Paca, levels, gold and the compendium are cleared, and the day and season start over.\n\nType {word} to confirm.': 'Esto reinicia tu aventura: tu grupo vuelve a ser solo la Alpaca, se borran niveles, oro y compendio, y el día y la estación empiezan de nuevo.\n\nEscribe {word} para confirmar.',
   // The party
-  'Paca': 'Alpaca', 'Thief': 'Ladrón', 'Warrior': 'Guerrero', 'Light Mage': 'Mago de luz', 'Fire Mage': 'Mago de fuego', 'Fae': 'Hada',
+  'Druid': 'Druida', 'Natural Toxin': 'Toxina natural', 'Paca': 'Alpaca', 'Thief': 'Ladrón', 'Warrior': 'Guerrero', 'Light Mage': 'Mago de luz', 'Fire Mage': 'Mago de fuego', 'Fae': 'Hada',
   'Quick, quiet and always one step ahead.': 'Rápido, sigiloso y siempre un paso por delante.',
   'A stalwart front-liner who never backs down.': 'Un firme combatiente de primera línea que nunca retrocede.',
   'Keeps the whole party hale and humming.': 'Mantiene a todo el grupo sano y animado.',
   'A short fuse and a flair for the dramatic.': 'Mecha corta y gusto por lo dramático.',
   'A glimmering lucky charm who never tires.': 'Un amuleto brillante de la suerte que nunca se cansa.',
+  'Tends the wild, and the wild answers.': 'Cuida de lo salvaje, y lo salvaje responde.',
+  'Natural Toxin: {d} damage a second for {n} s, every {s} s': 'Toxina natural: {d} de daño por segundo durante {n} s, cada {s} s',
   'Fast, loyal and always out front.': 'Veloz, leal y siempre al frente.',
   'Spring': 'Primavera', 'Summer': 'Verano', 'Fall': 'Otoño', 'Winter': 'Invierno', 'Year {y}  Day {d}': 'Año {y}  Día {d}',
   // Traits
@@ -154,12 +156,14 @@ const ZH = {
   'RESTART': '重新开始',
   'This resets your adventure: your party goes back to just the Paca, levels, gold and the compendium are cleared, and the day and season start over.\n\nType {word} to confirm.': '这将重置你的冒险：队伍只剩下羊驼，等级、金币和图鉴都会清空，日期和季节重新开始。\n\n输入“{word}”以确认。',
   // The party
-  'Paca': '羊驼', 'Thief': '盗贼', 'Warrior': '战士', 'Light Mage': '光明法师', 'Fire Mage': '火焰法师', 'Fae': '妖精',
+  'Druid': '德鲁伊', 'Natural Toxin': '天然毒素', 'Paca': '羊驼', 'Thief': '盗贼', 'Warrior': '战士', 'Light Mage': '光明法师', 'Fire Mage': '火焰法师', 'Fae': '妖精',
   'Quick, quiet and always one step ahead.': '身手敏捷，悄无声息，总是快人一步。',
   'A stalwart front-liner who never backs down.': '坚定的前排战士，从不退缩。',
   'Keeps the whole party hale and humming.': '让全队保持健康、精神抖擞。',
   'A short fuse and a flair for the dramatic.': '火爆脾气，偏爱戏剧效果。',
   'A glimmering lucky charm who never tires.': '闪闪发光的幸运符，永不疲倦。',
+  'Tends the wild, and the wild answers.': '照料荒野，荒野也会回应。',
+  'Natural Toxin: {d} damage a second for {n} s, every {s} s': '天然毒素：每秒 {d} 点伤害，持续 {n} 秒，每 {s} 秒施放一次',
   'Fast, loyal and always out front.': '迅捷、忠诚，永远冲在最前。',
   'Spring': '春', 'Summer': '夏', 'Fall': '秋', 'Winter': '冬', 'Year {y}  Day {d}': '第 {y} 年  第 {d} 天',
   // Traits

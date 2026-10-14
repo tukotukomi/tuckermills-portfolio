@@ -20,7 +20,7 @@ export const ITEM_DEFS = {
   PotionGreen: { name: 'Healing Potion I', price: 5, heal: 10, blurb: 'Heals one party member for 10 HP. After using it, tap the member to heal.' },
 };
 
-const TIMED_TRAITS = ['Heal', 'Fireball', 'Huzzah', 'StarHat'];
+const TIMED_TRAITS = ['Heal', 'Fireball', 'Huzzah', 'StarHat', 'NaturalToxin'];
 const SEASON_DAYS = 5;
 const TAVERN_SPAWN_PHASE = 0.88;
 

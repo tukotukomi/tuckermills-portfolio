@@ -1334,7 +1334,7 @@ export class PixelScene {
 }
 
 // The exe's save strings name companions with C# enum names.
-export const PARTY_ENUM = { paca: 'Paca', thief: 'Thief', warrior: 'Warrior', lightmage: 'LightMage', firemage: 'FireMage', fae: 'Fae' };
+export const PARTY_ENUM = { paca: 'Paca', thief: 'Thief', warrior: 'Warrior', lightmage: 'LightMage', firemage: 'FireMage', fae: 'Fae', druid: 'Druid' };
 export const KIND_FROM_ENUM = {};
 for (const k of Object.keys(PARTY_ENUM)) KIND_FROM_ENUM[PARTY_ENUM[k]] = k;
 // Saves written before the art rework used the old names; they still load.

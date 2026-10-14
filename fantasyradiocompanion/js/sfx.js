@@ -139,6 +139,20 @@ const RECIPES = {
       return (saw(ph) * 0.4 * Math.pow(1 - u, 1.4) + lp * 0.9 * exp(t, 0.4) + crumble) * 0.8;
     });
   },
+  ToxinCast() {   // a venom glob flung: a wet gurgle rising into a hiss
+    let ph = 0, lp = 0;
+    return make(0.4, t => {
+      const u = t / 0.4;
+      ph += (180 + 520 * u * u + 60 * Math.sin(t * 40)) / R;
+      lp += 0.25 * (noise() - lp);
+      const env = Math.sin(Math.PI * Math.pow(u, 0.6));
+      return (tri(ph) * 0.45 + lp * 0.5 + noise() * 0.08 * u) * env * 0.8;
+    });
+  },
+  ToxinTick() {   // a bubble popping in the poison: a soft "bloop"
+    let ph = 0;
+    return make(0.16, t => { ph += (700 - 2200 * t) / R; return sin(ph) * exp(t, 0.05) * 0.5 + noise() * 0.1 * exp(t, 0.01); });
+  },
   ToucanRoar() {   // a tinny two-note squawk
     let ph = 0, lp = 0;
     return make(0.55, t => {
