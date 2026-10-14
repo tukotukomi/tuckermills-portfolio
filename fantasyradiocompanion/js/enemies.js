@@ -11,13 +11,13 @@ const BOW_FIRST_DELAY = 1.5;   // seconds from the Thief first being able to sho
 import { t } from './i18n.js';
 
 // The four originals, then the variant of each that takes over half the spawns from Year 2 (same moves, twice the damage) and all of
-// them from Year 3, then the Toucan (no variant: it turns up in every year).
+// them from Year 3, then the Toucan (no variant: it joins them from Year 3).
 export const ENEMY_KINDS = ['sheller', 'orc', 'nightmare', 'gargogryph', 'spikedsheller', 'bassorc', 'slasher', 'wickedgryph', 'toucan'];
 export const ENEMY_ENUM = { sheller: 'Sheller', orc: 'Orc', nightmare: 'Nightmare', gargogryph: 'Gargogryph', spikedsheller: 'SpikedSheller', bassorc: 'BassOrc', slasher: 'Slasher', wickedgryph: 'Wickedgryph', toucan: 'Toucan' };
 const ENEMY_FROM_ENUM = { Sheller: 'sheller', Orc: 'orc', Nightmare: 'nightmare', Gargogryph: 'gargogryph', SpikedSheller: 'spikedsheller', BassOrc: 'bassorc', Slasher: 'slasher', Wickedgryph: 'wickedgryph', Toucan: 'toucan' };
 
 const DEFS = {
-  toucan: { name: 'Toucan', hp: 24, attackInterval: 1.0, walkSpeed: 22, nightOnly: false, headOffset: 0, hover: 6, habitat: 'Roams day and night', note: 'A purple toucan made of two tin cans, with metal talons. It slings a can tab that slices through the whole party.' },
+  toucan: { name: 'Toucan', hp: 24, attackInterval: 1.0, walkSpeed: 22, nightOnly: false, headOffset: 0, hover: 6, habitat: 'Roams day and night, from Year 3', note: 'A purple toucan made of two tin cans, with metal talons. It slings a can tab that slices through the whole party.' },
   sheller: { name: 'Sheller', hp: 10, attackInterval: 2.0, walkSpeed: 20, nightOnly: false, headOffset: 0, habitat: 'Roams by day', note: 'A grumpy shell-back. Punches first, claws second.' },
   orc: { name: 'Orc', hp: 18, attackInterval: 3.0, walkSpeed: 15, nightOnly: false, headOffset: 7, habitat: 'Roams day and night', note: 'Fond of shiny earrings and swinging big sticks.' },
   nightmare: { name: 'Nightmare', hp: 12, attackInterval: 2.5, walkSpeed: 24, nightOnly: true, headOffset: 4, hover: 2, habitat: 'Roams after dark', note: 'A cloaked drifter that only calls after dark. Its scythe cuts through the first two in line.' },
@@ -108,7 +108,7 @@ export function installEnemies(P) {
     const pool = this.isNight
       ? ['nightmare', 'nightmare', 'nightmare', 'nightmare', 'orc', 'orc', 'gargogryph', 'gargogryph']
       : ['sheller', 'sheller', 'sheller', 'sheller', 'orc', 'orc'];
-    pool.push('toucan');
+    if (this.year >= 3) pool.push('toucan');   // the Toucan only joins from Year 3
     let kind = pool[rnd(pool.length)];
     // From Year 2 half of them turn up as their meaner variant, and from Year 3 only the variants do (the Toucan has none).
     if (this.year >= 3 || (this.year >= 2 && Math.random() < 0.5)) kind = VARIANT_OF[kind] || kind;
