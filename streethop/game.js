@@ -20,7 +20,16 @@ const ri = (a, b) => Math.floor(rand(a, b + 1));
 const pick = a => a[Math.floor(Math.random() * a.length)];
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const lerp = (a, b, t) => a + (b - a) * t;
-const diff = r => clamp(r / 160, 0, 1);
+// Difficulty. The opening is calm: OPEN rows of plain grass, the centre column
+// kept clear on grass until STRAIGHT, one hazard lane at a time, slow traffic
+// with wide gaps. warm() fades that easing out by row 60; diff() then keeps
+// ramping speed and density out to row 230. Tougher hazards unlock by row.
+const OPEN = 8, STRAIGHT = 25;
+const UNLOCK = { pasture: 8, water: 10, pads: 15, wagon: 18, multiRoad: 20, wheat: 25, geese: 25, kayak: 30, bull: 40, crops: 60, pastureBull: 80 };
+const diff = r => clamp((r - 10) / 220, 0, 1);
+const warm = r => clamp(r / 60, 0, 1);
+const speedK = r => 0.6 + 0.4 * warm(r);
+const gapK = r => 1.7 - 0.7 * warm(r);
 
 const store = {
   get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
@@ -741,6 +750,8 @@ function addSunflower(lane, c) {
 }
 
 function addMovers(lane, kindFn, gapMin, gapMax, y = 0) {
+  lane.speed *= speedK(lane.r);
+  if (lane.type !== 'water') { gapMin *= gapK(lane.r); gapMax *= gapK(lane.r); } // wider water gaps would be harder, not easier
   let x = -SPAN / 2 + rand(gapMin, gapMax);
   for (;;) {
     const kind = kindFn(), len = LEN[kind];
@@ -777,31 +788,32 @@ function wrap(m) {
 
 function nextType(r, prev) {
   if (!queue.length) {
-    const d = diff(r), last = prev.type;
+    const d = diff(r), last = prev.type, early = r < STRAIGHT, on = k => r >= UNLOCK[k];
     let t;
-    if (last !== 'grass' && Math.random() < 0.45) t = 'grass';
+    // a grass break after every hazard until STRAIGHT, tapering to 45% of the time by row 60
+    if (last !== 'grass' && Math.random() < lerp(1, 0.45, clamp((r - STRAIGHT) / 35, 0, 1))) t = 'grass';
     else {
-      const w = [['grass', 0.2], ['road', 0.24 + 0.05 * d], ['pasture', 0.16], ['water', 0.2], ['bull', 0.08 + 0.05 * d],
-        ['wheat', 0.1], ['crops', r > 15 ? 0.07 + 0.05 * d : 0]];
+      const w = [['grass', 0.2], ['road', 0.24 + 0.05 * d], ['pasture', on('pasture') ? 0.16 : 0], ['water', on('water') ? 0.2 : 0],
+        ['bull', on('bull') ? 0.08 + 0.05 * d : 0], ['wheat', on('wheat') ? 0.1 : 0], ['crops', on('crops') ? 0.07 + 0.05 * d : 0]];
       let k = Math.random() * w.reduce((s, x) => s + x[1], 0);
       t = w.find(x => (k -= x[1]) < 0)[0];
       if (t === last && t !== 'grass') t = 'grass';
     }
-    if (t === 'grass') queue = Array(ri(1, 3)).fill('grass');
-    else if (t === 'road') queue = Array(ri(1, 2 + Math.round(2 * d))).fill('road');
-    else if (t === 'pasture') queue = Array(ri(1, 2)).fill('pasture');
+    if (t === 'grass') queue = Array(early ? ri(2, 3) : ri(1, 3)).fill('grass');
+    else if (t === 'road') queue = Array(on('multiRoad') ? ri(1, 2 + Math.round(2 * d)) : 1).fill('road');
+    else if (t === 'pasture') queue = Array(early ? 1 : ri(1, 2)).fill('pasture');
     else if (t === 'bull') queue = Array(ri(1, d > 0.4 ? 2 : 1)).fill('bull');
-    else if (t === 'wheat') queue = Array(ri(1, 2)).fill('wheat');
+    else if (t === 'wheat') queue = Array(r < 40 ? 1 : ri(1, 2)).fill('wheat');
     else if (t === 'crops') queue = ['crops'];
-    else if (last === 'grass' && Math.random() < 0.3) queue = ['pads', 'grass'];
-    else queue = Array(ri(1, 2 + Math.round(d))).fill('water');
+    else if (on('pads') && last === 'grass' && Math.random() < 0.3) queue = ['pads', 'grass'];
+    else queue = Array(r < 30 ? 1 : ri(1, 2 + Math.round(d))).fill('water');
   }
   return queue.shift();
 }
 
 function addLane(r) {
   const prev = lanes.get(r - 1) || null;
-  const type = r < 0 ? 'forest' : r < 5 ? 'grass' : nextType(r, prev);
+  const type = r < 0 ? 'forest' : r < OPEN ? 'grass' : nextType(r, prev);
   const lane = {
     r, type, movers: [], blocked: new Set(), reach: new Set(), coins: [],
     dir: Math.random() < 0.5 ? 1 : -1, speed: 0, group: new THREE.Group(),
@@ -822,14 +834,14 @@ function addLane(r) {
       for (let x = -COLS; x <= COLS; x++) { blocker(vb, x, true); lane.blocked.add(x); }
     } else {
       const forced = new Set(prev && prev.type === 'pads' ? prev.padCols : []);
-      if (r === 0) forced.add(0);
+      if (r < STRAIGHT) forced.add(0);
       let blocked = new Set(), reach = new Set();
       for (let attempt = 0; attempt < 14 && !reach.size; attempt++) {
         blocked = new Set();
-        const n = r < 3 ? ri(0, 2) : ri(1, 3 + Math.round(d * 1.5));
+        const n = r < STRAIGHT ? ri(0, 2) : ri(1, 3 + Math.round(d * 1.5));
         for (let k = 0; k < n; k++) {
           const x = ri(-COLS, COLS);
-          if (forced.has(x) || (r < 3 && Math.abs(x) < 2)) continue;
+          if (forced.has(x) || (r < OPEN && Math.abs(x) < 2)) continue;
           blocked.add(x);
         }
         reach = reachOf(blocked, prev);
@@ -852,7 +864,7 @@ function addLane(r) {
     }
     lane.speed = rand(1.5, 2.9) * (1 + 0.7 * d);
     const color = ri(0, TRACTORS.length - 1);
-    addMovers(lane, () => (Math.random() < 0.25 ? 'wagon' : 'tractor') + (Math.random() < 0.5 ? color : ri(0, TRACTORS.length - 1)), 3, 7.5 - 2 * d);
+    addMovers(lane, () => (r >= UNLOCK.wagon && Math.random() < 0.25 ? 'wagon' : 'tractor') + (Math.random() < 0.5 ? color : ri(0, TRACTORS.length - 1)), 3, 7.5 - 2 * d);
     if (Math.random() < 0.1) addSunflower(lane, ri(-COLS, COLS));
   } else if (type === 'pasture') {
     strip(vb, 0, 0xcfa66b, shade(0xcfa66b, 0.72));
@@ -861,10 +873,10 @@ function addLane(r) {
       vb.box(0.14, 0.01, 0.1, x, 0.005, rand(-0.35, 0.35), Math.abs(x) <= COLS + 0.5 ? 0xb58e58 : 0x8a6c43);
     }
     const k = Math.random();
-    if (d > 0.2 && k < 0.3) {
+    if (r >= UNLOCK.pastureBull && k < 0.3) {
       lane.speed = rand(5, 6.5) * (1 + 0.3 * d);
       addMovers(lane, () => 'bull', 9, 15);
-    } else if (k < 0.62) {
+    } else if (r >= UNLOCK.geese && k < 0.62) {
       lane.speed = rand(1.1, 1.7) * (1 + 0.4 * d);
       addMovers(lane, () => 'geese', 2.8, 6);
     } else {
@@ -925,14 +937,14 @@ function addLane(r) {
     strip(vb, -0.22, 0x56c3ee, shade(0x56c3ee, 0.74));
     if (type === 'water') {
       if (prev && prev.type === 'water') lane.dir = -prev.dir;
-      if (Math.random() < 0.35) {
+      if (r >= UNLOCK.kayak && Math.random() < 0.35) {
         // a flotilla of kayaks: quicker than logs, and shorter
         lane.speed = rand(1.4, 2.3) * (1 + 0.4 * d);
         const col = ri(0, KAYAKS.length - 1);
         addMovers(lane, () => 'kayak' + (Math.random() < 0.6 ? 2 : 3) + '_' + (Math.random() < 0.5 ? col : ri(0, KAYAKS.length - 1)), 1.3, 2.4 + d, -0.1);
       } else {
         lane.speed = rand(0.9, 1.9) * (1 + 0.45 * d);
-        const lens = d > 0.5 ? ['log2', 'log2', 'log3'] : ['log2', 'log3', 'log3', 'log4'];
+        const lens = r < 30 ? ['log3', 'log4', 'log4'] : d > 0.5 ? ['log2', 'log2', 'log3'] : ['log2', 'log3', 'log3', 'log4'];
         addMovers(lane, () => pick(lens), 1.2, 2.4 + d, -0.1);
       }
     } else {
@@ -1286,7 +1298,7 @@ window.addEventListener('resize', resize);
 
 const _t = new THREE.Vector3();
 function updateCamera(dt) {
-  if (game.state === 'play') game.camZ -= (0.34 + 0.3 * diff(P.r)) * dt;
+  if (game.state === 'play') game.camZ -= (0.22 + 0.12 * warm(P.r) + 0.3 * diff(P.r)) * dt;
   const desired = P.z - 4;
   if (P.alive && desired < game.camZ) game.camZ += (desired - game.camZ) * Math.min(1, dt * 5);
   if (P.alive) game.camX += (clamp(P.x, -2.5, 2.5) * 0.6 - game.camX) * Math.min(1, dt * 3);
