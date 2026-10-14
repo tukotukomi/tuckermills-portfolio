@@ -17,7 +17,7 @@ export const ENEMY_ENUM = { sheller: 'Sheller', orc: 'Orc', nightmare: 'Nightmar
 const ENEMY_FROM_ENUM = { Sheller: 'sheller', Orc: 'orc', Nightmare: 'nightmare', Gargogryph: 'gargogryph', SpikedSheller: 'spikedsheller', BassOrc: 'bassorc', Slasher: 'slasher', Wickedgryph: 'wickedgryph', Toucan: 'toucan' };
 
 const DEFS = {
-  toucan: { name: 'Toucan', hp: 16, attackInterval: 2.0, walkSpeed: 22, nightOnly: false, headOffset: 0, hover: 6, habitat: 'Roams day and night', note: 'A purple toucan made of two tin cans. It dives in with a beak that stings for 6.' },
+  toucan: { name: 'Toucan', hp: 16, attackInterval: 1.0, walkSpeed: 22, nightOnly: false, headOffset: 0, hover: 6, habitat: 'Roams day and night', note: 'A purple toucan made of two tin cans, with metal talons. It slings a can tab that slices through the whole party.' },
   sheller: { name: 'Sheller', hp: 10, attackInterval: 2.0, walkSpeed: 20, nightOnly: false, headOffset: 0, habitat: 'Roams by day', note: 'A grumpy shell-back. Punches first, claws second.' },
   orc: { name: 'Orc', hp: 18, attackInterval: 3.0, walkSpeed: 15, nightOnly: false, headOffset: 7, habitat: 'Roams day and night', note: 'Fond of shiny earrings and swinging big sticks.' },
   nightmare: { name: 'Nightmare', hp: 12, attackInterval: 2.5, walkSpeed: 24, nightOnly: true, headOffset: 4, hover: 2, habitat: 'Roams after dark', note: 'A cloaked drifter that only calls after dark. Its scythe cuts through the first two in line.' },
@@ -37,7 +37,7 @@ const reachOf = kind => (baseOf(kind) === 'nightmare' ? 2 : 1);
 const VARIANT_OF = { sheller: 'spikedsheller', orc: 'bassorc', nightmare: 'slasher', gargogryph: 'wickedgryph' };
 
 /** HP an attack takes off the member it lands on: 2 for most (doubled from 1), 4 for the Gargogryph (a whole volley of feathers counts as one attack); the variants hit twice as hard again. */
-const enemyDamage = kind => (baseOf(kind) === 'toucan' ? 6 : (baseOf(kind) === 'gargogryph' ? 4 : 2) * (isVariant(kind) ? 2 : 1));   // the Toucan: a fixed 6
+const enemyDamage = kind => (baseOf(kind) === 'toucan' ? 2 : (baseOf(kind) === 'gargogryph' ? 4 : 2) * (isVariant(kind) ? 2 : 1));   // the Toucan: a fixed 2 to every member its can tab cuts
 /** HP the Blood Moon takes off every member of the party when it breaks (a Wickedgryph's takes twice as much). */
 const bloodMoonDamage = kind => (isVariant(kind) ? 10 : 5);   // the Gargogryph's Blood Moon 5, the Wickedgryph's (Blood Moon II) 10
 
@@ -50,7 +50,7 @@ const BLOOD_MOON_HP_FRACTION = 0.55;   // it is called down once, when the Gargo
 function attackFx(kind, pose, hit) {
   kind = baseOf(kind);
   if (kind === 'gargogryph') return hit ? 'GargogryphShot' : 'GargogryphFlap';
-  if (kind === 'toucan') return hit ? 'ToucanHit' : 'ToucanSwing';
+  if (kind === 'toucan') return hit ? 'ToucanSling' : 'ToucanSwing';   // (the tab's own clang plays as it cuts a member)
   const p = kind === 'orc' ? (pose === 0 ? ['OrcSmashSwing', 'OrcSmashHit'] : ['OrcSweepSwing', 'OrcSweepHit'])
     : kind === 'nightmare' ? (pose === 0 ? ['NightmareSweepSwing', 'NightmareSweepHit'] : ['NightmareChopSwing', 'NightmareChopHit'])
       : (pose === 0 ? ['ShellerPunchSwing', 'ShellerPunchHit'] : ['ShellerClawSwing', 'ShellerClawHit']);
@@ -60,11 +60,20 @@ function strikeEffect(kind, pose) {
   kind = baseOf(kind);
   if (kind === 'gargogryph') return 'feathers';
   if (kind === 'nightmare') return 'scythe';
-  if (kind === 'orc' || kind === 'toucan') return 'impact';
+  if (kind === 'toucan') return 'tab';
+  if (kind === 'orc') return 'impact';
   return pose === 0 ? 'impact' : 'claws';
 }
 
 const FIRST_ENEMY_SECONDS = 12;
+const TAB_SPEED = 140;   // the Toucan's can tab, scene pixels per second
+// Its four spin positions (6x6): a ring seen flat, edge-on, and turning.
+const TAB_SHAPES = [
+  [[1, 0], [2, 0], [3, 0], [4, 0], [0, 1], [5, 1], [1, 2], [2, 2], [3, 2], [4, 2]],
+  [[0, 0], [1, 1], [2, 2], [3, 3], [4, 4], [1, 0], [0, 1], [3, 4], [4, 3]],
+  [[1, 0], [0, 1], [0, 2], [0, 3], [1, 4], [2, 4], [3, 3], [3, 2], [3, 1], [2, 0]],
+  [[4, 0], [3, 1], [2, 2], [1, 3], [0, 4], [3, 0], [4, 1], [0, 3], [1, 4]],
+];
 
 export function installEnemies(P) {
   const m = P.prototype;
@@ -78,6 +87,7 @@ export function installEnemies(P) {
     this.peckAnim = -1;
     this.flinch = 0;
     this.shots = [];   // the Gargogryph's feathers in flight
+    this.tabs = [];    // the Toucan's can tabs in flight
     this.bloodMoonT = -1;   // 0..1 while the Blood Moon plays out, <0 otherwise
     this.bloodMoonStruck = false;
     this.kills = {};   // a kind is "known" once it has an entry here
@@ -298,6 +308,25 @@ export function installEnemies(P) {
       }
     }
 
+    // Can tabs in flight: each takes its damage off a member as it reaches them, then flies on through the rest of the line.
+    for (let i = this.tabs.length - 1; i >= 0; i--) {
+      const tb = this.tabs[i];
+      tb.age += dt;
+      tb.x -= dt * TAB_SPEED;
+      tb.y += Math.max(-dt * 60, Math.min(dt * 60, tb.targetY - tb.y));   // it settles to the height of the party as it goes
+      for (const k of this.party.slice()) {
+        if (tb.cut.indexOf(k) >= 0 || this.hpOf(k) <= 0) continue;
+        const mr = this._rectOf(k);
+        if (tb.x > mr.x + mr.w * 0.75) continue;
+        tb.cut.push(k);
+        this.bursts.push({ x: mr.x + mr.w * 0.7, y: mr.y + mr.h * 0.45, kind: 'scythe', age: 0 });
+        if (!tb.sounded) { tb.sounded = true; Sound.play('ToucanHit'); }
+        this.flinch = 0.14;
+        this.damageMember(k, enemyDamage('toucan') * this.monsterDamageMultiplier);
+      }
+      if (tb.x < -8) this.tabs.splice(i, 1);
+    }
+
     // The Blood Moon: a red moon rises, the sky bleeds, and at the peak a wave of red light breaks over the whole party.
     if (this.bloodMoonT >= 0) {
       this.bloodMoonT += dt / BLOOD_MOON_SECONDS;
@@ -336,6 +365,10 @@ export function installEnemies(P) {
           const er = this._enemyRect(e);
           for (let i = 0; i < 3; i++)
             this.shots.push({ x: er.x + 6, y: er.y + er.h * (0.35 + 0.12 * i), targetY: r.y + r.h * (0.3 + 0.18 * ((i + e.attackPose) % 3)), delay: 0.1 + i * 0.16, age: 0, damage: i === 0 ? enemyDamage(e.kind) : 0 });
+        } else if (effect === 'tab') {
+          // A ranged attack: the can tab is slung forward from its beak and cuts through everyone in the line.
+          const er = this._enemyRect(e);
+          this.tabs.push({ x: er.x + 2, y: er.y + er.h * 0.4, targetY: r.y + r.h * 0.45, age: 0, cut: [], sounded: false });
         } else {
           // A blow lands on the front member, and on the next one behind them if it reaches that far (the scythe).
           const hit = this._lineOrder().filter(k => this.hpOf(k) > 0).slice(0, reachOf(e.kind));
@@ -361,6 +394,7 @@ export function installEnemies(P) {
     this.peckAnim = -1;
     this.flinch = 0;
     this.shots.length = 0;
+    this.tabs.length = 0;
     this.bloodMoonT = -1;
     this.bloodMoonStruck = false;
   };
@@ -502,6 +536,15 @@ export function installEnemies(P) {
   };
 
   m._drawEnemyEffects = function (g) {
+    // Can tabs: a spinning silver ring-pull, with a short glint trailing behind it.
+    for (const tb of this.tabs) {
+      const x = Math.round(tb.x), y = Math.round(tb.y);
+      const shape = TAB_SHAPES[Math.trunc(tb.age * 20) % 4];
+      g.rect(x + 6, y + 2, 5, 1, CA(110, 214, 224, 255));
+      for (const p of shape) g.rect(x + p[0] + 1, y + p[1] + 1, 1, 1, CA(200, 30, 22, 40));
+      for (const p of shape) g.rect(x + p[0], y + p[1], 1, 1, C(214, 222, 238));
+      g.rect(x + shape[0][0], y + shape[0][1], 1, 1, C(255, 255, 255));
+    }
     // Feathers in flight: a bright slash with a crimson tip, pointing the way they fly.
     for (const s of this.shots) {
       if (s.delay > 0) continue;

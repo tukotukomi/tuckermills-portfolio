@@ -155,7 +155,14 @@ const RECIPES = {
     let ph = 0;
     return make(0.16, t => { ph += (500 + 2200 * t) / R; return tri(ph) * exp(t, 0.07) * 0.3 + noise() * 0.25 * Math.sin(Math.PI * t / 0.16); });
   },
-  ToucanHit() {   // the bill clanging on armour: a ring of tin and a click
+  ToucanSling() {   // a can tab slung away: a sharp metallic zing
+    let a = 0, b = 0;
+    return make(0.22, t => {
+      a += (2200 - 4200 * t) / R; b += (3300 - 6000 * t) / R;
+      return (sin(a) * 0.35 + sqr(b, 0.25) * 0.15) * exp(t, 0.07) + noise() * 0.25 * exp(t, 0.012);
+    });
+  },
+  ToucanHit() {   // the tab cutting a member: a ring of tin and a click
     let a = 0, b = 0;
     return make(0.3, t => {
       a += 1180 / R; b += 1770 / R;

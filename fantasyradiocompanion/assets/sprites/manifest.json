@@ -66,11 +66,11 @@
   "enemy_wickedgryph_attack_a": [42, 33],
   "enemy_wickedgryph_attack_b": [42, 33],
   "enemy_wickedgryph_hurt": [42, 33],
-  "enemy_toucan_walk_a": [45, 37],
-  "enemy_toucan_walk_b": [45, 37],
-  "enemy_toucan_attack_a": [45, 37],
-  "enemy_toucan_attack_b": [45, 37],
-  "enemy_toucan_hurt": [45, 37],
+  "enemy_toucan_walk_a": [45, 39],
+  "enemy_toucan_walk_b": [45, 39],
+  "enemy_toucan_attack_a": [45, 39],
+  "enemy_toucan_attack_b": [45, 39],
+  "enemy_toucan_hurt": [45, 39],
   "dragon_0": [38, 24],
   "dragon_1": [38, 24]
 }
