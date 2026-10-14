@@ -21,7 +21,7 @@ export const IS_MOBILE = (() => {
       || (window.matchMedia && window.matchMedia('(pointer: coarse)').matches && !window.matchMedia('(hover: hover)').matches);
   } catch (e) { return false; }
 })();
-const BLURB = {
+export const BLURB = {
   thief: 'Quick, quiet and always one step ahead.',
   warrior: 'A stalwart front-liner who never backs down.',
   lightmage: 'Keeps the whole party hale and humming.',
@@ -487,7 +487,7 @@ export class Visualizer {
     ctx.fillStyle = 'rgb(120,90,80)';
     for (let i = 0; i < 3; i++) { ctx.fillRect(bx + 1, by + 2 + i * 3, 5, 1); ctx.fillRect(bx + 9, by + 2 + i * 3, 5, 1); }
     ctx.fillStyle = 'rgb(255,214,120)'; ctx.fillRect(bx + 11, by + 8, 2, 5);
-    if (hot) this._tip(ctx, t('Monster Compendium'), r.x - 8, r.y + r.h / 2);
+    if (hot) this._tip(ctx, t('Compendium'), r.x - 8, r.y + r.h / 2);
   }
 
   /** A little label beside a button: ending at anchorX, or (alignLeft) starting at it. */

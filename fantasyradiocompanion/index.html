@@ -101,8 +101,11 @@
   </div>
 </section>
 
-<section id="compendium" class="popup pixel" hidden role="dialog" aria-label="Monster Compendium">
-  <header><span class="tome"></span><h2 id="compTitle">MONSTER COMPENDIUM</h2><button id="compClose" class="plain close" aria-label="Close">&times;</button></header>
+<section id="compendium" class="popup pixel" hidden role="dialog" aria-label="Compendium">
+  <header><span class="tome"></span><h2 id="compTitle">COMPENDIUM</h2>
+    <button id="compEye" class="plain eye" aria-label="Show everything" title="Show everything" aria-pressed="false"><svg viewBox="0 0 24 14" width="24" height="14" aria-hidden="true"><path d="M1 7C5 1 19 1 23 7 19 13 5 13 1 7Z" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="7" r="3.2" fill="currentColor"/></svg></button>
+    <button id="compClose" class="plain close" aria-label="Close">&times;</button></header>
+  <div id="compTabs"><button data-ctab="0" class="on">MONSTERS</button><button data-ctab="1">PARTY</button></div>
   <div id="compCards"></div>
   <footer id="compFoot"></footer>
 </section>

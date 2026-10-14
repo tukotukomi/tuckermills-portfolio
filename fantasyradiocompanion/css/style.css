@@ -133,6 +133,18 @@ html.themed .vlist .row .support { text-shadow: none; }
 .pixel h2 { margin: 0; font-size: 18px; color: var(--gold); letter-spacing: 1px; flex: 1; }
 .tome { width: 30px; height: 26px; background: #962840; border: 2px solid #0e0a22; box-shadow: inset 4px 0 0 #681830, inset 0 3px 0 #d25060; position: relative; }
 .tome::after { content: ""; position: absolute; left: 12px; top: 6px; width: 5px; height: 11px; background: var(--gold); box-shadow: -3px 3px 0 var(--gold), 3px 3px 0 var(--gold); }
+#compTabs { display: flex; gap: 6px; padding: 8px 12px 0; }
+#compTabs button { font: inherit; font-size: 12px; font-weight: 700; letter-spacing: 1px; color: #bec4f0; background: #26205a; border: 2px solid #6e78c8; padding: 5px 16px; border-radius: 0; cursor: pointer; }
+#compTabs button.on { color: var(--gold); background: #50429f; border-color: var(--gold); }
+.pixel header .eye { color: #b4bcec; background: #46388a; border: 2px solid var(--gold); border-radius: 0; padding: 4px 6px; display: flex; align-items: center; cursor: pointer; }
+.pixel header .eye[aria-pressed=true] { color: #c4ff80; background: #5a6e28; border-color: #bef878; }
+.card .st .hit { color: #ffb078; }
+.card .st .iv { color: #96c8ff; }
+.card .st .bm { color: #ff8080; }
+.card .lbl { color: #969cd2; font-size: 10px; letter-spacing: 1px; margin-right: 6px; }
+.card .row { font-size: 12px; color: #d6daf6; margin: 2px 0; }
+.card .row.atk { color: #ffb078; }
+.card .row.skl { color: #96c8ff; }
 #compCards { overflow: auto; padding: 12px; display: flex; flex-direction: column; gap: 10px; max-height: min(60dvh, 420px); }
 .card { display: grid; grid-template-columns: 84px 1fr auto; gap: 12px; padding: 8px; background: #282260; border: 2px solid #7882e6; }
 .card.unknown { border-color: #46467f; opacity: 0.85; }

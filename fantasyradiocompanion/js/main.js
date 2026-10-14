@@ -1,8 +1,8 @@
 // Fantasy Radio Companion for the web: the page, wiring the scene, the player, the music library and the popups together.
 
 import { PixelScene } from './scene.js';
-import { Sprites } from './sprites.js';
-import { Visualizer, IS_MOBILE } from './visualizer.js';
+import { Sprites, PARTY, PARTY_NAMES } from './sprites.js';
+import { Visualizer, IS_MOBILE, BLURB } from './visualizer.js';
 import { t, setLanguage, getLanguage, detectLanguage, applyDom, onLanguageChange } from './i18n.js';
 import { Sound } from './sfx.js';
 import { Player, STATIONS, AUDIO_EXTENSIONS, parsePlaylist } from './player.js';
@@ -25,6 +25,9 @@ async function main() {
   scene.loadState(store.get('save', ''));
   scene.bestDays = parseInt(store.get('best', '0'), 10) || 0;   // the furthest travelled, kept across restarts
   scene.onBest = n => store.set('best', String(n));
+  // The heroes ever used, kept across restarts (the party compendium).
+  for (const k of store.get('heroes', '').split(',')) if (PARTY.indexOf(k) >= 0) scene.heroesUsed.add(k);
+  scene.onHeroes = list => store.set('heroes', list.join(','));
   const player = new Player();
   const canvas = $('scene');
 
@@ -476,40 +479,87 @@ async function main() {
     portraits[key] = seen ? src : silhouetteImage(src, C(12, 10, 30));
     return portraits[key];
   }
+  // Which tab is up and whether the eye is on (everything shown, met or not): kept while the page is open.
+  let compTab = 0, compReveal = false;
+  function heroPortrait(kind, seen) {
+    const key = 'hero:' + kind + (seen ? '' : '#');
+    if (portraits[key]) return portraits[key];
+    const src = Sprites.party[kind].a;   // the party faces right already
+    portraits[key] = seen ? src : silhouetteImage(src, C(12, 10, 30));
+    return portraits[key];
+  }
+  /** The card's portrait window: a bit of sky over a strip of grass, with the picture standing on it. */
+  function cardCanvas(img, seen) {
+    const cv = document.createElement('canvas');
+    cv.width = 38; cv.height = 38;
+    const cx = cv.getContext('2d');
+    cx.imageSmoothingEnabled = false;
+    cx.fillStyle = seen ? '#5c84d6' : '#28284a'; cx.fillRect(0, 0, 38, 38);
+    cx.fillStyle = seen ? '#4ca050' : '#1e1e38'; cx.fillRect(0, 30, 38, 8);
+    const f = Math.max(1, Math.min(Math.floor(34 / img.width), Math.floor(30 / img.height)));
+    cx.drawImage(img, Math.round((38 - img.width * f) / 2), 34 - img.height * f, img.width * f, img.height * f);
+    return cv;
+  }
+  const secs = n => String(Math.round(n * 10) / 10);
   function openCompendium() {
     Sound.unlock();
     closePopups();
-    const cards = $('compCards');
-    cards.textContent = '';
-    let known = 0, kills = 0;
-    for (const b of scene.bestiary()) {
-      if (b.seen) known++;
-      kills += b.kills;
-      const card = el('div', 'card' + (b.seen ? '' : ' unknown'));
-      const cv = document.createElement('canvas');
-      cv.width = 38; cv.height = 38;
-      const cx = cv.getContext('2d');
-      cx.imageSmoothingEnabled = false;
-      const img = portrait(b.kind, b.seen);
-      // Sky over a strip of grass, with the portrait standing on it.
-      cx.fillStyle = b.seen ? '#5c84d6' : '#28284a'; cx.fillRect(0, 0, 38, 38);
-      cx.fillStyle = b.seen ? '#4ca050' : '#1e1e38'; cx.fillRect(0, 30, 38, 8);
-      const f = Math.max(1, Math.min(Math.floor(34 / img.width), Math.floor(30 / img.height)));
-      cx.drawImage(img, Math.round((38 - img.width * f) / 2), 34 - img.height * f, img.width * f, img.height * f);
-      const mid = el('div');
-      if (b.seen) {
-        mid.append(el('div', 'nm', t(b.name).toUpperCase()));
-        const st = el('div', 'st'); st.innerHTML = '<b>' + t('HP {n}', { n: b.maxHp }) + '</b> &nbsp; ' + t(b.habitat);
-        mid.append(st, el('div', 'nt', t(b.note)));
-      } else { mid.append(el('div', 'nm', '???'), el('div', 'nt', t('Not yet encountered.'))); }
-      const right = el('div', 'kills');
-      if (b.seen) { right.append(el('div', 'n', 'x ' + b.kills), el('div', 'l', t('DEFEATED'))); }
-      card.append(cv, mid, right);
-      cards.append(card);
-    }
-    $('compFoot').textContent = t('DISCOVERED {a}/{b}   DEFEATED {n}', { a: known, b: scene.bestiary().length, n: kills });
+    renderCompendium();
     showPopup('compendium');
   }
+  function renderCompendium() {
+    const cards = $('compCards');
+    cards.textContent = '';
+    for (const b of document.querySelectorAll('[data-ctab]')) b.classList.toggle('on', Number(b.dataset.ctab) === compTab);
+    $('compEye').setAttribute('aria-pressed', compReveal ? 'true' : 'false');
+    if (compTab === 0) {
+      const book = scene.bestiary();
+      let known = 0, kills = 0;
+      for (const b of book) {
+        if (b.seen) known++;
+        kills += b.kills;
+        const seen = b.seen || compReveal;
+        const card = el('div', 'card' + (seen ? '' : ' unknown'));
+        const mid = el('div');
+        if (seen) {
+          mid.append(el('div', 'nm', t(b.name).toUpperCase()));
+          const st = el('div', 'st');
+          st.innerHTML = '<b>' + t('HP {n}', { n: b.maxHp }) + '</b> &nbsp; <span class="hit">' + t('HIT {n}', { n: b.hit }) + '</span> &nbsp; <span class="iv">'
+            + t('EVERY {n} s', { n: secs(b.interval) }) + '</span>' + (b.bloodMoon > 0 ? ' &nbsp; <span class="bm">' + t('BLOOD MOON {n}', { n: b.bloodMoon }) + '</span>' : '');
+          const hab = el('div', 'st', t(b.habitat));
+          const nt = el('div', 'nt'); nt.append(el('span', 'lbl', t('NOTES')), t(b.note));
+          mid.append(st, hab, nt);
+        } else { mid.append(el('div', 'nm', '???'), el('div', 'nt', t('Not yet encountered.'))); }
+        const right = el('div', 'kills');
+        if (seen) { right.append(el('div', 'n', 'x ' + b.kills), el('div', 'l', t('DEFEATED'))); }
+        card.append(cardCanvas(portrait(b.kind, seen), seen), mid, right);
+        cards.append(card);
+      }
+      $('compFoot').textContent = t('DISCOVERED {a}/{b}   DEFEATED {n}', { a: known, b: book.length, n: kills });
+    } else {
+      const book = scene.partyBook();
+      let used = 0;
+      for (const b of book) {
+        if (b.seen) used++;
+        const seen = b.seen || compReveal;
+        const card = el('div', 'card' + (seen ? '' : ' unknown'));
+        const mid = el('div');
+        if (seen) {
+          mid.append(el('div', 'nm', t(PARTY_NAMES[b.kind]).toUpperCase()));
+          const st = el('div', 'st'); st.innerHTML = '<b>' + t('HP {n}', { n: b.maxHp }) + '</b>';
+          const atk = el('div', 'row atk'); atk.append(el('span', 'lbl', t('ATTACK')), b.attack);
+          const skl = el('div', 'row skl'); skl.append(el('span', 'lbl', t('SKILL')), b.skill);
+          const nt = el('div', 'row'); nt.append(el('span', 'lbl', t('NOTES')), t(BLURB[b.kind]));
+          mid.append(st, atk, skl, nt);
+        } else { mid.append(el('div', 'nm', '???'), el('div', 'nt', t('Not yet recruited.'))); }
+        card.append(cardCanvas(heroPortrait(b.kind, seen), seen), mid, el('div', 'kills'));
+        cards.append(card);
+      }
+      $('compFoot').textContent = t('HEROES USED {a}/{b}', { a: used, b: book.length });
+    }
+  }
+  for (const b of document.querySelectorAll('[data-ctab]')) b.addEventListener('click', () => { compTab = Number(b.dataset.ctab); renderCompendium(); $('compCards').scrollTop = 0; });
+  $('compEye').addEventListener('click', () => { compReveal = !compReveal; renderCompendium(); });
 
   // ---- Menu --------------------------------------------------------------------------------------------------------
   $('menuBtn').addEventListener('click', e => { e.stopPropagation(); $('menu').hidden = !$('menu').hidden; });

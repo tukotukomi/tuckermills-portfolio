@@ -433,7 +433,10 @@ export function installEnemies(P) {
   m.bestiary = function () {
     return ENEMY_KINDS.map(k => {
       const seen = this.kills[k] !== undefined;
-      return { kind: k, name: DEFS[k].name, seen: seen, kills: seen ? this.kills[k] : 0, maxHp: DEFS[k].hp, habitat: DEFS[k].habitat, note: DEFS[k].note };
+      return {
+        kind: k, name: DEFS[k].name, seen: seen, kills: seen ? this.kills[k] : 0, maxHp: DEFS[k].hp, habitat: DEFS[k].habitat, note: DEFS[k].note,
+        hit: enemyDamage(k), interval: DEFS[k].attackInterval, bloodMoon: baseOf(k) === 'gargogryph' ? bloodMoonDamage(k) : 0
+      };
     });
   };
 

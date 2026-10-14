@@ -2,7 +2,7 @@
 // level so levelling up can change a trait without the scene having to know how.
 
 import { C, CA, withAlpha, rnd } from './util.js';
-import { Sprites } from './sprites.js';
+import { Sprites, PARTY } from './sprites.js';
 import { Sound } from './sfx.js';
 import { t } from './i18n.js';
 
@@ -91,6 +91,8 @@ export function installTraits(P) {
   const m = P.prototype;
 
   m._initTraits = function () {
+    this.heroesUsed = new Set();   // every hero ever in a party (the page keeps it across restarts), for the party compendium
+    this.onHeroes = null;
     this.traitTimer = {};
     this.memberRects = {};
     this.fireballs = [];
@@ -112,6 +114,32 @@ export function installTraits(P) {
   /** A party member's damage after any Huzzah! bonus. */
   m._withHuzzah = function (damage) {
     return this.partyInspired ? damage * huzzahDamageMultiplier(this.levelOf('warrior')) : damage;
+  };
+
+  /** Everyone in the party now counts as used (the pair at the campfire don't, until one is picked). */
+  m._noteHeroesUsed = function () {
+    if (this.starting || !this.heroesUsed) return;
+    let added = false;
+    for (const k of this.party) if (!this.heroesUsed.has(k)) { this.heroesUsed.add(k); added = true; }
+    if (added && this.onHeroes) this.onHeroes(Array.from(this.heroesUsed));
+  };
+
+  /** One entry per hero, used or not, for the compendium: their numbers in one place (a balance reference). */
+  m.partyBook = function () {
+    this._noteHeroesUsed();
+    const attack = kind => {
+      switch (kind) {
+        case 'paca': return 'Peck ' + peckDamage(1) + ' dmg / ' + peckInterval(1) + ' s';
+        case 'warrior': return 'Thrown axe ' + axeDamage(1) + ' dmg / ' + axeInterval(1) + ' s, ' + axeRangeBlocks(1) + ' blocks';
+        case 'thief': return 'Melee ' + BASIC_DAMAGE + ' dmg / ' + basicInterval(kind) + ' s when leading; crossbow ' + crossbowDamage(1) + ' dmg / ' + crossbowInterval(1) + ' s otherwise';
+        case 'druid': return 'None';
+        default: return 'Melee ' + BASIC_DAMAGE + ' dmg / ' + basicInterval(kind) + ' s when leading';
+      }
+    };
+    return PARTY.map(k => ({
+      kind: k, seen: this.heroesUsed.has(k), maxHp: this.maxHpOf(k),
+      attack: attack(k), skill: traitSummary(k, 1) + (k === 'firemage' ? ' (' + fireballDamage(1) + ' dmg)' : '')
+    }));
   };
 
   m._applyHeal = function (who, hp) { this._restoreHp(who, hp); };

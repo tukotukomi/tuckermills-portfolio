@@ -137,7 +137,7 @@ export class PixelScene {
   get marching() { return this._marching && !this.suspended; }
   set marching(v) { this._marching = v; }
 
-  raiseProgress() { if (this.onProgress) this.onProgress(); }
+  raiseProgress() { if (this._noteHeroesUsed) this._noteHeroesUsed(); if (this.onProgress) this.onProgress(); }
 
   setSpectrum(live, bass, mid, treble, loud) {
     this._inLive = live; this._inBass = bass; this._inMid = mid; this._inTreble = treble; this._inLoud = loud;
