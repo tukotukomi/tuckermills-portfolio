@@ -8,10 +8,12 @@ import * as THREE from 'three';
 const COLS = 4;                 // playable columns either side of centre
 const VIS = 16;                 // columns drawn either side
 const SPAN = 2 * VIS + 10;      // loop length that moving things wrap around
-const AHEAD = 27, BEHIND = 17;  // rows kept around the camera
+const AHEAD = 27, BEHIND = 22;  // rows kept around the camera
 const HOP_T = 0.13;             // seconds per hop
 const CAM_OFF = new THREE.Vector3(2.4, 5.6, 7.2); // behind-right, a low 36° look across the fields
-const HAWK_DIST = 7.6;          // how far behind the camera Betty Lou can fall
+const _feet = new THREE.Vector3();
+// The hawk only swoops once the hopper's feet have reached the bottom edge of the screen.
+const offBottom = () => _feet.set(P.x, 0, P.z).project(camera).y < -0.98;
 const RAINBOW = [0xff4b4b, 0xff9a2e, 0xffd93b, 0x5fd35f, 0x46a6ff, 0x9b6bff];
 const GREENS = [0x5cb83a, 0x4faa38, 0x68c444, 0x55b03f];
 
@@ -281,6 +283,13 @@ function buildGirl() {
     inner.add(m);
     tails.push(m);
   }
+  return finishHero(group, inner, tails);
+}
+
+// Shared by every playable character: scale, stencil material, x-ray children.
+// `wobbles` are pivoted meshes that bounce when hopping (pigtails, tails...);
+// userData.side sets direction and userData.axis the rotation axis (default z).
+function finishHero(group, inner, wobbles) {
   group.scale.setScalar(1.3);
   const meshes = [];
   group.traverse(o => { if (o.isMesh) meshes.push(o); });
@@ -289,8 +298,135 @@ function buildGirl() {
     m.castShadow = true;
     m.add(new THREE.Mesh(m.geometry, XRAY_MAT));
   }
-  return { group, inner, tails };
+  return { group, inner, tails: wobbles };
 }
+function wobble(inner, vb, x, y, z, side, axis = 'z') {
+  const m = vb.mesh();
+  m.position.set(x, y, z);
+  m.userData.side = side;
+  m.userData.axis = axis;
+  inner.add(m);
+  return m;
+}
+function star(vb, x, y, z, r, depth, color, ry = 0) {
+  vb.box(r * 1.1, r * 1.1, depth, x, y, z, color, 0, ry, Math.PI / 4);
+  for (let i = 0; i < 5; i++) {
+    const a = Math.PI / 2 + i * 2 * Math.PI / 5;
+    vb.box(r * 0.55, r * 1.2, depth * 0.9, x + Math.cos(a) * r * 0.75, y + Math.sin(a) * r * 0.75, z, color, 0, ry, a - Math.PI / 2);
+  }
+}
+
+function buildAxolotl() {
+  const PINK = 0xffb3d1, PINK_D = 0xff8fbf, BELLY = 0xffe0ec, GILL = 0xff4f9a, GOLD = 0xffd23f;
+  const group = new THREE.Group(), inner = new THREE.Group();
+  group.add(inner);
+  const b = new VB();
+  for (const s of [-1, 1]) {
+    b.box(0.13, 0.08, 0.17, s * 0.1, 0.04, -0.02, PINK_D);           // feet
+    b.box(0.12, 0.12, 0.12, s * 0.1, 0.14, 0, PINK);                  // legs
+    b.box(0.09, 0.18, 0.1, s * 0.245, 0.37, -0.02, PINK);             // arms
+    b.box(0.1, 0.06, 0.1, s * 0.245, 0.25, -0.02, PINK_D);
+    b.box(0.07, 0.08, 0.02, s * 0.17, 0.74, -0.222, 0x222222);        // eyes
+    b.box(0.025, 0.03, 0.01, s * 0.17 + 0.012, 0.765, -0.234, 0xffffff);
+    b.box(0.08, 0.04, 0.02, s * 0.2, 0.655, -0.221, 0xff7aa8);        // cheeks
+    b.box(0.05, 0.1, 0.04, s * 0.1, 0.97, -0.1, GOLD);                // tiara side points
+    b.box(0.04, 0.04, 0.03, s * 0.1, 0.95, -0.125, GILL);
+  }
+  b.box(0.4, 0.34, 0.32, 0, 0.36, 0, PINK);                           // body
+  b.box(0.26, 0.24, 0.02, 0, 0.34, -0.165, BELLY);
+  b.box(0.58, 0.36, 0.44, 0, 0.7, 0, PINK);                           // wide head
+  b.box(0.18, 0.025, 0.02, 0, 0.635, -0.221, 0xc2475f);               // wide smile
+  b.box(0.32, 0.05, 0.22, 0, 0.905, -0.02, GOLD);                     // tiara band
+  b.box(0.06, 0.16, 0.04, 0, 0.99, -0.1, GOLD);                       // centre point
+  b.box(0.06, 0.06, 0.03, 0, 0.98, -0.125, 0x46a6ff);                 // gem
+  inner.add(b.mesh());
+  const wob = [];
+  for (const s of [-1, 1]) {                                          // frilly gills
+    const g = new VB();
+    for (const [x, y, sz] of [[0.06, 0.12, 0.08], [0.11, 0.22, 0.07], [0.1, 0.04, 0.08], [0.2, 0.07, 0.07], [0.08, -0.06, 0.08], [0.17, -0.12, 0.07]]) {
+      g.box(sz, sz, sz, s * x, y, 0, GILL);
+      g.box(sz * 0.5, sz * 0.5, sz * 1.05, s * (x + sz * 0.3), y + sz * 0.3, 0, 0xff8cc0);
+    }
+    wob.push(wobble(inner, g, s * 0.29, 0.72, 0.06, s));
+  }
+  const t = new VB();                                                 // wagging tail with a fin
+  t.box(0.13, 0.14, 0.3, 0, 0, 0.15, PINK);
+  t.box(0.06, 0.26, 0.28, 0, 0.02, 0.38, PINK_D);
+  wob.push(wobble(inner, t, 0, 0.27, 0.13, 1, 'y'));
+  return finishHero(group, inner, wob);
+}
+
+function buildCatstar() {
+  const K = 0x262630, W = 0xffffff, PINK = 0xff8fb0, STAR = 0xffcf2a;
+  const group = new THREE.Group(), inner = new THREE.Group();
+  group.add(inner);
+  const b = new VB();
+  for (const s of [-1, 1]) {
+    b.box(0.13, 0.07, 0.2, s * 0.09, 0.035, -0.03, W);                // white feet
+    b.box(0.13, 0.16, 0.14, s * 0.09, 0.15, 0, K);
+    b.box(0.08, 0.2, 0.1, s * 0.21, 0.4, -0.02, K);                   // arms
+    b.box(0.09, 0.07, 0.1, s * 0.21, 0.27, -0.03, W);                 // paws
+    b.box(0.08, 0.09, 0.02, s * 0.12, 0.77, -0.195, 0x9ee34a);        // green eyes
+    b.box(0.03, 0.08, 0.01, s * 0.12, 0.77, -0.207, 0x111111);
+    b.box(0.15, 0.012, 0.012, s * 0.2, 0.645, -0.2, W, 0, 0, s * 0.12); // whiskers
+    b.box(0.15, 0.012, 0.012, s * 0.2, 0.62, -0.2, W, 0, 0, -s * 0.08);
+    b.box(0.12, 0.15, 0.08, s * 0.15, 0.95, 0, K, 0, 0, -s * 0.2);    // ears
+    b.box(0.06, 0.08, 0.02, s * 0.15, 0.94, -0.045, PINK, 0, 0, -s * 0.2);
+    b.box(0.05, 0.02, 0.28, s * 0.1, 0.525, 0, 0xe2412f);             // backpack straps
+  }
+  b.box(0.34, 0.3, 0.26, 0, 0.37, 0, K);
+  b.box(0.2, 0.24, 0.02, 0, 0.38, -0.135, W);                         // white chest
+  b.box(0.46, 0.36, 0.38, 0, 0.72, 0, K);                             // head
+  b.box(0.22, 0.12, 0.03, 0, 0.63, -0.2, W);                          // muzzle
+  b.box(0.08, 0.14, 0.02, 0, 0.76, -0.195, W);                        // blaze
+  b.box(0.06, 0.04, 0.02, 0, 0.675, -0.218, PINK);
+  star(b, 0, 0.42, 0.17, 0.2, 0.08, STAR);                            // star backpack
+  b.box(0.06, 0.06, 0.02, -0.04, 0.46, 0.215, 0xfff3a0);
+  inner.add(b.mesh());
+  const t = new VB();                                                 // swishy tail, white tip
+  for (const [y, z] of [[0.02, 0.06], [0.1, 0.12], [0.2, 0.15], [0.3, 0.14]]) t.box(0.07, 0.1, 0.07, 0, y, z, K);
+  t.box(0.08, 0.08, 0.08, 0, 0.38, 0.11, W);
+  return finishHero(group, inner, [wobble(inner, t, 0, 0.24, 0.12, 1)]);
+}
+
+function buildLeafWish() {
+  const LEAF = 0x6cc94a, LEAF_D = 0x58b43c, VEIN = 0xb8f08a, TWIG = 0x6b4a2a;
+  const group = new THREE.Group(), inner = new THREE.Group();
+  group.add(inner);
+  const b = new VB();
+  for (const s of [-1, 1]) {
+    b.box(0.05, 0.18, 0.05, s * 0.08, 0.09, 0, TWIG);                 // twig legs
+    b.box(0.1, 0.04, 0.13, s * 0.08, 0.02, -0.02, TWIG);
+    b.box(0.07, 0.09, 0.02, s * 0.11, 0.74, -0.085, 0x222222);        // eyes
+    b.box(0.025, 0.03, 0.01, s * 0.11 + 0.012, 0.765, -0.097, 0xffffff);
+    b.box(0.08, 0.04, 0.02, s * 0.17, 0.665, -0.083, 0xff9eb5);       // cheeks
+    for (const y of [0.45, 0.65, 0.85]) b.box(0.16, 0.02, 0.02, s * 0.1, y + 0.04, 0.086, VEIN, 0, 0, s * 0.5); // back veins
+  }
+  b.box(0.04, 0.18, 0.04, -0.27, 0.56, -0.02, TWIG, 0, 0, -0.5);       // left arm
+  b.box(0.04, 0.16, 0.04, 0.28, 0.5, -0.04, TWIG, 0, 0, 0.9);         // right arm, holding the wand
+  [0.16, 0.32, 0.42, 0.48, 0.5, 0.48, 0.42, 0.32, 0.18].forEach((w, i) =>   // leaf blade
+    b.box(w, 0.1, 0.16, 0, 0.25 + i * 0.1, 0, i % 2 ? LEAF : LEAF_D));
+  b.box(0.03, 0.84, 0.02, 0, 0.64, 0.086, VEIN);                      // midrib on the back
+  b.box(0.08, 0.025, 0.02, 0, 0.66, -0.083, 0xc2475f);                // smile
+  inner.add(b.mesh());
+  const st = new VB();                                                // curly stem on top
+  st.box(0.05, 0.14, 0.05, 0, 0.06, 0, 0x4c7a2a);
+  st.box(0.1, 0.05, 0.05, 0.04, 0.14, 0, 0x4c7a2a);
+  const w = new VB();                                                 // wishing wand
+  w.box(0.035, 0.42, 0.035, 0, 0.18, 0, 0xb48cff);
+  star(w, 0, 0.44, 0, 0.12, 0.05, 0xffe14d);
+  for (const [x, y] of [[0.12, 0.52], [-0.1, 0.56], [0.08, 0.32]]) w.box(0.04, 0.04, 0.04, x, y, 0, 0xffffff);
+  return finishHero(group, inner, [wobble(inner, st, 0, 1.15, 0, 1), wobble(inner, w, 0.34, 0.45, -0.06, -1, 'x')]);
+}
+
+const HEROES = [
+  { id: 'betty', name: 'Betty Lou', build: () => buildGirl(), bg: '#ffd6ec' },
+  { id: 'axolotl', name: 'Axolotl Princess', build: buildAxolotl, bg: '#d9f2ff' },
+  { id: 'catstar', name: 'Catstar', build: buildCatstar, bg: '#fff1b8' },
+  { id: 'leafwish', name: 'LeafWish', build: buildLeafWish, bg: '#e6dcff' },
+];
+let heroId = store.get('bl-hero', 'betty');
+const hero = () => HEROES.find(h => h.id === heroId) || HEROES[0];
 
 function buildTractor(col, hub, wagon) {
   const b = new VB();
@@ -673,16 +809,72 @@ function strip(vb, top, color, dark) {
 }
 const LANE_Y = { grass: 0, forest: 0, road: -0.02, pasture: 0, bull: 0, wheat: 0, crops: 0, water: 0.05, pads: -0.15 };
 
-function tree(vb, x) {
-  const h = pick([0.45, 0.65, 0.9, 1.15]), g = pick(GREENS);
-  vb.box(0.28, 0.3, 0.28, x, 0.15, 0, 0x8a5a33);
-  vb.box(0.8, h, 0.8, x, 0.3 + h / 2, 0, g);
-  if (Math.random() < 0.22) {
-    for (let i = 0; i < 3; i++) {
-      vb.box(0.1, 0.1, 0.04, x + rand(-0.28, 0.28), 0.3 + rand(0.12, h - 0.08), 0.41, 0xff3b3b);
-      vb.box(0.04, 0.1, 0.1, x + 0.41, 0.3 + rand(0.12, h - 0.08), rand(-0.28, 0.28), 0xff3b3b);
-    }
+// ---------- trees: a mix of species, each nudged and turned a little ----------
+const BARK = 0x7a4f2c;
+// Tiered conifer: layers shrink upward, every other layer turned 45° so the
+// silhouette is a star, not a block.
+function conifer(vb, x, z, tiers, base, top, h, green, trunkH = 0.22) {
+  vb.box(0.14, trunkH, 0.14, x, trunkH / 2, z, BARK);
+  const step = h / tiers;
+  for (let i = 0; i < tiers; i++) {
+    const w = lerp(base, top, i / (tiers - 1));
+    vb.box(w, step * 1.15, w, x, trunkH + step * (i + 0.5), z, i % 2 ? shade(green, 1.1) : green, 0, i % 2 ? Math.PI / 4 : 0.2, 0);
   }
+  vb.box(0.08, 0.14, 0.08, x, trunkH + h + 0.05, z, shade(green, 1.15));
+}
+const pine = (vb, x, z) => conifer(vb, x, z, 4, 0.8, 0.28, rand(1.3, 1.7), 0x2f7a3a);
+const fir = (vb, x, z) => conifer(vb, x, z, 6, 0.58, 0.14, rand(1.7, 2.2), 0x2f7f66, 0.16);
+function poplar(vb, x, z) {          // tall, skinny column (Italian cypress / Lombardy poplar)
+  vb.box(0.1, 0.18, 0.1, x, 0.09, z, BARK);
+  const g = pick([0x3c8f3a, 0x4a9a3c]);
+  const ws = [0.26, 0.34, 0.37, 0.35, 0.3, 0.22, 0.12], h = rand(1.6, 2.1), step = h / ws.length;
+  ws.forEach((w, i) => vb.box(w, step * 1.1, w, x, 0.18 + step * (i + 0.5), z, i % 2 ? g : shade(g, 1.1), 0, i * 0.35, 0));
+}
+function dogwood(vb, x, z) {         // low spreading tiers dotted with white blossoms
+  vb.box(0.1, 0.42, 0.1, x, 0.21, z, BARK);
+  vb.box(0.06, 0.24, 0.06, x + 0.1, 0.4, z, BARK, 0, 0, -0.6);
+  const leaves = 0x5fb84a;
+  const pads = [[0, 0.5, 0, 0.78], [0.12, 0.72, -0.05, 0.6], [-0.1, 0.9, 0.06, 0.42]];
+  for (const [dx, y, dz, w] of pads) {
+    vb.box(w, 0.2, w * 0.9, x + dx, y, z + dz, leaves, 0, rand(0, 1), 0);
+    for (let i = 0; i < 4; i++) {
+      vb.box(0.09, 0.05, 0.09, x + dx + rand(-w, w) * 0.4, y + 0.11, z + dz + rand(-w, w) * 0.35, pick([0xffffff, 0xfff0f5]));
+    }
+    vb.box(0.09, 0.09, 0.03, x + dx + rand(-0.2, 0.2), y, z + dz + w * 0.45, 0xffffff);
+  }
+}
+function crepeMyrtle(vb, x, z) {     // several smooth pale trunks, puffs of pink bloom
+  for (const a of [-0.35, 0, 0.35]) vb.box(0.06, 0.6, 0.06, x + a * 0.25, 0.3, z + a * 0.1, 0xc9a98a, 0, 0, a);
+  const pinks = pick([[0xff6fb5, 0xe64a9a], [0xd77bff, 0xb35ae0], [0xff8fa3, 0xf2607e]]);
+  for (const [dx, y, dz, s] of [[-0.18, 0.72, 0, 0.36], [0.18, 0.76, 0.04, 0.34], [0, 0.95, -0.04, 0.38], [0.02, 0.68, 0.18, 0.28]]) {
+    vb.box(s, s * 0.85, s, x + dx, y, z + dz, pinks[0], 0, rand(0, 1), 0);
+    vb.box(s * 0.6, s * 0.5, s * 0.6, x + dx + 0.05, y + s * 0.4, z + dz, pinks[1], 0, rand(0, 1), 0);
+  }
+  vb.box(0.5, 0.12, 0.4, x, 0.6, z, 0x5fa83a);
+}
+function birch(vb, x, z) {           // white bark with dark marks, small airy crown
+  vb.box(0.12, 0.85, 0.12, x, 0.425, z, 0xf2efe6);
+  for (const y of [0.2, 0.45, 0.7]) vb.box(0.13, 0.03, 0.06, x, y, z + 0.035, 0x333333);
+  const g = 0x8fd15a;
+  vb.box(0.44, 0.34, 0.44, x, 0.95, z, g, 0, 0.6, 0);
+  vb.box(0.3, 0.26, 0.3, x + 0.12, 1.18, z, shade(g, 1.08), 0, 0.2, 0);
+  vb.box(0.26, 0.22, 0.26, x - 0.14, 0.8, z + 0.08, shade(g, 0.92));
+}
+function appleTree(vb, x, z) {       // rounded crown built from a plus of boxes, red apples
+  vb.box(0.18, 0.36, 0.18, x, 0.18, z, BARK);
+  const g = pick(GREENS);
+  vb.box(0.76, 0.42, 0.5, x, 0.6, z, g);
+  vb.box(0.5, 0.42, 0.76, x, 0.6, z, g);
+  vb.box(0.5, 0.26, 0.5, x, 0.9, z, shade(g, 1.1), 0, Math.PI / 4, 0);
+  for (let i = 0; i < 4; i++) vb.box(0.09, 0.09, 0.09, x + rand(-0.3, 0.3), rand(0.45, 0.8), z + 0.38, 0xff3b3b);
+  for (let i = 0; i < 2; i++) vb.box(0.09, 0.09, 0.09, x + 0.38, rand(0.45, 0.8), z + rand(-0.2, 0.2), 0xff3b3b);
+}
+// Playable lanes get the shorter species so they don't hide oncoming traffic
+// at the low camera angle; the tall, skinny ones stand along the edges.
+const SHORT_TREES = [dogwood, crepeMyrtle, appleTree, birch];
+const ALL_TREES = [pine, pine, fir, fir, poplar, poplar, dogwood, crepeMyrtle, appleTree, birch];
+function tree(vb, x, tall) {
+  pick(tall ? ALL_TREES : SHORT_TREES)(vb, x + rand(-0.08, 0.08), rand(-0.08, 0.08));
 }
 function bush(vb, x) {
   vb.box(0.72, 0.42, 0.62, x, 0.21, 0, 0x4fae3f);
@@ -712,8 +904,8 @@ function flowers(vb, x) {
 }
 function blocker(vb, x, outer) {
   const k = Math.random();
-  if (outer) return k < 0.85 ? tree(vb, x) : bush(vb, x);
-  if (k < 0.5) tree(vb, x);
+  if (outer) return k < 0.85 ? tree(vb, x, true) : bush(vb, x);
+  if (k < 0.5) tree(vb, x, false);
   else if (k < 0.65) hay(vb, x);
   else if (k < 0.77) rock(vb, x);
   else if (k < 0.89) pumpkin(vb, x);
@@ -831,7 +1023,7 @@ function addLane(r) {
       else if (Math.random() < 0.4) flowers(vb, x);
     }
     if (type === 'forest') {
-      for (let x = -COLS; x <= COLS; x++) { blocker(vb, x, true); lane.blocked.add(x); }
+      for (let x = -COLS; x <= COLS; x++) { tree(vb, x, r < -3); lane.blocked.add(x); }  // short trees nearest the start
     } else {
       const forced = new Set(prev && prev.type === 'pads' ? prev.padCols : []);
       if (r < STRAIGHT) forced.add(0);
@@ -1065,7 +1257,7 @@ function resetPlayer() {
     x: 0, z: 0, y: 0, r: 0, hop: null, queue: null, log: null, alive: true,
     face: Math.PI + 0.36, faceTarget: Math.PI + 0.36, held: false, sy: 1,
     tailAng: 0, tailVel: 0, death: null, deathT: 0, vx: 0, vy: 0, vz: 0,
-    model: buildGirl(),
+    model: hero().build(),
   });
   scene.add(P.model.group);
 }
@@ -1130,7 +1322,7 @@ const DEATH_MSG = {
   squash: 'Flattened by a tractor!',
   bonk: 'Bonked by a cow!',
   launch: 'Launched by a bull!',
-  splash: "Splash! Betty Lou can't swim!",
+  splash: "Splash! {name} can't swim!",
   swept: 'Swept down the creek!',
   hawk: 'Snatched by a hawk!',
   goose: 'Chased off by geese!',
@@ -1230,7 +1422,6 @@ function updatePlayer(dt) {
         }
       }
     }
-    if (P.alive && P.z - game.camZ > HAWK_DIST) die('hawk');
   }
 
   // death animations
@@ -1277,7 +1468,7 @@ function updatePlayer(dt) {
   P.tailVel += (-70 * P.tailAng - 7 * P.tailVel) * dt;
   P.tailAng += P.tailVel * dt;
   const idle = Math.sin(game.time * 3) * 0.04;
-  for (const t of tails) t.rotation.z = t.userData.side * (P.tailAng * 0.12 + idle);
+  for (const t of tails) t.rotation[t.userData.axis || 'z'] = t.userData.side * (P.tailAng * 0.12 + idle);
 
   group.position.set(P.x, P.y, P.z);
   group.rotation.y = P.face;
@@ -1307,6 +1498,9 @@ function updateCamera(dt) {
   camera.lookAt(_t);
   sun.position.copy(_t).add(SUN_OFF);
   sun.target.position.copy(_t);
+  // hawk check runs here, against this frame's camera (not last game's, after a restart)
+  camera.updateMatrixWorld();
+  if (game.state === 'play' && P.alive && offBottom()) die('hawk');
 }
 
 function ensureLanes() {
@@ -1347,7 +1541,7 @@ function startGame() {
 function gameOver() {
   game.state = 'over';
   document.body.classList.add('over');
-  $('overMsg').textContent = DEATH_MSG[P.death] || 'Oh no!';
+  $('overMsg').textContent = (DEATH_MSG[P.death] || 'Oh no!').replace('{name}', hero().name);
   const over = $('over');
   over.classList.toggle('record', !!game.record);
   over.classList.add('show');
@@ -1365,13 +1559,13 @@ function restart() {
 // ---------- input: tap = hop forward, swipe = direction ----------
 let press = null;
 window.addEventListener('pointerdown', e => {
-  if (e.target.closest('button')) return;
+  if (game.picking || e.target.closest('button')) return;
   sfx.ensure();
   press = { x: e.clientX, y: e.clientY, id: e.pointerId };
   if (game.state === 'title' || game.state === 'play') P.held = true;
 });
 window.addEventListener('pointerup', e => {
-  if (!press || e.pointerId !== press.id) return;
+  if (!press || e.pointerId !== press.id || game.picking) { press = null; P.held = false; return; }
   const dx = e.clientX - press.x, dy = e.clientY - press.y;
   press = null;
   P.held = false;
@@ -1391,6 +1585,7 @@ const KEYS = {
 };
 window.addEventListener('keydown', e => {
   sfx.ensure();
+  if (game.picking) { if (e.code === 'Escape') closeHeroes(); return; }
   if (game.state === 'over' && (e.code === 'Space' || e.code === 'Enter')) { restart(); return; }
   if (e.code === 'Space' && !e.repeat) { move(0, 1); e.preventDefault(); return; }
   const k = KEYS[e.code];
@@ -1436,6 +1631,73 @@ function frame(now) {
   last = now;
   requestAnimationFrame(frame);
 }
+
+// ---------- character select ----------
+// Portraits are rendered once in a throwaway WebGL context: a head-only cut-out
+// of Betty Lou for the select button, and a full-body shot of each hopper.
+function renderPortraits() {
+  const r = new THREE.WebGLRenderer({ alpha: true, antialias: true, preserveDrawingBuffer: true });
+  r.setPixelRatio(1);
+  const sc = new THREE.Scene();
+  sc.add(new THREE.HemisphereLight(0xfff4ec, 0x7d6fa8, 1.5));
+  const key = new THREE.DirectionalLight(0xfff3dc, 2.4);
+  key.position.set(-2, 5, 6);
+  sc.add(key);
+  const shot = (h, size, cy, half, clipBelow) => {
+    r.setSize(size, size, false);
+    r.clippingPlanes = clipBelow == null ? [] : [new THREE.Plane(new THREE.Vector3(0, 1, 0), -clipBelow)];
+    const m = h.build();
+    m.group.rotation.y = Math.PI - 0.45;   // three-quarter view, facing the camera
+    sc.add(m.group);
+    const cam = new THREE.OrthographicCamera(-half, half, half, -half, 0.1, 50);
+    cam.position.set(0, cy + 1.2, 10);
+    cam.lookAt(0, cy, 0);
+    r.render(sc, cam);
+    sc.remove(m.group);
+    return r.domElement.toDataURL('image/png');
+  };
+  const head = shot(HEROES[0], 160, 1.08, 0.72, 0.74);
+  const cards = HEROES.map(h => shot(h, 256, 0.8, 0.98));
+  r.dispose();
+  r.forceContextLoss();
+  return { head, cards };
+}
+
+const shots = renderPortraits();
+document.querySelectorAll('.heroBtn img').forEach(img => { img.src = shots.head; });
+const heroGrid = $('heroGrid');
+HEROES.forEach((h, i) => {
+  const card = document.createElement('button');
+  card.className = 'heroCard';
+  card.dataset.id = h.id;
+  card.style.background = h.bg;
+  card.innerHTML = `<img class="cutout" alt="" src="${shots.cards[i]}"><span>${h.name}</span>`;
+  card.addEventListener('click', () => pickHero(h.id));
+  heroGrid.append(card);
+});
+function markHero() {
+  for (const c of heroGrid.children) c.classList.toggle('on', c.dataset.id === heroId);
+}
+function openHeroes() {
+  markHero();
+  $('heroes').classList.add('show');
+  game.picking = true;
+}
+function closeHeroes() {
+  $('heroes').classList.remove('show');
+  game.picking = false;
+}
+function pickHero(id) {
+  heroId = id;
+  store.set('bl-hero', id);
+  markHero();
+  if (game.state === 'title') resetPlayer();   // show the new hopper straight away
+  setTimeout(closeHeroes, 200);
+}
+document.querySelectorAll('.heroBtn').forEach(b => b.addEventListener('click', () => { sfx.ensure(); openHeroes(); }));
+$('heroClose').addEventListener('click', closeHeroes);
+$('heroes').addEventListener('click', e => { if (e.target.id === 'heroes') closeHeroes(); });
+$('start').addEventListener('click', () => { sfx.ensure(); if (game.state === 'title') startGame(); });
 
 resize();
 newWorld();

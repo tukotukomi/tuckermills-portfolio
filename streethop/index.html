@@ -38,12 +38,30 @@
 
 <div id="hint" class="outline">Tap to hop<small>Swipe to turn &amp; go back</small></div>
 
+<div id="titleBtns" class="btnRow">
+  <button class="heroBtn" aria-label="Choose character"><img class="cutout" alt=""></button>
+  <button id="start" class="playBtn" aria-label="Play">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l10.5-6.5z" fill="#fff" stroke="#000" stroke-width="1.6" stroke-linejoin="round"/></svg>
+  </button>
+</div>
+
 <div id="over">
   <div id="overMsg" class="outline"></div>
   <div id="newTop" class="outline">New top score!</div>
-  <button id="play" aria-label="Play again">
-    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l10.5-6.5z" fill="#fff" stroke="#000" stroke-width="1.6" stroke-linejoin="round"/></svg>
-  </button>
+  <div class="btnRow">
+    <button class="heroBtn" aria-label="Choose character"><img class="cutout" alt=""></button>
+    <button id="play" class="playBtn" aria-label="Play again">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l10.5-6.5z" fill="#fff" stroke="#000" stroke-width="1.6" stroke-linejoin="round"/></svg>
+    </button>
+  </div>
+</div>
+
+<div id="heroes" role="dialog" aria-modal="true" aria-labelledby="heroesTitle">
+  <div class="panel">
+    <h2 id="heroesTitle" class="outline">Pick your hopper</h2>
+    <div id="heroGrid"></div>
+    <button id="heroClose" aria-label="Close">&#x2715;</button>
+  </div>
 </div>
 
 <button id="look" aria-label="Switch art style">
