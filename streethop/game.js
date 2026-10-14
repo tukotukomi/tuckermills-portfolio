@@ -308,14 +308,35 @@ function wobble(inner, vb, x, y, z, side, axis = 'z') {
   inner.add(m);
   return m;
 }
-function star(vb, x, y, z, r, depth, color, ry = 0) {
-  vb.box(r * 1.1, r * 1.1, depth, x, y, z, color, 0, ry, Math.PI / 4);
-  for (let i = 0; i < 5; i++) {
-    const a = Math.PI / 2 + i * 2 * Math.PI / 5;
-    vb.box(r * 0.55, r * 1.2, depth * 0.9, x + Math.cos(a) * r * 0.75, y + Math.sin(a) * r * 0.75, z, color, 0, ry, a - Math.PI / 2);
+// A plump cartoon star: five rounded tips, soft valleys, bevelled edges.
+// `color` is a hex, or (x, y) => THREE.Color for gradients such as rainbowAt.
+function starMesh(r, depth, color) {
+  const pts = [];
+  for (let i = 0; i < 10; i++) {
+    const a = Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? r * 0.5 : r;
+    pts.push(new THREE.Vector2(Math.cos(a) * rr, Math.sin(a) * rr));
   }
+  const s = new THREE.Shape();
+  pts.forEach((p, i) => {
+    const k = i % 2 ? 0.22 : 0.2;   // how much each corner is rounded off
+    const a = p.clone().lerp(pts[(i + 9) % 10], k), b = p.clone().lerp(pts[(i + 1) % 10], k);
+    if (i === 0) s.moveTo(a.x, a.y); else s.lineTo(a.x, a.y);
+    s.quadraticCurveTo(p.x, p.y, b.x, b.y);
+  });
+  s.closePath();
+  const g = new THREE.ExtrudeGeometry(s, {
+    depth, curveSegments: 4, bevelEnabled: true, bevelThickness: depth * 0.4, bevelSize: r * 0.07, bevelSegments: 2,
+  });
+  g.translate(0, 0, -depth / 2);
+  const pos = g.attributes.position, cols = new Float32Array(pos.count * 3), c = new THREE.Color();
+  for (let i = 0; i < pos.count; i++) {
+    if (typeof color === 'function') c.copy(color(pos.getX(i), pos.getY(i))); else c.set(color);
+    cols[i * 3] = c.r; cols[i * 3 + 1] = c.g; cols[i * 3 + 2] = c.b;
+  }
+  g.setAttribute('color', new THREE.BufferAttribute(cols, 3));
+  return new THREE.Mesh(g);   // finishHero gives it the hero material
 }
-
+const rainbowAt = (x, y) => new THREE.Color().setHSL((Math.atan2(y, x) / (2 * Math.PI) + 1.25) % 1, 0.95, 0.58);
 function buildAxolotl() {
   const PINK = 0xffb3d1, PINK_D = 0xff8fbf, BELLY = 0xffe0ec, GILL = 0xff4f9a, GOLD = 0xffd23f;
   const group = new THREE.Group(), inner = new THREE.Group();
@@ -380,13 +401,24 @@ function buildCatstar() {
   b.box(0.22, 0.12, 0.03, 0, 0.63, -0.2, W);                          // muzzle
   b.box(0.08, 0.14, 0.02, 0, 0.76, -0.195, W);                        // blaze
   b.box(0.06, 0.04, 0.02, 0, 0.675, -0.218, PINK);
-  star(b, 0, 0.42, 0.17, 0.2, 0.08, STAR);                            // star backpack
-  b.box(0.06, 0.06, 0.02, -0.04, 0.46, 0.215, 0xfff3a0);
+  b.box(0.2, 0.07, 0.22, 0, 0.935, 0.01, 0x8a5cff);                  // little cap for the spring
+  b.box(0.2, 0.02, 0.1, 0, 0.91, -0.15, 0x8a5cff);
   inner.add(b.mesh());
+  const pack = starMesh(0.2, 0.07, STAR);                             // star backpack
+  pack.position.set(0, 0.42, 0.2);
+  inner.add(pack);
   const t = new VB();                                                 // swishy tail, white tip
   for (const [y, z] of [[0.02, 0.06], [0.1, 0.12], [0.2, 0.15], [0.3, 0.14]]) t.box(0.07, 0.1, 0.07, 0, y, z, K);
   t.box(0.08, 0.08, 0.08, 0, 0.38, 0.11, W);
-  return finishHero(group, inner, [wobble(inner, t, 0, 0.24, 0.12, 1)]);
+  const sp = new VB();                                                // coiled spring on the cap
+  for (let i = 0; i < 5; i++) sp.box(0.11, 0.022, 0.03, 0, 0.025 + i * 0.05, 0, 0xcfd6e0, 0, 0, i % 2 ? 0.35 : -0.35);
+  for (const s of [-1, 1]) sp.box(0.025, 0.035, 0.02, s * 0.035, 0.32, -0.04, 0x111111);  // the star's eyes
+  const spring = wobble(inner, sp, 0, 0.97, 0.01, 1, 'x');
+  spring.userData.boing = true;                                       // stretches as well as sways
+  const hatStar = starMesh(0.11, 0.05, STAR);
+  hatStar.position.set(0, 0.31, 0);
+  spring.add(hatStar);
+  return finishHero(group, inner, [wobble(inner, t, 0, 0.24, 0.12, 1), spring]);
 }
 
 function buildLeafWish() {
@@ -414,9 +446,12 @@ function buildLeafWish() {
   st.box(0.1, 0.05, 0.05, 0.04, 0.14, 0, 0x4c7a2a);
   const w = new VB();                                                 // wishing wand
   w.box(0.035, 0.42, 0.035, 0, 0.18, 0, 0xb48cff);
-  star(w, 0, 0.44, 0, 0.12, 0.05, 0xffe14d);
   for (const [x, y] of [[0.12, 0.52], [-0.1, 0.56], [0.08, 0.32]]) w.box(0.04, 0.04, 0.04, x, y, 0, 0xffffff);
-  return finishHero(group, inner, [wobble(inner, st, 0, 1.15, 0, 1), wobble(inner, w, 0.34, 0.45, -0.06, -1, 'x')]);
+  const wand = wobble(inner, w, 0.34, 0.45, -0.06, -1, 'x');
+  const wishStar = starMesh(0.14, 0.05, rainbowAt);                    // rainbow star tip
+  wishStar.position.set(0, 0.46, 0);
+  wand.add(wishStar);
+  return finishHero(group, inner, [wobble(inner, st, 0, 1.15, 0, 1), wand]);
 }
 
 const HEROES = [
@@ -1468,7 +1503,10 @@ function updatePlayer(dt) {
   P.tailVel += (-70 * P.tailAng - 7 * P.tailVel) * dt;
   P.tailAng += P.tailVel * dt;
   const idle = Math.sin(game.time * 3) * 0.04;
-  for (const t of tails) t.rotation[t.userData.axis || 'z'] = t.userData.side * (P.tailAng * 0.12 + idle);
+  for (const t of tails) {
+    t.rotation[t.userData.axis || 'z'] = t.userData.side * (P.tailAng * 0.12 + idle);
+    if (t.userData.boing) t.scale.y = 1 + P.tailAng * 0.3 + idle;   // Catstar's spring
+  }
 
   group.position.set(P.x, P.y, P.z);
   group.rotation.y = P.face;
