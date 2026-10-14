@@ -139,6 +139,39 @@ const RECIPES = {
       return (saw(ph) * 0.4 * Math.pow(1 - u, 1.4) + lp * 0.9 * exp(t, 0.4) + crumble) * 0.8;
     });
   },
+  ToucanRoar() {   // a tinny two-note squawk
+    let ph = 0, lp = 0;
+    return make(0.55, t => {
+      const first = t < 0.24;
+      const u = first ? t / 0.24 : (t - 0.24) / 0.31;
+      const hz = (first ? 760 + 380 * u : 620 + 520 * u) + 40 * Math.sin(t * 70);
+      ph += hz / R;
+      lp += 0.5 * (noise() - lp);
+      const env = first ? Math.sin(Math.PI * u) : Math.pow(1 - u, 0.7) * attack(t - 0.24, 0.02);
+      return (sqr(ph, 0.35) * 0.4 + saw(ph * 2) * 0.15 + (noise() - lp) * 0.12) * env * 0.85;
+    });
+  },
+  ToucanSwing() {   // the bill drawing back: a quick rising peep and a breath
+    let ph = 0;
+    return make(0.16, t => { ph += (500 + 2200 * t) / R; return tri(ph) * exp(t, 0.07) * 0.3 + noise() * 0.25 * Math.sin(Math.PI * t / 0.16); });
+  },
+  ToucanHit() {   // the bill clanging on armour: a ring of tin and a click
+    let a = 0, b = 0;
+    return make(0.3, t => {
+      a += 1180 / R; b += 1770 / R;
+      return (sin(a) * 0.5 + sin(b) * 0.35 + sqr(a * 0.5, 0.5) * 0.1) * exp(t, 0.07) * 0.7 + noise() * 0.5 * exp(t, 0.006);
+    });
+  },
+  ToucanDeath() {   // a falling squawk and the rattle of a dropped can
+    let ph = 0, a = 0;
+    return make(0.9, t => {
+      const u = t / 0.9;
+      ph += (1100 * Math.exp(-u * 3) + 140) / R;
+      a += 1400 / R;
+      const rattle = noise() > 0.85 ? noise() * 0.5 * exp(t, 0.35) : 0;
+      return (sqr(ph, 0.3) * 0.35 * Math.pow(1 - u, 1.2) + rattle + sin(a) * 0.15 * exp(t, 0.1)) * 0.85;
+    });
+  },
   BloodMoon() {
     const d = new Float32Array(Math.trunc(3.2 * R));
     let a = 0, b = 0;

@@ -10,12 +10,14 @@ import { peckDamage, peckInterval, axeInterval, axeRangeBlocks, BLOCK_PIXELS, cr
 const BOW_FIRST_DELAY = 1.5;   // seconds from the Thief first being able to shoot to his first bolt
 import { t } from './i18n.js';
 
-// The four originals, then the variant of each that takes over half the spawns from Year 2 (same moves, twice the damage).
-export const ENEMY_KINDS = ['sheller', 'orc', 'nightmare', 'gargogryph', 'spikedsheller', 'bassorc', 'slasher', 'wickedgryph'];
-export const ENEMY_ENUM = { sheller: 'Sheller', orc: 'Orc', nightmare: 'Nightmare', gargogryph: 'Gargogryph', spikedsheller: 'SpikedSheller', bassorc: 'BassOrc', slasher: 'Slasher', wickedgryph: 'Wickedgryph' };
-const ENEMY_FROM_ENUM = { Sheller: 'sheller', Orc: 'orc', Nightmare: 'nightmare', Gargogryph: 'gargogryph', SpikedSheller: 'spikedsheller', BassOrc: 'bassorc', Slasher: 'slasher', Wickedgryph: 'wickedgryph' };
+// The four originals, then the variant of each that takes over half the spawns from Year 2 (same moves, twice the damage) and all of
+// them from Year 3, then the Toucan (no variant: it turns up in every year).
+export const ENEMY_KINDS = ['sheller', 'orc', 'nightmare', 'gargogryph', 'spikedsheller', 'bassorc', 'slasher', 'wickedgryph', 'toucan'];
+export const ENEMY_ENUM = { sheller: 'Sheller', orc: 'Orc', nightmare: 'Nightmare', gargogryph: 'Gargogryph', spikedsheller: 'SpikedSheller', bassorc: 'BassOrc', slasher: 'Slasher', wickedgryph: 'Wickedgryph', toucan: 'Toucan' };
+const ENEMY_FROM_ENUM = { Sheller: 'sheller', Orc: 'orc', Nightmare: 'nightmare', Gargogryph: 'gargogryph', SpikedSheller: 'spikedsheller', BassOrc: 'bassorc', Slasher: 'slasher', Wickedgryph: 'wickedgryph', Toucan: 'toucan' };
 
 const DEFS = {
+  toucan: { name: 'Toucan', hp: 16, attackInterval: 2.0, walkSpeed: 22, nightOnly: false, headOffset: 0, hover: 6, habitat: 'Roams day and night', note: 'A purple toucan made of two tin cans. It dives in with a beak that stings for 6.' },
   sheller: { name: 'Sheller', hp: 10, attackInterval: 2.0, walkSpeed: 20, nightOnly: false, headOffset: 0, habitat: 'Roams by day', note: 'A grumpy shell-back. Punches first, claws second.' },
   orc: { name: 'Orc', hp: 18, attackInterval: 3.0, walkSpeed: 15, nightOnly: false, headOffset: 7, habitat: 'Roams day and night', note: 'Fond of shiny earrings and swinging big sticks.' },
   nightmare: { name: 'Nightmare', hp: 12, attackInterval: 2.5, walkSpeed: 24, nightOnly: true, headOffset: 4, hover: 2, habitat: 'Roams after dark', note: 'A cloaked drifter that only calls after dark. Its scythe cuts through the first two in line.' },
@@ -35,19 +37,20 @@ const reachOf = kind => (baseOf(kind) === 'nightmare' ? 2 : 1);
 const VARIANT_OF = { sheller: 'spikedsheller', orc: 'bassorc', nightmare: 'slasher', gargogryph: 'wickedgryph' };
 
 /** HP an attack takes off the member it lands on: 2 for most (doubled from 1), 4 for the Gargogryph (a whole volley of feathers counts as one attack); the variants hit twice as hard again. */
-const enemyDamage = kind => (baseOf(kind) === 'gargogryph' ? 4 : 2) * (isVariant(kind) ? 2 : 1);
+const enemyDamage = kind => (baseOf(kind) === 'toucan' ? 6 : (baseOf(kind) === 'gargogryph' ? 4 : 2) * (isVariant(kind) ? 2 : 1));   // the Toucan: a fixed 6
 /** HP the Blood Moon takes off every member of the party when it breaks (a Wickedgryph's takes twice as much). */
 const bloodMoonDamage = kind => (isVariant(kind) ? 10 : 5);   // the Gargogryph's Blood Moon 5, the Wickedgryph's (Blood Moon II) 10
 
 export function enemyDef(kind) { return DEFS[kind]; }
 
-const ROAR = { sheller: 'ShellerRoar', orc: 'OrcRoar', nightmare: 'NightmareRoar', gargogryph: 'GargogryphRoar' };
-const DEATH = { sheller: 'ShellerDeath', orc: 'OrcDeath', nightmare: 'NightmareDeath', gargogryph: 'GargogryphDeath' };
+const ROAR = { sheller: 'ShellerRoar', orc: 'OrcRoar', nightmare: 'NightmareRoar', gargogryph: 'GargogryphRoar', toucan: 'ToucanRoar' };
+const DEATH = { sheller: 'ShellerDeath', orc: 'OrcDeath', nightmare: 'NightmareDeath', gargogryph: 'GargogryphDeath', toucan: 'ToucanDeath' };
 const BLOOD_MOON_SECONDS = 3.2;
 const BLOOD_MOON_HP_FRACTION = 0.55;   // it is called down once, when the Gargogryph is hurt this badly
 function attackFx(kind, pose, hit) {
   kind = baseOf(kind);
   if (kind === 'gargogryph') return hit ? 'GargogryphShot' : 'GargogryphFlap';
+  if (kind === 'toucan') return hit ? 'ToucanHit' : 'ToucanSwing';
   const p = kind === 'orc' ? (pose === 0 ? ['OrcSmashSwing', 'OrcSmashHit'] : ['OrcSweepSwing', 'OrcSweepHit'])
     : kind === 'nightmare' ? (pose === 0 ? ['NightmareSweepSwing', 'NightmareSweepHit'] : ['NightmareChopSwing', 'NightmareChopHit'])
       : (pose === 0 ? ['ShellerPunchSwing', 'ShellerPunchHit'] : ['ShellerClawSwing', 'ShellerClawHit']);
@@ -57,7 +60,7 @@ function strikeEffect(kind, pose) {
   kind = baseOf(kind);
   if (kind === 'gargogryph') return 'feathers';
   if (kind === 'nightmare') return 'scythe';
-  if (kind === 'orc') return 'impact';
+  if (kind === 'orc' || kind === 'toucan') return 'impact';
   return pose === 0 ? 'impact' : 'claws';
 }
 
@@ -90,10 +93,15 @@ export function installEnemies(P) {
   };
 
   m._pickEnemyKind = function () {
-    const pool = this.isNight ? ['nightmare', 'nightmare', 'orc', 'gargogryph'] : ['sheller', 'sheller', 'orc'];
+    // Twice the old weights (the Sheller and the Nightmare 4, the Orc and the Gargogryph 2) so that the Toucan, at 1, turns up
+    // half as often as the rarest of the others.
+    const pool = this.isNight
+      ? ['nightmare', 'nightmare', 'nightmare', 'nightmare', 'orc', 'orc', 'gargogryph', 'gargogryph']
+      : ['sheller', 'sheller', 'sheller', 'sheller', 'orc', 'orc'];
+    pool.push('toucan');
     let kind = pool[rnd(pool.length)];
-    // From Year 2 half of them turn up as their meaner variant.
-    if (this.year >= 2 && Math.random() < 0.5) kind = VARIANT_OF[kind];
+    // From Year 2 half of them turn up as their meaner variant, and from Year 3 only the variants do (the Toucan has none).
+    if (this.year >= 3 || (this.year >= 2 && Math.random() < 0.5)) kind = VARIANT_OF[kind] || kind;
     return kind;
   };
 

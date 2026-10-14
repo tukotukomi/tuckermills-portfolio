@@ -96,8 +96,9 @@ const ES = {
   'You found a Fantasy Crystal! Give it to someone in your party.': '¡Encontraste un Cristal de Fantasía! Dáselo a alguien de tu grupo.',
   // Monsters
   'Sheller': 'Caparazón', 'Orc': 'Orco', 'Nightmare': 'Pesadilla', 'Gargogryph': 'Gargogrifo',
-  'Spiked Sheller': 'Caparazón espinoso', 'Bass Orc': 'Orco bajista', 'Slasher': 'Destripador', 'Wickedgryph': 'Malvagrifo',
+  'Toucan': 'Tucán', 'Spiked Sheller': 'Caparazón espinoso', 'Bass Orc': 'Orco bajista', 'Slasher': 'Destripador', 'Wickedgryph': 'Malvagrifo',
   'Roams by day, from Year 2': 'Merodea de día, desde el Año 2', 'Roams day and night, from Year 2': 'Merodea de día y de noche, desde el Año 2', 'Roams after dark, from Year 2': 'Merodea al anochecer, desde el Año 2', 'Only under a dark sky, from Year 2': 'Solo bajo un cielo oscuro, desde el Año 2',
+  'A purple toucan made of two tin cans. It dives in with a beak that stings for 6.': 'Un tucán morado hecho con dos latas. Ataca en picado con un pico que hace 6 de daño.',
   'A Sheller that grew spikes over the winter. Hits twice as hard.': 'Un Caparazón al que le crecieron púas durante el invierno. Golpea el doble de fuerte.',
   'Plays its orcish bass guitar at the party, and swings it, too. Hits twice as hard.': 'Toca su bajo orco para el grupo, y también lo blande. Golpea el doble de fuerte.',
   'A Nightmare that traded its scythe for a horror knife. Hits twice as hard, and still cuts through the first two in line.': 'Una Pesadilla que cambió su guadaña por un cuchillo de terror. Golpea el doble de fuerte y sigue atravesando a los dos primeros de la fila.',
@@ -197,8 +198,9 @@ const ZH = {
   'You found a Fantasy Crystal! Give it to someone in your party.': '你找到了一颗幻想水晶！把它交给队伍中的某人。',
   // Monsters
   'Sheller': '龟壳兽', 'Orc': '兽人', 'Nightmare': '梦魇', 'Gargogryph': '石像鹫',
-  'Spiked Sheller': '尖刺龟壳兽', 'Bass Orc': '贝斯兽人', 'Slasher': '杀戮者', 'Wickedgryph': '凶牙石像鹫',
+  'Toucan': '巨嘴鸟', 'Spiked Sheller': '尖刺龟壳兽', 'Bass Orc': '贝斯兽人', 'Slasher': '杀戮者', 'Wickedgryph': '凶牙石像鹫',
   'Roams by day, from Year 2': '第2年起白天出没', 'Roams day and night, from Year 2': '第2年起昼夜出没', 'Roams after dark, from Year 2': '第2年起夜间出没', 'Only under a dark sky, from Year 2': '第2年起仅在夜空下出现',
+  'A purple toucan made of two tin cans. It dives in with a beak that stings for 6.': '一只用两个罐头做成的紫色巨嘴鸟。俯冲啄击，每一击造成 6 点伤害。',
   'A Sheller that grew spikes over the winter. Hits twice as hard.': '一只在冬天长出尖刺的龟壳兽，攻击力翻倍。',
   'Plays its orcish bass guitar at the party, and swings it, too. Hits twice as hard.': '对着队伍弹奏兽人贝斯，还会抡起来砸人，攻击力翻倍。',
   'A Nightmare that traded its scythe for a horror knife. Hits twice as hard, and still cuts through the first two in line.': '把镰刀换成恐怖尖刀的梦魇，攻击力翻倍，仍会同时砍中队伍里的前两人。',
