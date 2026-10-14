@@ -71,7 +71,7 @@ const ES = {
   'Fireball: casts one to the right every {s} s': 'Bola de fuego: lanza una a la derecha cada {s} s',
   'Lucky Coins: {p}% chance of {n} coins together': 'Monedas de la suerte: {p}% de probabilidad de {n} monedas juntas',
   'Huzzah!: party damage x{m} for {d} s every {s} s': '¡Hurra!: daño del grupo x{m} durante {d} s cada {s} s',
-  'Star Hat: party wears one for {d} min every {s} min': 'Sombrero estelar: el grupo lo lleva {d} min cada {s} min',
+  'Star Hat: red (+1 HP / 2 s) or blue (half damage) hats for {d} min every {s} min': 'Sombrero estelar: rojo (+1 PV / 2 s) o azul (mitad de daño), {d} min cada {s} min',
   'Huzzah!': '¡Hurra!', 'Blood Moon!': '¡Luna de Sangre!',
   // HUD and shop
   'Tuner: music & radio stations': 'Sintonizador: música y emisoras', 'Tap: use   Hold: switch': 'Toca: usar   Mantén: cambiar', 'Restart': 'Reiniciar',
@@ -178,7 +178,7 @@ const ZH = {
   'Fireball: casts one to the right every {s} s': '火球：每 {s} 秒向右发射一枚',
   'Lucky Coins: {p}% chance of {n} coins together': '幸运金币：{p}% 几率同时出现 {n} 枚金币',
   'Huzzah!: party damage x{m} for {d} s every {s} s': '万岁！：每 {s} 秒让全队伤害 x{m}，持续 {d} 秒',
-  'Star Hat: party wears one for {d} min every {s} min': '星星帽：每 {s} 分钟全队戴上 {d} 分钟',
+  'Star Hat: red (+1 HP / 2 s) or blue (half damage) hats for {d} min every {s} min': '星星帽：红色（每 2 秒 +1 生命）或蓝色（伤害减半），持续 {d} 分钟，每 {s} 分钟一次',
   'Huzzah!': '万岁！', 'Blood Moon!': '血月！',
   // HUD and shop
   'Tuner: music & radio stations': '调谐器：音乐与电台', 'Tap: use   Hold: switch': '轻点：使用   长按：切换', 'Restart': '重新开始',

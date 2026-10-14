@@ -79,6 +79,7 @@ export function installHealth(P) {
     if (this.party.indexOf(kind) < 0 || amount <= 0) return;
     const before = this.hpOf(kind);
     if (before <= 0) return;   // already out cold
+    amount = this._hatDamage(kind, amount);   // a Blue Hat halves what its wearer takes
     this.hp[kind] = Math.max(0, before - amount);
     const r = this._rectOf(kind);
     if (this.hp[kind] === 0) this._addItemText(t('Fainted!'), r.x + r.w / 2.0, r.y - 4, C(255, 170, 160));

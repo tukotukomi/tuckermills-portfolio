@@ -1327,7 +1327,7 @@ export class PixelScene {
       this._noteMemberRect(kind, x, y, sprite.w, sprite.h + breath);
       this.memberFrames[kind] = frame;
       delete this.memberClip[kind];
-      if (this.hatLeft > 0 && !newcomer) this._drawStarHat(g, frame, x, y);
+      if (this.hatLeft > 0 && !newcomer) this._drawStarHat(g, frame, x, y, kind);
     }
     if (asleep.length > 0) this._drawCart(g, asleep, leaderX - awake * SPACING);
   }

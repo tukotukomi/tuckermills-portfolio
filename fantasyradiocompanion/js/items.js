@@ -229,7 +229,7 @@ export function installItems(P) {
         g.ctx.beginPath(); g.ctx.rect(r.x - 3, r.y - 4, r.w + 6, clip - (r.y - 4)); g.ctx.clip();
       }
       g.image(frame, r.x, r.y, false, undefined, r.w, r.h);
-      if (this.hatLeft > 0 && clip === undefined) this._drawStarHat(g, frame, r.x, r.y);
+      if (this.hatLeft > 0 && clip === undefined) this._drawStarHat(g, frame, r.x, r.y, kind);
       if (clip !== undefined) g.ctx.restore();
     }
   };

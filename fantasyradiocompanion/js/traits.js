@@ -18,7 +18,9 @@ export function luckyCoinCount(level) { return 2; }
 export function huzzahInterval(level) { return 30; }
 export function huzzahDuration(level) { return 5; }
 export function huzzahDamageMultiplier(level) { return 2; }
-export function starHatInterval(level) { return 5 * 60; }
+export function starHatInterval(level) { return 3 * 60; }
+export function redHatRegenHp(level) { return 1; }            // a Red Hat gives this much back...
+export function redHatRegenSeconds(level) { return 2; }       // ...every this many seconds
 export function starHatDuration(level) { return 60; }
 export function peckDamage(level) { return 1; }
 export function peckInterval(level) { return 1.0; }
@@ -56,7 +58,7 @@ export function traitSummary(kind, level) {
     case 'Fireball': return t('Fireball: casts one to the right every {s} s', { s: fireballInterval(level) });
     case 'LuckyCoins': return t('Lucky Coins: {p}% chance of {n} coins together', { p: Math.round(luckyCoinChance(level) * 100), n: luckyCoinCount(level) });
     case 'Huzzah': return t('Huzzah!: party damage x{m} for {d} s every {s} s', { m: huzzahDamageMultiplier(level), d: huzzahDuration(level), s: huzzahInterval(level) });
-    case 'StarHat': return t('Star Hat: party wears one for {d} min every {s} min', { d: starHatDuration(level) / 60, s: starHatInterval(level) / 60 });
+    case 'StarHat': return t('Star Hat: red (+1 HP / 2 s) or blue (half damage) hats for {d} min every {s} min', { d: starHatDuration(level) / 60, s: starHatInterval(level) / 60 });
     case 'NaturalToxin': return t('Natural Toxin: {d} damage a second for {n} s, every {s} s', { d: toxinDamage(level), n: toxinTicks(level), s: toxinInterval(level) });
   }
   return '';
@@ -102,6 +104,8 @@ export function installTraits(P) {
     this.toxinFlash = 0;
     this.heals = [];
     this.inspireLeft = 0; this.hatLeft = 0; this.shoutAge = -1; this.castFlash = 0; this.luckyFlash = 0;
+    this.hatRed = {};     // each wearer's hat: true = red (regen), false = blue (half damage)
+    this.hatRegen = {};   // seconds since a red hat last gave HP back
     this.headSpots = new Map();
   };
 
@@ -142,6 +146,18 @@ export function installTraits(P) {
     }));
   };
 
+  /** Whether a member's hat is red (else blue). Settled when the hats are cast, 50/50 each (and the first time it is asked for, for
+   *  someone who joined while the hats were on). */
+  m._hatIsRed = function (kind) {
+    if (this.hatRed[kind] === undefined) this.hatRed[kind] = Math.random() < 0.5;
+    return this.hatRed[kind];
+  };
+
+  /** A Blue Hat halves the damage its wearer takes, rounding up from a half. */
+  m._hatDamage = function (kind, amount) {
+    return this.hatLeft > 0 && !this._hatIsRed(kind) ? Math.ceil(amount / 2) : amount;
+  };
+
   m._applyHeal = function (who, hp) { this._restoreHp(who, hp); };
   m._healthFraction = function (who) { const max = this.maxHpOf(who); return max > 0 ? this.hpOf(who) / max : 1.0; };
 
@@ -163,7 +179,23 @@ export function installTraits(P) {
     }
     if (this.berserkLeft > 0) this.berserkLeft = Math.max(0, this.berserkLeft - dt);   // the Monster Berserker runs in adventuring time too
     if (this.inspireLeft > 0) this.inspireLeft = Math.max(0, this.inspireLeft - dt);
-    if (this.hatLeft > 0) this.hatLeft = Math.max(0, this.hatLeft - dt);
+    if (this.hatLeft > 0) {
+      this.hatLeft = Math.max(0, this.hatLeft - dt);
+      // Red Hats give 1 HP back every 2 seconds to a wearer who is up and hurt.
+      const every = redHatRegenSeconds(this.levelOf('fae'));
+      for (const k of this.party.slice()) {
+        if (this.hpOf(k) <= 0 || this.hpOf(k) >= this.maxHpOf(k) || !this._hatIsRed(k)) { delete this.hatRegen[k]; continue; }
+        let tm = (this.hatRegen[k] || 0) + dt;
+        if (tm >= every) {
+          tm -= every;
+          const hp = redHatRegenHp(this.levelOf('fae'));
+          this._restoreHp(k, hp);
+          this.heals.push({ from: k, to: k, amount: hp, age: 0 });
+        }
+        this.hatRegen[k] = tm;
+      }
+    }
+    if (this.hatLeft <= 0 && Object.keys(this.hatRed).length > 0) { this.hatRed = {}; this.hatRegen = {}; }   // the hats are gone, and so are their colours
   };
 
   m._fireTrait = function (trait, level) {
@@ -190,6 +222,8 @@ export function installTraits(P) {
         break;
       case 'StarHat':
         this.hatLeft = starHatDuration(level);
+        this.hatRed = {}; this.hatRegen = {};
+        for (const k of this.party) this._hatIsRed(k);   // each member's hat: red or blue, 50/50
         Sound.play('StarHat');
         break;
       case 'NaturalToxin':
@@ -370,7 +404,7 @@ export function installTraits(P) {
     this.traitTimer = {};
     this.fireballs.length = 0; this.axes.length = 0; this.bolts.length = 0; this.globs.length = 0; this.toxinFlash = 0; this.heals.length = 0;
     this.hp = {}; this.memberClip = {};
-    this.inspireLeft = 0; this.hatLeft = 0; this.shoutAge = -1; this.castFlash = 0; this.luckyFlash = 0;
+    this.inspireLeft = 0; this.hatLeft = 0; this.hatRed = {}; this.hatRegen = {}; this.shoutAge = -1; this.castFlash = 0; this.luckyFlash = 0;
     this._resetEnemies();
   };
 
@@ -538,7 +572,8 @@ export function installTraits(P) {
     return spot;
   };
 
-  m._drawStarHat = function (g, frame, x, y) {
+  m._drawStarHat = function (g, frame, x, y, kind) {
+    const red = this._hatIsRed(kind);
     const spot = this._headSpot(frame);
     const left = x + spot.center - 3;
     const bottom = y + spot.top + 1;
@@ -548,7 +583,7 @@ export function installTraits(P) {
       for (let c = 0; c < 7; c++) {
         const ch = HAT_ROWS[r][c];
         if (ch === '.') continue;
-        const col = ch === 'y' ? (twinkle && r === 0 ? C(255, 250, 200) : C(255, 224, 84)) : ch === 'B' ? C(36, 44, 132) : C(72, 96, 222);
+        const col = ch === 'y' ? (twinkle && r === 0 ? C(255, 250, 200) : C(255, 224, 84)) : ch === 'B' ? (red ? C(124, 22, 40) : C(36, 44, 132)) : (red ? C(222, 62, 66) : C(72, 96, 222));
         g.rect(left + c, rowTop + r, 1, 1, col);
       }
   };
