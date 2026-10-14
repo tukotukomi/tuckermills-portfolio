@@ -8,10 +8,10 @@ import * as THREE from 'three';
 const COLS = 4;                 // playable columns either side of centre
 const VIS = 16;                 // columns drawn either side
 const SPAN = 2 * VIS + 10;      // loop length that moving things wrap around
-const AHEAD = 20, BEHIND = 17;  // rows kept around the camera
+const AHEAD = 27, BEHIND = 17;  // rows kept around the camera
 const HOP_T = 0.13;             // seconds per hop
-const CAM_OFF = new THREE.Vector3(2.4, 10, 6.6); // behind-right, looking down
-const HAWK_DIST = 6.6;          // how far behind the camera Betty Lou can fall
+const CAM_OFF = new THREE.Vector3(2.4, 5.6, 7.2); // behind-right, a low 36° look across the fields
+const HAWK_DIST = 7.6;          // how far behind the camera Betty Lou can fall
 const RAINBOW = [0xff4b4b, 0xff9a2e, 0xffd93b, 0x5fd35f, 0x46a6ff, 0x9b6bff];
 const GREENS = [0x5cb83a, 0x4faa38, 0x68c444, 0x55b03f];
 
@@ -43,7 +43,7 @@ scene.add(hemi);
 const sun = new THREE.DirectionalLight(0xfff3dc, 2.9);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
-Object.assign(sun.shadow.camera, { left: -18, right: 18, top: 18, bottom: -18, near: 1, far: 60 });
+Object.assign(sun.shadow.camera, { left: -24, right: 24, top: 24, bottom: -24, near: 1, far: 70 });
 sun.shadow.bias = -0.0006;
 sun.shadow.normalBias = 0.02;
 scene.add(sun, sun.target);
@@ -73,7 +73,7 @@ const toon = opts => {
 };
 
 const INK = new THREE.Color(0x2b1d33);
-const rtColor = new THREE.WebGLRenderTarget(1, 1, { samples: 4 });
+const rtColor = new THREE.WebGLRenderTarget(1, 1, { samples: 4, stencilBuffer: true });
 rtColor.texture.colorSpace = THREE.SRGBColorSpace;
 const rtNormal = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType });
 rtNormal.depthTexture = new THREE.DepthTexture(1, 1);
@@ -214,6 +214,15 @@ class VB {
 const shade = (hex, f) => new THREE.Color(hex).multiplyScalar(f).getHex();
 
 // ---------- models ----------
+// The low camera lets trees and traffic stand in front of Betty Lou, so she marks
+// her pixels in the stencil buffer and a flat silhouette is drawn wherever
+// something else covers her.
+const GIRL_MAT = toon({ vertexColors: true, stencilWrite: true, stencilRef: 1, stencilZPass: THREE.ReplaceStencilOp });
+const XRAY_MAT = new THREE.MeshBasicMaterial({
+  color: 0x8a5cff, transparent: true, opacity: 0.8, depthWrite: false, depthFunc: THREE.GreaterDepth,
+  stencilWrite: true, stencilRef: 1, stencilFunc: THREE.NotEqualStencilFunc,
+});
+
 function buildGirl() {
   const SKIN = 0xffd3b4, DENIM = 0x3e6fd8, DENIM_D = 0x2c56b0, SHIRT = 0xff8fc8;
   const group = new THREE.Group();
@@ -264,7 +273,13 @@ function buildGirl() {
     tails.push(m);
   }
   group.scale.setScalar(1.3);
-  group.traverse(o => { if (o.isMesh) o.castShadow = true; });
+  const meshes = [];
+  group.traverse(o => { if (o.isMesh) meshes.push(o); });
+  for (const m of meshes) {
+    m.material = GIRL_MAT;
+    m.castShadow = true;
+    m.add(new THREE.Mesh(m.geometry, XRAY_MAT));
+  }
   return { group, inner, tails };
 }
 
@@ -650,7 +665,7 @@ function strip(vb, top, color, dark) {
 const LANE_Y = { grass: 0, forest: 0, road: -0.02, pasture: 0, bull: 0, wheat: 0, crops: 0, water: 0.05, pads: -0.15 };
 
 function tree(vb, x) {
-  const h = pick([0.5, 0.8, 1.1, 1.4]), g = pick(GREENS);
+  const h = pick([0.45, 0.65, 0.9, 1.15]), g = pick(GREENS);
   vb.box(0.28, 0.3, 0.28, x, 0.15, 0, 0x8a5a33);
   vb.box(0.8, h, 0.8, x, 0.3 + h / 2, 0, g);
   if (Math.random() < 0.22) {
@@ -1262,7 +1277,7 @@ function resize() {
   renderer.setSize(w, h, false);
   resizeCel();
   let halfW, halfH;
-  if (a < 1) { halfW = 4.7; halfH = halfW / a; }
+  if (a < 1) { halfW = 4.3; halfH = halfW / a; }
   else { halfH = 6.2; halfW = Math.min(halfH * a, 11); halfH = halfW / a; }
   Object.assign(camera, { left: -halfW, right: halfW, top: halfH, bottom: -halfH });
   camera.updateProjectionMatrix();
@@ -1272,7 +1287,7 @@ window.addEventListener('resize', resize);
 const _t = new THREE.Vector3();
 function updateCamera(dt) {
   if (game.state === 'play') game.camZ -= (0.34 + 0.3 * diff(P.r)) * dt;
-  const desired = P.z - 3;
+  const desired = P.z - 4;
   if (P.alive && desired < game.camZ) game.camZ += (desired - game.camZ) * Math.min(1, dt * 5);
   if (P.alive) game.camX += (clamp(P.x, -2.5, 2.5) * 0.6 - game.camX) * Math.min(1, dt * 3);
   _t.set(game.camX, 0, game.camZ);
@@ -1306,7 +1321,7 @@ function newWorld() {
   game.score = 0;
   game.record = false;
   game.camX = 0;
-  game.camZ = -3;
+  game.camZ = -4;
   resetPlayer();
   ensureLanes();
   hud();
