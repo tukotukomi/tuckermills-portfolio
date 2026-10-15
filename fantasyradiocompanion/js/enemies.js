@@ -18,16 +18,16 @@ const ENEMY_FROM_ENUM = { Sheller: 'sheller', Orc: 'orc', Nightmare: 'nightmare'
 
 const DEFS = {
   toucan: { name: 'Toucan', hp: 48, attackInterval: 1.0, walkSpeed: 22, nightOnly: false, headOffset: 0, hover: 6, habitat: 'Roams day and night, from Year 3', note: 'A purple toucan made of two tin cans, with metal talons. It slings a can tab that slices through the whole party.' },
-  sheller: { name: 'Sheller', hp: 20, attackInterval: 2.0, walkSpeed: 20, nightOnly: false, headOffset: 0, habitat: 'Roams by day', note: 'A grumpy shell-back. Punches first, claws second.' },
-  orc: { name: 'Orc', hp: 36, attackInterval: 3.0, walkSpeed: 15, nightOnly: false, headOffset: 7, habitat: 'Roams day and night', note: 'Fond of shiny earrings and swinging big sticks.' },
-  nightmare: { name: 'Nightmare', hp: 24, attackInterval: 2.5, walkSpeed: 24, nightOnly: true, headOffset: 4, hover: 2, habitat: 'Roams after dark', note: 'A cloaked drifter that only calls after dark. Its scythe cuts through the first two in line.' },
-  gargogryph: { name: 'Gargogryph', hp: 80, attackInterval: 3.5, walkSpeed: 18, nightOnly: true, headOffset: 4, hover: 5, standoff: 30, habitat: 'Only under a dark sky', note: 'A stone lion-ox with eagle wings, hard to hurt. Wingbeats throw razor feathers, and it can call down a Blood Moon.' },
+  sheller: { name: 'Sheller', hp: 10, attackInterval: 2.0, walkSpeed: 20, nightOnly: false, headOffset: 0, habitat: 'Roams by day', note: 'A grumpy shell-back. Punches first, claws second.' },
+  orc: { name: 'Orc', hp: 18, attackInterval: 3.0, walkSpeed: 15, nightOnly: false, headOffset: 7, habitat: 'Roams day and night', note: 'Fond of shiny earrings and swinging big sticks.' },
+  nightmare: { name: 'Nightmare', hp: 12, attackInterval: 2.5, walkSpeed: 24, nightOnly: true, headOffset: 4, hover: 2, habitat: 'Roams after dark', note: 'A cloaked drifter that only calls after dark. Its scythe cuts through the first two in line.' },
+  gargogryph: { name: 'Gargogryph', hp: 40, attackInterval: 3.5, walkSpeed: 18, nightOnly: true, headOffset: 4, hover: 5, standoff: 30, habitat: 'Only under a dark sky', note: 'A stone lion-ox with eagle wings, hard to hurt. Wingbeats throw razor feathers, and it can call down a Blood Moon.' },
 };
 
-DEFS.spikedsheller = Object.assign({}, DEFS.sheller, { base: 'sheller', name: 'Spiked Sheller', habitat: 'Roams by day, from Year 2', note: 'A Sheller that grew spikes over the winter. Hits twice as hard.' });
-DEFS.bassorc = Object.assign({}, DEFS.orc, { base: 'orc', name: 'Bass Orc', habitat: 'Roams day and night, from Year 2', note: 'Plays its orcish bass guitar at the party, and swings it, too. Hits twice as hard.' });
-DEFS.slasher = Object.assign({}, DEFS.nightmare, { base: 'nightmare', name: 'Slasher', habitat: 'Roams after dark, from Year 2', headOffset: 0, note: 'A Nightmare that traded its scythe for a horror knife. Hits twice as hard, and still cuts through the first two in line.' });
-DEFS.wickedgryph = Object.assign({}, DEFS.gargogryph, { base: 'gargogryph', name: 'Wickedgryph', habitat: 'Only under a dark sky, from Year 2', note: 'A Gargogryph with big fangs and a worse temper. Hits twice as hard, and so does its Blood Moon.' });
+DEFS.spikedsheller = Object.assign({}, DEFS.sheller, { base: 'sheller', name: 'Spiked Sheller', hp: 20, habitat: 'Roams by day, from Year 2', note: 'A Sheller that grew spikes over the winter. Hits twice as hard.' });
+DEFS.bassorc = Object.assign({}, DEFS.orc, { base: 'orc', name: 'Bass Orc', hp: 36, habitat: 'Roams day and night, from Year 2', note: 'Plays its orcish bass guitar at the party, and swings it, too. Hits twice as hard.' });
+DEFS.slasher = Object.assign({}, DEFS.nightmare, { base: 'nightmare', name: 'Slasher', hp: 24, habitat: 'Roams after dark, from Year 2', headOffset: 0, note: 'A Nightmare that traded its scythe for a horror knife. Hits twice as hard, and still cuts through the first two in line.' });
+DEFS.wickedgryph = Object.assign({}, DEFS.gargogryph, { base: 'gargogryph', name: 'Wickedgryph', hp: 80, habitat: 'Only under a dark sky, from Year 2', note: 'A Gargogryph with big fangs and a worse temper. Hits twice as hard, and so does its Blood Moon.' });
 
 // The Year 4 monsters: half of their family's spawns, with stats of their own.
 DEFS.magmashellra = Object.assign({}, DEFS.sheller, { base: 'sheller', name: 'Magma Shellra', hp: 40, damage: 8, attackInterval: 3.0, reach: 2, standoff: 16, habitat: 'Roams by day, from Year 4', note: 'A Sheller whose shell has split open to molten rock. It spits a fireball that scorches the first two in line.' });
