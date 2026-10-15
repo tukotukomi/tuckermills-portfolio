@@ -180,3 +180,5 @@ body.title #titleBtns { display: flex; }
   border: 4px solid #000; background: #ff4b4b; color: #fff;
   font: inherit; font-size: 22px; cursor: pointer; box-shadow: 0 4px 0 #000;
 }
+/* controller focus ring in the picker (only once a controller or keys are used) */
+body.pad .heroCard.focus, body.keys .heroCard.focus, .heroCard:focus-visible { outline: 5px solid #46a6ff; outline-offset: 2px; transform: scale(1.04); }

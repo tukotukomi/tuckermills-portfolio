@@ -1623,7 +1623,14 @@ const KEYS = {
 };
 window.addEventListener('keydown', e => {
   sfx.ensure();
-  if (game.picking) { if (e.code === 'Escape') closeHeroes(); return; }
+  if (game.picking) {   // arrow keys + Enter work in the picker too
+    const nav = { ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down' }[e.code];
+    if (nav) { document.body.classList.add('keys'); heroNav(nav); }
+    else if (e.code === 'Enter' || e.code === 'Space') pickHero(HEROES[heroFocus].id);
+    else if (e.code === 'Escape') closeHeroes();
+    e.preventDefault();
+    return;
+  }
   if (game.state === 'over' && (e.code === 'Space' || e.code === 'Enter')) { restart(); return; }
   if (e.code === 'Space' && !e.repeat) { move(0, 1); e.preventDefault(); return; }
   const k = KEYS[e.code];
@@ -1665,6 +1672,7 @@ function step(dt) {
   renderCel();
 }
 function frame(now) {
+  pollPad();
   step(Math.min(0.05, (now - last) / 1000));
   last = now;
   requestAnimationFrame(frame);
@@ -1713,10 +1721,21 @@ HEROES.forEach((h, i) => {
   card.addEventListener('click', () => pickHero(h.id));
   heroGrid.append(card);
 });
+let heroFocus = 0;   // highlighted card when choosing with a controller or arrow keys
 function markHero() {
-  for (const c of heroGrid.children) c.classList.toggle('on', c.dataset.id === heroId);
+  [...heroGrid.children].forEach((c, i) => {
+    c.classList.toggle('on', c.dataset.id === heroId);
+    c.classList.toggle('focus', i === heroFocus);
+  });
+}
+function heroNav(dir) {   // the cards sit in a 2-wide grid
+  const step = { left: -1, right: 1, up: -2, down: 2 }[dir];
+  const n = heroFocus + step;
+  if (n >= 0 && n < HEROES.length && !(Math.abs(step) === 1 && Math.floor(n / 2) !== Math.floor(heroFocus / 2))) heroFocus = n;
+  markHero();
 }
 function openHeroes() {
+  heroFocus = Math.max(0, HEROES.findIndex(h => h.id === heroId));
   markHero();
   $('heroes').classList.add('show');
   game.picking = true;
@@ -1737,8 +1756,59 @@ $('heroClose').addEventListener('click', closeHeroes);
 $('heroes').addEventListener('click', e => { if (e.target.id === 'heroes') closeHeroes(); });
 $('start').addEventListener('click', () => { sfx.ensure(); if (game.state === 'title') startGame(); });
 
+// ---------- gamepad (for the big TV) ----------
+// Standard mapping: A 0, B 1, X 2, Y 3, Start 9, d-pad 12-15, left stick axes 0/1.
+// Polled every frame; buttons act on the press edge so holding never repeats.
+const DIRS = { up: [0, 1], down: [0, -1], left: [-1, 0], right: [1, 0] };
+const pad = { prev: [], stick: null };
+function showPadHints() {
+  if (document.body.classList.contains('pad')) return;
+  document.body.classList.add('pad');
+  $('hint').innerHTML = 'Press A to hop<small>D-pad or stick to move &middot; Y to pick a hopper</small>';
+}
+window.addEventListener('gamepadconnected', showPadHints);
+function pollPad() {
+  const gp = [...(navigator.getGamepads ? navigator.getGamepads() : [])].find(p => p && p.connected);
+  if (!gp) return;
+  const down = gp.buttons.map(b => b.pressed), prev = pad.prev;
+  pad.prev = down;
+  const pressed = i => down[i] && !prev[i];
+  const released = i => !down[i] && prev[i];
+
+  // left stick as a d-pad: a direction fires once when pushed past 0.55, re-arms below 0.3
+  const ax = gp.axes[0] || 0, ay = gp.axes[1] || 0, mag = Math.hypot(ax, ay);
+  let stick = mag > 0.55 ? (Math.abs(ax) > Math.abs(ay) ? (ax > 0 ? 'right' : 'left') : (ay > 0 ? 'down' : 'up'))
+    : mag > 0.3 ? pad.stick : null;
+  const flick = stick && stick !== pad.stick ? stick : null;
+  pad.stick = stick;
+  const dir = pressed(12) ? 'up' : pressed(13) ? 'down' : pressed(14) ? 'left' : pressed(15) ? 'right' : flick;
+
+  if (dir || down.some(Boolean)) { showPadHints(); sfx.ensure(); }
+  const pick = pressed(2) || pressed(3);
+
+  if (game.picking) {
+    if (dir) heroNav(dir);
+    if (pressed(0) || pressed(9)) pickHero(HEROES[heroFocus].id);
+    if (pressed(1) || pick) closeHeroes();
+    return;
+  }
+  if (game.state === 'over') {
+    if (pressed(0) || pressed(9)) restart();
+    else if (pick) openHeroes();
+    return;
+  }
+  if (game.state === 'title' || game.state === 'play') {
+    if (game.state === 'title' && pick) { openHeroes(); return; }
+    if (game.state === 'title' && pressed(9)) { startGame(); return; }
+    if (dir) move(...DIRS[dir]);
+    // A behaves like a tap: squash while held, hop forward on release
+    if (pressed(0)) P.held = true;
+    if (released(0)) { P.held = false; move(0, 1); }
+  }
+}
+
 resize();
 newWorld();
 document.body.classList.add('title', 'show-logo');
 requestAnimationFrame(frame);
-if (new URLSearchParams(location.search).has('debug')) window.__hop = { P, game, lanes, move, step };
+if (new URLSearchParams(location.search).has('debug')) window.__hop = { P, game, lanes, move, step, pollPad };
