@@ -11,6 +11,7 @@ import { ITEM_DEFS, HOT_SLOT_COUNT } from './items.js';
 import { t, isCjk } from './i18n.js';
 
 export const ZOOMED_SCALE = 5;
+export const PARTY_ZOOM_OUT = 0.8;   // the party is drawn at 80% of the size it would otherwise be, in every view (20% zoomed out)
 
 // On a phone or tablet the adventure only progresses while the page is on screen: backgrounded or with the screen locked, the radio
 // plays on but the game waits (desktop browsers keep their own rules: a visible window keeps going).
@@ -97,9 +98,9 @@ export class Visualizer {
     if (this.zoomed) {
       const want = this.fullscreen ? Math.max(ZOOMED_SCALE, Math.floor(this.height / 150)) : ZOOMED_SCALE;
       // On a narrow screen (a phone held upright) keep at least ~150 world pixels across so the whole party fits.
-      return Math.max(2, Math.min(want, Math.floor(this.width / 150)));
+      return PARTY_ZOOM_OUT * Math.max(2, Math.min(want, Math.floor(this.width / 150)));
     }
-    return Math.max(1, Math.floor(this.height / DESIGN_HEIGHT));
+    return Math.max(1, Math.floor(this.height / DESIGN_HEIGHT) * PARTY_ZOOM_OUT);
   }
   get vw() { return this.width / this.hud; }
   get vh() { return this.height / this.hud; }
