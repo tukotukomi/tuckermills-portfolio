@@ -789,6 +789,8 @@ export class Visualizer {
   _ensureQuestFont() {
     if (this._questFontAsked) return;
     this._questFontAsked = true;
+    // Our own preference first: if the machine has one of those faces, no third-party font is asked for at all.
+    if (['Lucida Calligraphy', 'Gabriola', 'Palatino Linotype', 'Old English Text MT'].some(n => this._hasLocalFont(n))) return;
     try {
       const link = document.createElement('link');
       link.rel = 'stylesheet'; link.href = 'https://fonts.googleapis.com/css2?family=MedievalSharp&display=swap';
@@ -797,8 +799,21 @@ export class Visualizer {
     } catch (x) { /* fine: the fallbacks do */ }
   }
 
+  /** Whether the machine itself has this font (a text width that differs from each generic fallback's means it was found). */
+  _hasLocalFont(name) {
+    const c = this._fontProbe || (this._fontProbe = document.createElement('canvas').getContext('2d'));
+    const sample = 'mmmmmmmmmmlliWQ@#';
+    for (const base of ['monospace', 'serif', 'sans-serif']) {
+      c.font = '72px ' + base;
+      const plain = c.measureText(sample).width;
+      c.font = '72px "' + name + '", ' + base;
+      if (c.measureText(sample).width !== plain) return true;
+    }
+    return false;
+  }
+
   _questFace() {
-    return isCjk() ? FONT : '"MedievalSharp", "Blackadder ITC", "Old English Text MT", "Lucida Calligraphy", Gabriola, "Palatino Linotype", "Book Antiqua", Georgia, serif';
+    return isCjk() ? FONT : '"Lucida Calligraphy", Gabriola, "Palatino Linotype", "Old English Text MT", "MedievalSharp", Georgia, serif';
   }
 
   /** The big word: filled with a gradient, edged in dark, with a soft halo, scaled down to fit the width available. */
