@@ -1194,7 +1194,7 @@ export class Visualizer {
     const bw = Math.trunc(150 * k), bh = Math.trunc(34 * k), pw = Math.trunc(84 * k), ph = Math.trunc(70 * k), gap = Math.trunc(8 * k);
     const top = Math.trunc(36 * k);                                       // under the heading
     const bottom = Math.trunc(this.scene.partyTopPixel()) - Math.trunc(6 * k);   // over the party's heads
-    const by = Math.max(top, bottom - bh);
+    const by = Math.max(top, bottom - bh - 30);   // (30 px higher than flush with the heads)
     const py = by - gap - ph;
     return {
       levelUp: { x: Math.trunc((this.width - bw) / 2), y: by, w: bw, h: bh },
