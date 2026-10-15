@@ -29,6 +29,7 @@ export const BASIC_ATTACKERS = ['thief', 'fae', 'lightmage', 'firemage'];
 export const BASIC_DAMAGE = 1;
 export function basicInterval(kind) { return { thief: 2, fae: 3, lightmage: 3, firemage: 5 }[kind] || 5; }
 export function fireballDamage(level) { return 5; }
+export function fireballRangeBlocks(level) { return 50; }   // it burns out into ash after travelling this many blocks
 export function axeDamage(level) { return 3; }          // the Warrior's thrown axe
 export function axeInterval(level) { return 3.0; }
 export function axeRangeBlocks(level) { return 10; }   // blocks of grass it travels
@@ -265,6 +266,7 @@ export function installTraits(P) {
       const f = this.fireballs[i];
       f.age += dt;
       f.x += dt * 64;
+      f.traveled = (f.traveled || 0) + dt * 64;
       let goalY = cruise, rate = 26;
       if (target !== null && f.x > partyRight - 2) {   // clear of the party: drop onto the enemy
         const er = this._enemyRect(target);
@@ -274,6 +276,12 @@ export function installTraits(P) {
       f.y += Math.max(-dt * rate, Math.min(dt * rate, goalY - f.y));
       if (target !== null && f.x >= target.x + 1) {
         this._damageEnemy(target, this._withHuzzah(fireballDamage(this.levelOf('firemage'))), true, f.x, f.y);
+        this.fireballs.splice(i, 1);
+        continue;
+      }
+      if (f.traveled >= fireballRangeBlocks(this.levelOf('firemage')) * BLOCK_PIXELS) {
+        // Out of range: it gutters and falls as ash, so it can't strike something far away.
+        this.bursts.push({ x: f.x, y: f.y, kind: 'ash', age: 0 });
         this.fireballs.splice(i, 1);
         continue;
       }

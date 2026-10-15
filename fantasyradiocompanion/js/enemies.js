@@ -12,9 +12,9 @@ import { t } from './i18n.js';
 
 // The four originals, then the variant of each that takes over half the spawns from Year 2 (same moves, twice the damage) and all of
 // them from Year 3, then the Toucan (no variant: it joins them from Year 3).
-export const ENEMY_KINDS = ['sheller', 'orc', 'nightmare', 'gargogryph', 'spikedsheller', 'bassorc', 'slasher', 'wickedgryph', 'toucan'];
-export const ENEMY_ENUM = { sheller: 'Sheller', orc: 'Orc', nightmare: 'Nightmare', gargogryph: 'Gargogryph', spikedsheller: 'SpikedSheller', bassorc: 'BassOrc', slasher: 'Slasher', wickedgryph: 'Wickedgryph', toucan: 'Toucan' };
-const ENEMY_FROM_ENUM = { Sheller: 'sheller', Orc: 'orc', Nightmare: 'nightmare', Gargogryph: 'gargogryph', SpikedSheller: 'spikedsheller', BassOrc: 'bassorc', Slasher: 'slasher', Wickedgryph: 'wickedgryph', Toucan: 'toucan' };
+export const ENEMY_KINDS = ['sheller', 'orc', 'nightmare', 'gargogryph', 'spikedsheller', 'bassorc', 'slasher', 'wickedgryph', 'toucan', 'magmashellra', 'percussiveorc', 'shadecrow'];
+export const ENEMY_ENUM = { sheller: 'Sheller', orc: 'Orc', nightmare: 'Nightmare', gargogryph: 'Gargogryph', spikedsheller: 'SpikedSheller', bassorc: 'BassOrc', slasher: 'Slasher', wickedgryph: 'Wickedgryph', toucan: 'Toucan', magmashellra: 'MagmaShellra', percussiveorc: 'PercussiveOrc', shadecrow: 'Shadecrow' };
+const ENEMY_FROM_ENUM = { Sheller: 'sheller', Orc: 'orc', Nightmare: 'nightmare', Gargogryph: 'gargogryph', SpikedSheller: 'spikedsheller', BassOrc: 'bassorc', Slasher: 'slasher', Wickedgryph: 'wickedgryph', Toucan: 'toucan', MagmaShellra: 'magmashellra', PercussiveOrc: 'percussiveorc', Shadecrow: 'shadecrow' };
 
 const DEFS = {
   toucan: { name: 'Toucan', hp: 24, attackInterval: 1.0, walkSpeed: 22, nightOnly: false, headOffset: 0, hover: 6, habitat: 'Roams day and night, from Year 3', note: 'A purple toucan made of two tin cans, with metal talons. It slings a can tab that slices through the whole party.' },
@@ -29,15 +29,22 @@ DEFS.bassorc = Object.assign({}, DEFS.orc, { base: 'orc', name: 'Bass Orc', habi
 DEFS.slasher = Object.assign({}, DEFS.nightmare, { base: 'nightmare', name: 'Slasher', habitat: 'Roams after dark, from Year 2', headOffset: 0, note: 'A Nightmare that traded its scythe for a horror knife. Hits twice as hard, and still cuts through the first two in line.' });
 DEFS.wickedgryph = Object.assign({}, DEFS.gargogryph, { base: 'gargogryph', name: 'Wickedgryph', habitat: 'Only under a dark sky, from Year 2', note: 'A Gargogryph with big fangs and a worse temper. Hits twice as hard, and so does its Blood Moon.' });
 
+// The Year 4 monsters: half of their family's spawns, with stats of their own.
+DEFS.magmashellra = Object.assign({}, DEFS.sheller, { base: 'sheller', name: 'Magma Shellra', hp: 20, damage: 8, attackInterval: 3.0, reach: 2, standoff: 16, habitat: 'Roams by day, from Year 4', note: 'A Sheller whose shell has split open to molten rock. It spits a fireball that scorches the first two in line.' });
+DEFS.percussiveorc = Object.assign({}, DEFS.orc, { base: 'orc', name: 'Percussive Orc', hp: 36, damage: 4, attackInterval: 1.0, habitat: 'Roams day and night, from Year 4', note: 'Hammers a drum slung at its belly and bellows between beats. Hits fast and hard.' });
+DEFS.shadecrow = Object.assign({}, DEFS.nightmare, { base: 'nightmare', name: 'Shadecrow', hp: 24, damage: 6, attackInterval: 4.0, reach: 3, headOffset: 4, habitat: 'Roams after dark, from Year 4', note: 'A cloaked scarecrow that watches from the field. Its long pitchfork spears the first three in line.' });
+
 /** The original a variant is built on (an original is its own): a variant behaves, sounds and moves like it. */
 const baseOf = kind => DEFS[kind].base || kind;
 const isVariant = kind => baseOf(kind) !== kind;
 /** How many members of the party one of its blows reaches: the Nightmare's scythe cuts through the first two in the line. */
-const reachOf = kind => (baseOf(kind) === 'nightmare' ? 2 : 1);
+const reachOf = kind => (DEFS[kind].reach !== undefined ? DEFS[kind].reach : (baseOf(kind) === 'nightmare' ? 2 : 1));
 const VARIANT_OF = { sheller: 'spikedsheller', orc: 'bassorc', nightmare: 'slasher', gargogryph: 'wickedgryph' };
+/** The top tier of a family, half of its spawns from Year 4 (a family with no third tier tops out at its variant). */
+const THIRD_OF = { sheller: 'magmashellra', orc: 'percussiveorc', nightmare: 'shadecrow', gargogryph: 'wickedgryph' };
 
 /** HP an attack takes off the member it lands on: 2 for most (doubled from 1), 4 for the Gargogryph (a whole volley of feathers counts as one attack); the variants hit twice as hard again. */
-const enemyDamage = kind => (baseOf(kind) === 'toucan' ? 2 : (baseOf(kind) === 'gargogryph' ? 4 : 2) * (isVariant(kind) ? 2 : 1));   // the Toucan: a fixed 2 to every member its can tab cuts
+const enemyDamage = kind => (DEFS[kind].damage !== undefined ? DEFS[kind].damage : baseOf(kind) === 'toucan' ? 2 : (baseOf(kind) === 'gargogryph' ? 4 : 2) * (isVariant(kind) ? 2 : 1));   // the Toucan: a fixed 2 to every member its can tab cuts
 /** HP the Blood Moon takes off every member of the party when it breaks (a Wickedgryph's takes twice as much). */
 const bloodMoonDamage = kind => (isVariant(kind) ? 10 : 5);   // the Gargogryph's Blood Moon 5, the Wickedgryph's (Blood Moon II) 10
 
@@ -48,6 +55,8 @@ const DEATH = { sheller: 'ShellerDeath', orc: 'OrcDeath', nightmare: 'NightmareD
 const BLOOD_MOON_SECONDS = 3.2;
 const BLOOD_MOON_HP_FRACTION = 0.55;   // it is called down once, when the Gargogryph is hurt this badly
 function attackFx(kind, pose, hit) {
+  if (kind === 'magmashellra') return hit ? 'MagmaSpit' : 'FireCast';   // the fire gathers, then is spat
+  if (kind === 'percussiveorc') return pose === 0 ? (hit ? 'OrcSmashHit' : 'OrcSmashSwing') : (hit ? 'OrcShout' : 'OrcSweepSwing');   // the drumstick, then the shout
   kind = baseOf(kind);
   if (kind === 'gargogryph') return hit ? 'GargogryphShot' : 'GargogryphFlap';
   if (kind === 'toucan') return hit ? 'ToucanSling' : 'ToucanSwing';   // (the tab's own clang plays as it cuts a member)
@@ -57,6 +66,8 @@ function attackFx(kind, pose, hit) {
   return p[hit ? 1 : 0];
 }
 function strikeEffect(kind, pose) {
+  if (kind === 'magmashellra') return 'fireball';
+  if (kind === 'percussiveorc') return pose === 0 ? 'impact' : 'shout';
   kind = baseOf(kind);
   if (kind === 'gargogryph') return 'feathers';
   if (kind === 'nightmare') return 'scythe';
@@ -105,6 +116,7 @@ export function installEnemies(P) {
     this.flinch = 0;
     this.shots = [];   // the Gargogryph's feathers in flight
     this.tabs = [];    // the Toucan's can tabs in flight
+    this.spits = [];   // the Magma Shellra's fireballs in flight
     this.bloodMoonT = -1;   // 0..1 while the Blood Moon plays out, <0 otherwise
     this.bloodMoonStruck = false;
     this.kills = {};   // a kind is "known" once it has an entry here
@@ -127,8 +139,10 @@ export function installEnemies(P) {
       : ['sheller', 'sheller', 'sheller', 'sheller', 'orc', 'orc'];
     if (this.year >= 3) pool.push('toucan');   // the Toucan only joins from Year 3
     let kind = pool[rnd(pool.length)];
-    // From Year 2 half of them turn up as their meaner variant, and from Year 3 only the variants do (the Toucan has none).
-    if (this.year >= 3 || (this.year >= 2 && Math.random() < 0.5)) kind = VARIANT_OF[kind] || kind;
+    // From Year 2 half of them turn up as their meaner variant, from Year 3 only the variants do, and from Year 4 half of each family
+    // is the top tier (the Toucan has no variants).
+    if (this.year >= 4) kind = Math.random() < 0.5 ? (THIRD_OF[kind] || kind) : (VARIANT_OF[kind] || kind);
+    else if (this.year >= 3 || (this.year >= 2 && Math.random() < 0.5)) kind = VARIANT_OF[kind] || kind;
     return kind;
   };
 
@@ -311,7 +325,7 @@ export function installEnemies(P) {
     }
     for (let i = this.bursts.length - 1; i >= 0; i--) {
       const b = this.bursts[i];
-      b.age += dt / (b.kind === 'death' ? 0.8 : b.kind === 'blood' ? 0.7 : b.kind === 'fire' ? 0.4 : b.kind === 'toxin' ? 0.55 : 0.3);
+      b.age += dt / (b.kind === 'death' ? 0.8 : b.kind === 'blood' ? 0.7 : b.kind === 'fire' ? 0.4 : b.kind === 'toxin' ? 0.55 : b.kind === 'shout' ? 0.45 : b.kind === 'ash' ? 0.9 : 0.3);
       if (b.age >= 1) this.bursts.splice(i, 1);
     }
     if (this.peckAnim >= 0) { this.peckAnim += dt / 0.25; if (this.peckAnim >= 1) this.peckAnim = -1; }
@@ -334,6 +348,29 @@ export function installEnemies(P) {
           this.flinch = 0.14;
           this.shots.splice(i, 1);
         }
+      }
+    }
+
+    // Spat fireballs fly to the front of the party and burst on the first members.
+    if (this.spits.length > 0) {
+      const fr = this._rectOf(this._frontKind());
+      const hitX = fr.x + fr.w * 0.8;
+      for (let i = this.spits.length - 1; i >= 0; i--) {
+        const sp = this.spits[i];
+        sp.age += dt;
+        sp.x -= dt * 120;
+        sp.y += Math.max(-dt * 40, Math.min(dt * 40, sp.targetY - sp.y));
+        if (sp.x > hitX) continue;
+        const hit = this._lineOrder().filter(k => this.hpOf(k) > 0).slice(0, reachOf('magmashellra'));
+        if (hit.length === 0) hit.push(this._frontKind());
+        for (const k of hit) {
+          const hr = this._rectOf(k);
+          this.bursts.push({ x: hr.x + hr.w * 0.6, y: hr.y + hr.h * 0.45, kind: 'fire', age: 0 });
+          this.damageMember(k, enemyDamage('magmashellra') * this.monsterDamageMultiplier);
+        }
+        Sound.play('FireImpact');
+        this.flinch = 0.2;
+        this.spits.splice(i, 1);
       }
     }
 
@@ -394,6 +431,10 @@ export function installEnemies(P) {
           const er = this._enemyRect(e);
           for (let i = 0; i < 3; i++)
             this.shots.push({ x: er.x + 6, y: er.y + er.h * (0.35 + 0.12 * i), targetY: r.y + r.h * (0.3 + 0.18 * ((i + e.attackPose) % 3)), delay: 0.1 + i * 0.16, age: 0, damage: i === 0 ? enemyDamage(e.kind) : 0 });
+        } else if (effect === 'fireball') {
+          // A ranged attack: a fireball is spat from its mouth at the front of the party (it hits the first two when it lands).
+          const er = this._enemyRect(e);
+          this.spits.push({ x: er.x + 2, y: er.y + er.h * 0.3, targetY: r.y + r.h * 0.4, age: 0 });
         } else if (effect === 'tab') {
           // A ranged attack: the can tab is slung forward from its beak and cuts through everyone in the line.
           const er = this._enemyRect(e);
@@ -424,6 +465,7 @@ export function installEnemies(P) {
     this.flinch = 0;
     this.shots.length = 0;
     this.tabs.length = 0;
+    this.spits.length = 0;
     this.bloodMoonT = -1;
     this.bloodMoonStruck = false;
   };
@@ -577,6 +619,14 @@ export function installEnemies(P) {
   };
 
   m._drawEnemyEffects = function (g) {
+    // Spat fireballs: a ball of flame with a hot heart, shedding embers behind it.
+    for (const sp of this.spits) {
+      const x = Math.round(sp.x), y = Math.round(sp.y);
+      g.rect(x + 5, y + 1, 2, 1, CA(150, 255, 110, 30)); g.rect(x + 7, y + 3, 1, 1, CA(150, 255, 110, 30));
+      g.rect(x - 1, y - 1, 6, 6, C(238, 92, 24));
+      g.rect(x, y, 4, 4, C(255, 170, 50));
+      g.rect(x + 1, y + 1, 2, 2, C(255, 240, 170));
+    }
     // Can tabs: a spinning silver ring-pull, with a short glint trailing behind it.
     for (const tb of this.tabs) {
       const x = Math.round(tb.x), y = Math.round(tb.y);
@@ -607,6 +657,21 @@ export function installEnemies(P) {
             const sx = x + Math.round(Math.cos(a) * (rad + 3)), sy = y + Math.round(Math.sin(a) * (rad + 3));
             g.rect(sx, sy, 2, 2, k % 2 === 0 ? CA(fade, 255, 226, 120) : CA(fade, 255, 120, 40));
           }
+          break;
+        }
+        case 'shout': {   // rings of sound rolling out of a shout
+          for (let k = 0; k < 3; k++) {
+            const rx = x - Math.trunc(u * 14) - k * 4, h = 5 + k * 3, col = CA(Math.trunc(fade * (1 - k * 0.2)), 255, 244, 200);
+            g.rect(rx, y - Math.trunc(h / 2), 1, h, col); g.rect(rx + 1, y - Math.trunc(h / 2), 1, 1, col); g.rect(rx + 1, y + Math.trunc(h / 2) - 1, 1, 1, col);
+          }
+          break;
+        }
+        case 'ash': {   // a spent fireball: grey ash drifting down
+          for (let k = 0; k < 7; k++) {
+            const ax = x + (k - 3) * 2 + Math.trunc(u * (k % 2 === 0 ? 4 : -3)), ay = y + Math.trunc(u * 12) + (k % 3);
+            g.rect(ax, ay, k % 3 === 0 ? 2 : 1, 1, k % 2 === 0 ? CA(fade, 168, 166, 178) : CA(fade, 120, 118, 130));
+          }
+          g.rect(x - 1, y - 1, 2, 2, CA(Math.trunc(255 * Math.max(0, 1 - u * 3)), 255, 150, 60));
           break;
         }
         case 'toxin': {   // a few green bubbles lifting off where the poison bites

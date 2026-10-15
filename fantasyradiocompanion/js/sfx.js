@@ -139,6 +139,25 @@ const RECIPES = {
       return (saw(ph) * 0.4 * Math.pow(1 - u, 1.4) + lp * 0.9 * exp(t, 0.4) + crumble) * 0.8;
     });
   },
+  MagmaSpit() {   // a gout of fire spat: a sputtering burst and a roaring rush
+    let ph = 0, lp = 0;
+    return make(0.4, t => {
+      const u = t / 0.4;
+      ph += (140 + 500 * u) / R;
+      lp += 0.3 * (noise() - lp);
+      const env = Math.sin(Math.PI * Math.pow(u, 0.5));
+      return (sqr(ph, 0.4) * 0.3 + lp * 0.8 + noise() * 0.15 * Math.exp(-u * 4)) * env * 0.85;
+    });
+  },
+  OrcShout() {   // a bellowed shout: a low growl swelling with a ragged edge
+    let ph = 0;
+    return make(0.5, t => {
+      const u = t / 0.5;
+      ph += (95 + 40 * Math.sin(t * 30) + 60 * u) / R;
+      const env = attack(t, 0.04) * Math.pow(1 - u, 0.7);
+      return (saw(ph) * 0.45 + sqr(ph * 0.5, 0.5) * 0.25 + noise() * 0.2) * env * 0.85;
+    });
+  },
   ToxinCast() {   // a venom glob flung: a wet gurgle rising into a hiss
     let ph = 0, lp = 0;
     return make(0.4, t => {
