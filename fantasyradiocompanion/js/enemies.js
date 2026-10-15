@@ -77,6 +77,7 @@ function strikeEffect(kind, pose) {
 }
 
 const FIRST_ENEMY_SECONDS = 12;
+const SPIT_SECONDS = 0.5, SPIT_ARC = 16;   // the Magma Shellra's fireball: how long its lob takes, and how high it rises
 
 /** A poisoned enemy's frame: the same picture washed a little green (made once per frame image and kept). */
 const POISONED = new WeakMap();
@@ -116,7 +117,7 @@ export function installEnemies(P) {
     this.flinch = 0;
     this.shots = [];   // the Gargogryph's feathers in flight
     this.tabs = [];    // the Toucan's can tabs in flight
-    this.spits = [];   // the Magma Shellra's fireballs in flight
+    this.spits = [];   // the Magma Shellra's fireballs in flight (lobbed, to come down on the ground and burst into flames)
     this.bloodMoonT = -1;   // 0..1 while the Blood Moon plays out, <0 otherwise
     this.bloodMoonStruck = false;
     this.kills = {};   // a kind is "known" once it has an entry here
@@ -325,7 +326,7 @@ export function installEnemies(P) {
     }
     for (let i = this.bursts.length - 1; i >= 0; i--) {
       const b = this.bursts[i];
-      b.age += dt / (b.kind === 'death' ? 0.8 : b.kind === 'blood' ? 0.7 : b.kind === 'fire' ? 0.4 : b.kind === 'toxin' ? 0.55 : b.kind === 'shout' ? 0.45 : b.kind === 'ash' ? 0.9 : 0.3);
+      b.age += dt / (b.kind === 'death' ? 0.8 : b.kind === 'blood' ? 0.7 : b.kind === 'fire' ? 0.4 : b.kind === 'toxin' ? 0.55 : b.kind === 'shout' ? 0.45 : b.kind === 'ash' ? 0.9 : b.kind === 'flames' ? 0.75 : 0.3);
       if (b.age >= 1) this.bursts.splice(i, 1);
     }
     if (this.peckAnim >= 0) { this.peckAnim += dt / 0.25; if (this.peckAnim >= 1) this.peckAnim = -1; }
@@ -351,27 +352,28 @@ export function installEnemies(P) {
       }
     }
 
-    // Spat fireballs fly to the front of the party and burst on the first members.
-    if (this.spits.length > 0) {
-      const fr = this._rectOf(this._frontKind());
-      const hitX = fr.x + fr.w * 0.8;
-      for (let i = this.spits.length - 1; i >= 0; i--) {
-        const sp = this.spits[i];
-        sp.age += dt;
-        sp.x -= dt * 120;
-        sp.y += Math.max(-dt * 40, Math.min(dt * 40, sp.targetY - sp.y));
-        if (sp.x > hitX) continue;
-        const hit = this._lineOrder().filter(k => this.hpOf(k) > 0).slice(0, reachOf('magmashellra'));
-        if (hit.length === 0) hit.push(this._frontKind());
-        for (const k of hit) {
-          const hr = this._rectOf(k);
-          this.bursts.push({ x: hr.x + hr.w * 0.6, y: hr.y + hr.h * 0.45, kind: 'fire', age: 0 });
-          this.damageMember(k, enemyDamage('magmashellra') * this.monsterDamageMultiplier);
-        }
-        Sound.play('FireImpact');
-        this.flinch = 0.2;
-        this.spits.splice(i, 1);
+    // Spat fireballs are lobbed in an arc that comes down on the ground in front of the party, where they burst into flames that
+    // catch the first members.
+    for (let i = this.spits.length - 1; i >= 0; i--) {
+      const sp = this.spits[i];
+      sp.age += dt;
+      const u = Math.min(1, sp.age / SPIT_SECONDS);
+      sp.x = sp.startX + (sp.endX - sp.startX) * u;
+      sp.y = sp.startY + (sp.endY - sp.startY) * u - SPIT_ARC * Math.sin(Math.PI * u);
+      if (u < 1) continue;
+      const hit = this._lineOrder().filter(k => this.hpOf(k) > 0).slice(0, reachOf('magmashellra'));
+      if (hit.length === 0) hit.push(this._frontKind());
+      let left = Infinity, right = -Infinity;
+      for (const k of hit) {
+        const hr = this._rectOf(k);
+        left = Math.min(left, hr.x); right = Math.max(right, hr.x + hr.w);
+        this.damageMember(k, enemyDamage('magmashellra') * this.monsterDamageMultiplier);
       }
+      this.bursts.push({ x: (left + right) / 2, y: this.groundY, w: right - left + 8, kind: 'flames', age: 0 });
+      this.bursts.push({ x: sp.endX, y: this.groundY - 3, kind: 'fire', age: 0 });   // and the blast where it landed
+      Sound.play('FireImpact');
+      this.flinch = 0.2;
+      this.spits.splice(i, 1);
     }
 
     // Can tabs in flight: each takes its damage off a member as it reaches them, then flies on through the rest of the line.
@@ -434,7 +436,8 @@ export function installEnemies(P) {
         } else if (effect === 'fireball') {
           // A ranged attack: a fireball is spat from its mouth at the front of the party (it hits the first two when it lands).
           const er = this._enemyRect(e);
-          this.spits.push({ x: er.x + 2, y: er.y + er.h * 0.3, targetY: r.y + r.h * 0.4, age: 0 });
+          const sx = er.x + 2, sy = er.y + er.h * 0.3;
+          this.spits.push({ x: sx, y: sy, startX: sx, startY: sy, endX: r.x + r.w * 0.5, endY: this.groundY - 2, age: 0 });
         } else if (effect === 'tab') {
           // A ranged attack: the can tab is slung forward from its beak and cuts through everyone in the line.
           const er = this._enemyRect(e);
@@ -656,6 +659,23 @@ export function installEnemies(P) {
             const a = k * Math.PI / 4 + 0.3;
             const sx = x + Math.round(Math.cos(a) * (rad + 3)), sy = y + Math.round(Math.sin(a) * (rad + 3));
             g.rect(sx, sy, 2, 2, k % 2 === 0 ? CA(fade, 255, 226, 120) : CA(fade, 255, 120, 40));
+          }
+          break;
+        }
+        case 'flames': {   // flames bursting up from the ground where the fireball came down
+          const span = Math.max(14, b.w || 14);
+          const n = Math.max(4, Math.trunc(span / 3));
+          const rise = Math.sin(Math.PI * Math.min(1, u * 1.1)) * (1 - 0.25 * u);   // up fast, then guttering out
+          const fa = Math.trunc(255 * Math.max(0, 1 - u * u));
+          g.ellipse(Math.trunc(x - span / 2 - 3), y - 3, Math.trunc(span) + 6, 6, CA(Math.trunc(fa / 3), 255, 140, 40));   // a glow on the ground
+          for (let k = 0; k < n; k++) {
+            const fx = Math.round(x - span / 2 + k * (span / Math.max(1, n - 1)));
+            const wob = 0.65 + 0.35 * Math.sin(k * 1.7 + u * 16);
+            const h = Math.trunc((5 + 8 * (0.5 + 0.5 * Math.sin(k * 2.1))) * rise * wob);
+            if (h < 1) continue;
+            g.rect(fx, y - h, 3, h + 1, CA(fa, 232, 70, 24));
+            g.rect(fx, y - Math.trunc(h * 0.75), 2, Math.trunc(h * 0.75) + 1, CA(fa, 255, 150, 40));
+            g.rect(fx, y - Math.trunc(h * 0.4), 1, Math.trunc(h * 0.4) + 1, CA(fa, 255, 236, 140));
           }
           break;
         }
