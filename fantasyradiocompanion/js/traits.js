@@ -29,7 +29,7 @@ export const BASIC_ATTACKERS = ['thief', 'fae', 'lightmage', 'firemage'];
 export const BASIC_DAMAGE = 1;
 export function basicInterval(kind) { return { thief: 2, fae: 3, lightmage: 3, firemage: 5 }[kind] || 5; }
 export function fireballDamage(level) { return 5; }
-export function fireballRangeBlocks(level) { return 50; }   // it burns out into ash after travelling this many blocks
+export function fireballRangeBlocks(level) { return 25; }   // it burns out into ash after travelling this many blocks
 export function axeDamage(level) { return 3; }          // the Warrior's thrown axe
 export function axeInterval(level) { return 3.0; }
 export function axeRangeBlocks(level) { return 10; }   // blocks of grass it travels
