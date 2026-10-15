@@ -82,11 +82,11 @@ export function installStory(P) {
     Sound.play('DiscClick');
   };
 
-  /** BACK: the hero picked for the crystal is put back and the choice is open again. */
-  m.clearPick = function () {
-    if (!this.isLevelSelect || this.selected < 0) return;
-    this.selected = -1;
-    Sound.play('DiscClick');
+  /** Where the top of the party is on screen (control pixels, with room for the labels over their heads). */
+  m.partyTopPixel = function () {
+    let top = Infinity;
+    for (const k of this.party) { const r = this.memberRects[k]; if (r) top = Math.min(top, r.y); }
+    return top === Infinity ? this.lastTop + this.lh * this.lastScale * 0.5 : this.lastTop + (top - 14) * this.lastScale;
   };
 
   /** Over each hero while the crystal is being given: the level they have now. */

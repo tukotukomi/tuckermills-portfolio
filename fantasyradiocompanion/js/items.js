@@ -218,7 +218,11 @@ export function installItems(P) {
       if (!r || !frame) continue;
       const hover = this.targetHover === kind || (this.isSwapping && this.swapFirstKind === kind)   // (the first hero picked while swapping stays lit)
         || (this.isLevelSelect && this.selected >= 0 && this.party[this.selected] === kind);          // (and the one picked for the crystal)
-      const k = hover ? 1.0 : 0.65 + 0.35 * pulse;
+      let k = hover ? 1.0 : 0.65 + 0.35 * pulse;
+      if (this.isLevelSelect && this.selected >= 0) {   // someone is picked for the crystal: they alone glow strongly, the rest sit back
+        const pickedHero = this.party[this.selected] === kind, hovered = this.targetHover === kind;
+        k = pickedHero ? 1.0 : hovered ? 0.7 : 0.22 + 0.12 * pulse;
+      }
       const cx = r.x + Math.trunc(r.w / 2), cy = r.y + Math.trunc(r.h / 2);
       for (let i = 3; i >= 0; i--) {   // a soft halo behind
         const rx = Math.trunc(r.w / 2) + 2 + i * 2, ry = Math.trunc(r.h / 2) + 2 + i * 2;

@@ -1187,36 +1187,55 @@ export class Visualizer {
     }
   }
 
-  /** The LEVEL UP and BACK buttons, centred under the heading, once a hero has been picked for the crystal. */
-  _levelButtons() {
+  /** Where the picked hero's portrait and the LEVEL UP button go: a column in the middle of the scene, sitting just above the party's
+   *  heads (the portrait only when there is room for it above the button, under the heading). */
+  _levelLayout() {
     const k = this._uiScale(640);
-    const bw = Math.trunc(132 * k), bh = Math.trunc(34 * k), kb = Math.trunc(86 * k), gap = Math.trunc(10 * k);
-    const x = Math.trunc((this.width - (bw + gap + kb)) / 2), y = Math.trunc(40 * k);
-    return { levelUp: { x: x, y: y, w: bw, h: bh }, back: { x: x + bw + gap, y: y, w: kb, h: bh }, k: k };
+    const bw = Math.trunc(150 * k), bh = Math.trunc(34 * k), pw = Math.trunc(84 * k), ph = Math.trunc(70 * k), gap = Math.trunc(8 * k);
+    const top = Math.trunc(36 * k);                                       // under the heading
+    const bottom = Math.trunc(this.scene.partyTopPixel()) - Math.trunc(6 * k);   // over the party's heads
+    const by = Math.max(top, bottom - bh);
+    const py = by - gap - ph;
+    return {
+      levelUp: { x: Math.trunc((this.width - bw) / 2), y: by, w: bw, h: bh },
+      portrait: py >= top ? { x: Math.trunc((this.width - pw) / 2), y: py, w: pw, h: ph } : null,
+      k: k
+    };
   }
 
   _drawLevelSelect(ctx) {
-    // The heroes themselves glow in the scene (the colour of the Fantasy Crystal): this is the heading and, once one is picked, the
-    // question and the buttons that confirm it.
+    // The heroes themselves glow in the scene (the colour of the Fantasy Crystal); this is the heading, the picked hero held up above
+    // the party, and the LEVEL UP button that confirms it (dull until someone is picked).
     const s = this.scene;
-    const { levelUp, back, k } = this._levelButtons();
+    const { levelUp, portrait, k } = this._levelLayout();
     const picked = s.selected >= 0 && s.selected < s.party.length;
     const kind = picked ? s.party[s.selected] : null;
     this._banner(ctx, k, picked
       ? t('Level up {name} to Lv. {n}?', { name: t(PARTY_NAMES[kind]), n: s.levelOf(kind) + 1 })
       : t('Give the crystal to someone in your party'), false);
-    if (!picked) return;
+    if (picked && portrait) {
+      roundRect(ctx, portrait.x + 0.5, portrait.y + 0.5, portrait.w - 1, portrait.h - 1, 10 * k);
+      ctx.fillStyle = 'rgba(18,26,66,0.92)'; ctx.fill();
+      ctx.strokeStyle = 'rgb(150,210,255)'; ctx.lineWidth = 2.2; ctx.stroke();
+      const sp = Sprites.party[kind];
+      const room = portrait.h - 22 * k;
+      const factor = Math.max(1, Math.trunc(room / sp.h));
+      const pw = sp.w * factor, ph = sp.h * factor;
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(sp.a, portrait.x + Math.trunc((portrait.w - pw) / 2), portrait.y + Math.trunc(6 * k) + Math.trunc((room - ph) / 2), pw, ph);
+      this._text(ctx, t('Lv. {n}', { n: s.levelOf(kind) }) + '  >  ' + t('Lv. {n}', { n: s.levelOf(kind) + 1 }),
+        portrait.x + portrait.w / 2, portrait.y + portrait.h - 10 * k, { px: 8.5 * PT * k, color: 'rgb(190,226,255)', align: 'center' });
+    }
+    const ready = picked;
+    const hot = this.hover.levelUp && ready;
     roundRect(ctx, levelUp.x + 0.5, levelUp.y + 0.5, levelUp.w - 1, levelUp.h - 1, 8 * k);
     const grad = ctx.createLinearGradient(0, levelUp.y, 0, levelUp.y + levelUp.h);
-    if (this.hover.levelUp) { grad.addColorStop(0, 'rgb(255,232,130)'); grad.addColorStop(1, 'rgb(236,160,40)'); }
+    if (!ready) { grad.addColorStop(0, 'rgba(70,74,96,0.59)'); grad.addColorStop(1, 'rgba(44,46,64,0.59)'); }
+    else if (hot) { grad.addColorStop(0, 'rgb(255,232,130)'); grad.addColorStop(1, 'rgb(236,160,40)'); }
     else { grad.addColorStop(0, 'rgb(255,206,80)'); grad.addColorStop(1, 'rgb(220,130,24)'); }
     ctx.fillStyle = grad; ctx.fill();
-    ctx.strokeStyle = 'rgb(255,244,190)'; ctx.lineWidth = 2; ctx.stroke();
-    this._text(ctx, t('LEVEL UP'), levelUp.x + levelUp.w / 2, levelUp.y + levelUp.h / 2 + 0.5, { px: 11 * PT * k, weight: 700, color: 'rgb(70,36,8)', align: 'center' });
-    roundRect(ctx, back.x + 0.5, back.y + 0.5, back.w - 1, back.h - 1, 8 * k);
-    ctx.fillStyle = this.hover.back ? 'rgba(70,74,120,0.94)' : 'rgba(34,32,76,0.88)'; ctx.fill();
-    ctx.strokeStyle = this.hover.back ? 'rgb(170,190,255)' : 'rgba(170,190,255,0.78)'; ctx.lineWidth = 1.6; ctx.stroke();
-    this._text(ctx, t('BACK'), back.x + back.w / 2, back.y + back.h / 2 + 0.5, { px: 11 * PT * k, weight: 700, color: 'white', align: 'center' });
+    ctx.strokeStyle = ready ? 'rgb(255,244,190)' : 'rgba(120,126,150,0.63)'; ctx.lineWidth = ready ? 2 : 1.2; ctx.stroke();
+    this._text(ctx, t('LEVEL UP'), levelUp.x + levelUp.w / 2, levelUp.y + levelUp.h / 2 + 0.5, { px: 11 * PT * k, weight: 700, color: ready ? 'rgb(70,36,8)' : 'rgb(150,160,176)', align: 'center' });
   }
 
   // ---- Input ---------------------------------------------------------------------------------------------------------
@@ -1277,7 +1296,7 @@ export class Visualizer {
       restart: this._settingsOpen && this._inRect(h, this._restartItemRect),
       tuner: this._inTuner(h),
       comp: this.zoomed && this._inRect(h, this._compRect),
-      card: -1, tile: -1, levelUp: false, back: false
+      card: -1, tile: -1, levelUp: false
     };
     this._overHot = this._inHot(h);
     this._discHover = this._discOpen ? this._discSlotAt(h) : -1;
@@ -1294,16 +1313,15 @@ export class Visualizer {
     for (let i = 0; i < cards.length; i++) if (this._inRect(p, cards[i])) hover.card = i;
     if (s.isLevelSelect) {
       // The crystal is being given: the heroes in the scene glow, and tapping one picks them (then LEVEL UP confirms).
-      const b = this._levelButtons(), picked = s.selected >= 0;
-      hover.levelUp = picked && this._inRect(p, b.levelUp);
-      hover.back = picked && this._inRect(p, b.back);
-      const member = hover.levelUp || hover.back ? null : s.memberAt(p.x, p.y);
+      const b = this._levelLayout(), overButton = this._inRect(p, b.levelUp);
+      hover.levelUp = overButton && s.selected >= 0;   // (dull and dead until someone is picked)
+      const member = overButton ? null : s.memberAt(p.x, p.y);
       s.targetHover = member;
-      if (member || hover.back) hover.tile = 0;
+      if (member) hover.tile = 0;
     }
     this.hover = hover;
     const overCoin = !s.isLevelSelect && !s.isDialogue && !s.isChoosing && s.isCoinAt(p.x, p.y);
-    this.canvas.style.cursor = hover.button || hover.settings || hover.restart || hover.tuner || hover.comp || this._overHot || this._discHover >= 0 || hover.card >= 0 || hover.tile >= 0 || hover.levelUp || hover.back || overCoin ? 'pointer' : 'default';
+    this.canvas.style.cursor = hover.button || hover.settings || hover.restart || hover.tuner || hover.comp || this._overHot || this._discHover >= 0 || hover.card >= 0 || hover.tile >= 0 || hover.levelUp || overCoin ? 'pointer' : 'default';
   }
 
   _onDown(e) {
@@ -1368,9 +1386,8 @@ export class Visualizer {
     if (this._inRect(h, this._buttonRect)) { this.host.toggleFullscreen && this.host.toggleFullscreen(); return; }
 
     if (s.isLevelSelect) {
-      const b = this._levelButtons(), picked = s.selected >= 0;
-      if (picked && this._inRect(p, b.levelUp)) { if (s.confirmLevelUp()) { this.hover.levelUp = false; s.targetHover = null; } }
-      else if (picked && this._inRect(p, b.back)) s.clearPick();
+      const b = this._levelLayout();
+      if (this._inRect(p, b.levelUp)) { if (s.selected >= 0 && s.confirmLevelUp()) { this.hover.levelUp = false; s.targetHover = null; } }
       else { const who = s.memberAt(p.x, p.y); if (who) s.pickMember(who); }
     } else if (s.isDialogue) s.advanceDialogue();
     else if (s.isLevelFx) s.skipLevelFx();
