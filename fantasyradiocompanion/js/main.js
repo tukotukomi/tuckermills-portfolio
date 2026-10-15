@@ -546,7 +546,7 @@ async function main() {
         const mid = el('div');
         if (seen) {
           mid.append(el('div', 'nm', t(PARTY_NAMES[b.kind]).toUpperCase()));
-          const st = el('div', 'st'); st.innerHTML = '<b>' + t('HP {n}', { n: b.maxHp }) + '</b>';
+          const st = el('div', 'st'); st.innerHTML = '<b>' + t('HP {n}', { n: b.maxHp }) + '</b> &nbsp; <span class="iv">' + b.hpGrowth + '</span>';
           const atk = el('div', 'row atk'); atk.append(el('span', 'lbl', t('ATTACK')), b.attack);
           const skl = el('div', 'row skl'); skl.append(el('span', 'lbl', t('SKILL')), b.skill);
           const nt = el('div', 'row'); nt.append(el('span', 'lbl', t('NOTES')), t(BLURB[b.kind]));

@@ -3,6 +3,7 @@
 
 import { C, CA, withAlpha, rnd } from './util.js';
 import { Sprites, PARTY } from './sprites.js';
+import { maxHp, hpGain } from './health.js';
 import { Sound } from './sfx.js';
 import { t } from './i18n.js';
 
@@ -142,7 +143,8 @@ export function installTraits(P) {
       }
     };
     return PARTY.map(k => ({
-      kind: k, seen: this.heroesUsed.has(k), maxHp: this.maxHpOf(k),
+      kind: k, seen: this.heroesUsed.has(k), maxHp: maxHp(k, 1),
+      hpGrowth: '+' + hpGain(k, 1) + ' / +' + hpGain(k, 5) + ' / +' + hpGain(k, 10) + ' per level at Lv. 1 / 5 / 10',
       attack: attack(k), skill: traitSummary(k, 1) + (k === 'firemage' ? ' (' + fireballDamage(1) + ' dmg)' : '')
     }));
   };

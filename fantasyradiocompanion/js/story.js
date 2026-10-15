@@ -108,7 +108,15 @@ export function installStory(P) {
     this.fxMember = this.selected;
     this.fxFrom = this.levelOf(kind);
     this.fxTo = this.fxFrom + 1;
+    const oldMax = this.maxHpOf(kind);
+    const hurt = this.hpOf(kind) > 0 && this.hpOf(kind) < oldMax;
     this.levels[kind] = this.fxTo;
+    const gain = this.maxHpOf(kind) - oldMax;   // the new HP: a full member simply stays full, a hurt one is given what was added
+    if (hurt) this._restoreHp(kind, gain);
+    if (gain > 0) {
+      const r = this._rectOf(kind);
+      this._addItemText(t('Max HP +{n}', { n: gain }), r.x + r.w / 2.0, r.y - 10, C(190, 226, 255));
+    }
     this.story = 'LevelFx';
     this.storyT = 0;
     Sound.play('LevelUp');

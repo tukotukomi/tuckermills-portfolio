@@ -7,7 +7,25 @@ import { Sprites } from './sprites.js';
 import { t } from './i18n.js';
 
 /** Hit points at full health. Everyone has 50 for now; the Warrior, the front-liner, has 80. */
-export function maxHp(kind, level) { return kind === 'warrior' ? 80 : 50; }
+/** The HP a level-up adds, from `fromLevel` to the next. Four tiers, every one at 10 or more in the early levels: the tank (Warrior)
+ *  starts at +14 and gains one more each level; the sturdy Paca +12, rising one every two levels; the Thief a flat +11; and the casters
+ *  (Light Mage, Fire Mage, Fae, Druid) +10 through the fifth level-up, then fading one every three levels to a floor of +6. */
+export function hpGain(kind, fromLevel) {
+  const l = Math.max(1, fromLevel);
+  switch (kind) {
+    case 'warrior': return 14 + (l - 1);
+    case 'paca': return 12 + Math.trunc((l - 1) / 2);
+    case 'thief': return 11;
+    default: return l <= 5 ? 10 : Math.max(6, 9 - Math.trunc((l - 6) / 3));
+  }
+}
+
+/** Hit points at full health at `level`: a base (50; the Warrior, the front-liner, 80) plus what each level-up has added. */
+export function maxHp(kind, level) {
+  let hp = kind === 'warrior' ? 80 : 50;
+  for (let l = 1; l < level; l++) hp += hpGain(kind, l);
+  return hp;
+}
 
 const INK = C(30, 22, 40), WOOD = C(158, 100, 58), DARK = C(104, 62, 38), PALE = C(204, 146, 92);
 
