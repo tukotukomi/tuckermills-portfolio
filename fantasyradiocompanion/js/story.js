@@ -73,6 +73,34 @@ export function installStory(P) {
     if (this.isLevelSelect && partyIndex >= 0 && partyIndex < this.party.length) this.selected = partyIndex;
   };
 
+  /** A tap on a hero while the crystal is being given: they are picked (tapped again, they are put back). LEVEL UP then confirms it. */
+  m.pickMember = function (who) {
+    if (!this.isLevelSelect) return;
+    const i = this.party.indexOf(who);
+    if (i < 0) return;
+    this.selected = this.selected === i ? -1 : i;
+    Sound.play('DiscClick');
+  };
+
+  /** BACK: the hero picked for the crystal is put back and the choice is open again. */
+  m.clearPick = function () {
+    if (!this.isLevelSelect || this.selected < 0) return;
+    this.selected = -1;
+    Sound.play('DiscClick');
+  };
+
+  /** Over each hero while the crystal is being given: the level they have now. */
+  m._appendLevelSelectText = function (list) {
+    if (!this.isLevelSelect) return;
+    this.party.forEach((kind, i) => {
+      const r = this.memberRects[kind];
+      if (!r) return;
+      let y = this.lastTop + (r.y - 13) * this.lastScale;
+      if (y < 48) y = this.lastTop + (r.y + r.h * 0.62) * this.lastScale;
+      list.push({ text: t('Lv. {n}', { n: this.levelOf(kind) }), x: (r.x + r.w / 2) * this.lastScale, y: y, alpha: 1, bubble: false, color: i === this.selected ? C(200, 232, 255) : C(255, 255, 255) });
+    });
+  };
+
   /** The LEVEL UP button: the highlighted member goes up a level and time can move on once the celebration ends. */
   m.confirmLevelUp = function () {
     if (!this.isLevelSelect || this.selected < 0 || this.selected >= this.party.length) return false;

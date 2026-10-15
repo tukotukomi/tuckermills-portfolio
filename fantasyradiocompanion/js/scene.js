@@ -267,7 +267,7 @@ export class PixelScene {
     this._drawGlowSpots(g);
     this._drawCampfireGlow(g, lw);
     this._drawCrystalLayer(g, lw);
-    if (this.targetItem !== null || this.isGameOver || this.isSwapping) this._drawTargetOverlay(g, lw);
+    if (this.targetItem !== null || this.isGameOver || this.isSwapping || this.isLevelSelect) this._drawTargetOverlay(g, lw);
     this._drawHpBars(g);   // on top of everything, so a night tint or the dimmed overlay doesn't hide it
   }
 

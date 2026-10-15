@@ -11,7 +11,10 @@ import { ITEM_DEFS, HOT_SLOT_COUNT } from './items.js';
 import { t, isCjk } from './i18n.js';
 
 export const ZOOMED_SCALE = 5;
-export const PARTY_ZOOM_OUT = 0.8;   // the party is drawn at 80% of the size it would otherwise be, in every view (20% zoomed out)
+export const PARTY_ZOOM_OUT = 0.8;   // the party is drawn at about 80% of the size it would otherwise be, in every view (20% zoomed out)
+/** A scale taken down by PARTY_ZOOM_OUT and snapped to the nearest whole number (at least 1): a fractional scale makes single scene
+ *  pixels land 2 or 3 screen pixels wide, so sprites shimmer as they move. */
+const zoomedOut = scale => Math.max(1, Math.round(scale * PARTY_ZOOM_OUT));
 
 // On a phone or tablet the adventure only progresses while the page is on screen: backgrounded or with the screen locked, the radio
 // plays on but the game waits (desktop browsers keep their own rules: a visible window keeps going).
@@ -98,9 +101,9 @@ export class Visualizer {
     if (this.zoomed) {
       const want = this.fullscreen ? Math.max(ZOOMED_SCALE, Math.floor(this.height / 150)) : ZOOMED_SCALE;
       // On a narrow screen (a phone held upright) keep at least ~150 world pixels across so the whole party fits.
-      return PARTY_ZOOM_OUT * Math.max(2, Math.min(want, Math.floor(this.width / 150)));
+      return zoomedOut(Math.max(2, Math.min(want, Math.floor(this.width / 150))));
     }
-    return Math.max(1, Math.floor(this.height / DESIGN_HEIGHT) * PARTY_ZOOM_OUT);
+    return zoomedOut(Math.floor(this.height / DESIGN_HEIGHT));
   }
   get vw() { return this.width / this.hud; }
   get vh() { return this.height / this.hud; }
@@ -1184,46 +1187,36 @@ export class Visualizer {
     }
   }
 
-  _tileRects() {
-    const n = this.scene.party.length;
-    const k = this._uiScale(n * 120 + (n - 1) * 8 + 24 + 88);
-    const tw = Math.trunc(120 * k), th = Math.trunc(56 * k), gap = Math.trunc(8 * k), bw = Math.trunc(88 * k);
-    const total = n * tw + (n - 1) * gap + Math.trunc(24 * k) + bw;
-    const x = Math.trunc((this.width - total) / 2), top = Math.trunc(34 * k);
-    const tiles = [];
-    for (let i = 0; i < n; i++) tiles.push({ x: x + i * (tw + gap), y: top, w: tw, h: th });
-    return { tiles: tiles, levelUp: { x: x + n * (tw + gap) - gap + Math.trunc(24 * k), y: top, w: bw, h: th }, k: k };
+  /** The LEVEL UP and BACK buttons, centred under the heading, once a hero has been picked for the crystal. */
+  _levelButtons() {
+    const k = this._uiScale(640);
+    const bw = Math.trunc(132 * k), bh = Math.trunc(34 * k), kb = Math.trunc(86 * k), gap = Math.trunc(10 * k);
+    const x = Math.trunc((this.width - (bw + gap + kb)) / 2), y = Math.trunc(40 * k);
+    return { levelUp: { x: x, y: y, w: bw, h: bh }, back: { x: x + bw + gap, y: y, w: kb, h: bh }, k: k };
   }
 
   _drawLevelSelect(ctx) {
+    // The heroes themselves glow in the scene (the colour of the Fantasy Crystal): this is the heading and, once one is picked, the
+    // question and the buttons that confirm it.
     const s = this.scene;
-    const { tiles, levelUp, k } = this._tileRects();
-    this._banner(ctx, k, t('Give the crystal to someone in your party'), false);
-    for (let i = 0; i < tiles.length && i < s.party.length; i++) {
-      const r = tiles[i], selected = i === s.selected, hot = i === this.hover.tile, kind = s.party[i];
-      roundRect(ctx, r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1, 8 * k);
-      ctx.fillStyle = selected ? 'rgba(52,52,118,0.96)' : hot ? 'rgba(36,36,84,0.93)' : 'rgba(22,22,60,0.87)'; ctx.fill();
-      ctx.strokeStyle = selected ? 'rgb(255,224,120)' : hot ? 'rgb(190,204,255)' : 'rgba(150,168,232,0.75)'; ctx.lineWidth = selected ? 3 : 1.5; ctx.stroke();
-      const sp = Sprites.party[kind];
-      const factor = Math.max(1, Math.trunc((r.h - 10 * k) / sp.h));
-      const pw = sp.w * factor, ph = sp.h * factor;
-      const px0 = r.x + Math.trunc(8 * k);
-      ctx.imageSmoothingEnabled = false;
-      ctx.drawImage(sp.a, px0, r.y + Math.trunc((r.h - ph) / 2), pw, ph);
-      const tx = px0 + pw + Math.trunc(6 * k);
-      this._text(ctx, t(PARTY_NAMES[kind]), tx, r.y + Math.trunc(8 * k) + 9 * k, { px: 7.5 * PT * k, color: 'white' });
-      this._text(ctx, t('Lv. {n}', { n: s.levelOf(kind) }), tx, r.y + Math.trunc(28 * k) + 10 * k, { px: 10 * PT * k, color: 'rgb(255,214,120)' });
-    }
-    const ready = s.selected >= 0;
-    const hotBtn = this.hover.levelUp && ready;
+    const { levelUp, back, k } = this._levelButtons();
+    const picked = s.selected >= 0 && s.selected < s.party.length;
+    const kind = picked ? s.party[s.selected] : null;
+    this._banner(ctx, k, picked
+      ? t('Level up {name} to Lv. {n}?', { name: t(PARTY_NAMES[kind]), n: s.levelOf(kind) + 1 })
+      : t('Give the crystal to someone in your party'), false);
+    if (!picked) return;
     roundRect(ctx, levelUp.x + 0.5, levelUp.y + 0.5, levelUp.w - 1, levelUp.h - 1, 8 * k);
     const grad = ctx.createLinearGradient(0, levelUp.y, 0, levelUp.y + levelUp.h);
-    if (!ready) { grad.addColorStop(0, 'rgba(70,74,96,0.59)'); grad.addColorStop(1, 'rgba(44,46,64,0.59)'); }
-    else if (hotBtn) { grad.addColorStop(0, 'rgb(255,232,130)'); grad.addColorStop(1, 'rgb(236,160,40)'); }
+    if (this.hover.levelUp) { grad.addColorStop(0, 'rgb(255,232,130)'); grad.addColorStop(1, 'rgb(236,160,40)'); }
     else { grad.addColorStop(0, 'rgb(255,206,80)'); grad.addColorStop(1, 'rgb(220,130,24)'); }
     ctx.fillStyle = grad; ctx.fill();
-    ctx.strokeStyle = ready ? 'rgb(255,244,190)' : 'rgba(120,126,150,0.63)'; ctx.lineWidth = ready ? 2 : 1.2; ctx.stroke();
-    this._text(ctx, t('LEVEL UP'), levelUp.x + levelUp.w / 2, levelUp.y + levelUp.h / 2 + 0.5, { px: 11 * PT * k, weight: 700, color: ready ? 'rgb(70,36,8)' : 'rgb(150,160,176)', align: 'center' });
+    ctx.strokeStyle = 'rgb(255,244,190)'; ctx.lineWidth = 2; ctx.stroke();
+    this._text(ctx, t('LEVEL UP'), levelUp.x + levelUp.w / 2, levelUp.y + levelUp.h / 2 + 0.5, { px: 11 * PT * k, weight: 700, color: 'rgb(70,36,8)', align: 'center' });
+    roundRect(ctx, back.x + 0.5, back.y + 0.5, back.w - 1, back.h - 1, 8 * k);
+    ctx.fillStyle = this.hover.back ? 'rgba(70,74,120,0.94)' : 'rgba(34,32,76,0.88)'; ctx.fill();
+    ctx.strokeStyle = this.hover.back ? 'rgb(170,190,255)' : 'rgba(170,190,255,0.78)'; ctx.lineWidth = 1.6; ctx.stroke();
+    this._text(ctx, t('BACK'), back.x + back.w / 2, back.y + back.h / 2 + 0.5, { px: 11 * PT * k, weight: 700, color: 'white', align: 'center' });
   }
 
   // ---- Input ---------------------------------------------------------------------------------------------------------
@@ -1284,7 +1277,7 @@ export class Visualizer {
       restart: this._settingsOpen && this._inRect(h, this._restartItemRect),
       tuner: this._inTuner(h),
       comp: this.zoomed && this._inRect(h, this._compRect),
-      card: -1, tile: -1, levelUp: false
+      card: -1, tile: -1, levelUp: false, back: false
     };
     this._overHot = this._inHot(h);
     this._discHover = this._discOpen ? this._discSlotAt(h) : -1;
@@ -1300,13 +1293,17 @@ export class Visualizer {
     const cards = this._cardRects();
     for (let i = 0; i < cards.length; i++) if (this._inRect(p, cards[i])) hover.card = i;
     if (s.isLevelSelect) {
-      const t = this._tileRects();
-      for (let i = 0; i < t.tiles.length; i++) if (this._inRect(p, t.tiles[i])) hover.tile = i;
-      hover.levelUp = this._inRect(p, t.levelUp) && s.selected >= 0;
+      // The crystal is being given: the heroes in the scene glow, and tapping one picks them (then LEVEL UP confirms).
+      const b = this._levelButtons(), picked = s.selected >= 0;
+      hover.levelUp = picked && this._inRect(p, b.levelUp);
+      hover.back = picked && this._inRect(p, b.back);
+      const member = hover.levelUp || hover.back ? null : s.memberAt(p.x, p.y);
+      s.targetHover = member;
+      if (member || hover.back) hover.tile = 0;
     }
     this.hover = hover;
     const overCoin = !s.isLevelSelect && !s.isDialogue && !s.isChoosing && s.isCoinAt(p.x, p.y);
-    this.canvas.style.cursor = hover.button || hover.settings || hover.restart || hover.tuner || hover.comp || this._overHot || this._discHover >= 0 || hover.card >= 0 || hover.tile >= 0 || hover.levelUp || overCoin ? 'pointer' : 'default';
+    this.canvas.style.cursor = hover.button || hover.settings || hover.restart || hover.tuner || hover.comp || this._overHot || this._discHover >= 0 || hover.card >= 0 || hover.tile >= 0 || hover.levelUp || hover.back || overCoin ? 'pointer' : 'default';
   }
 
   _onDown(e) {
@@ -1371,9 +1368,10 @@ export class Visualizer {
     if (this._inRect(h, this._buttonRect)) { this.host.toggleFullscreen && this.host.toggleFullscreen(); return; }
 
     if (s.isLevelSelect) {
-      const t = this._tileRects();
-      for (let i = 0; i < t.tiles.length; i++) if (this._inRect(p, t.tiles[i])) { s.selectMember(i); return; }
-      if (this._inRect(p, t.levelUp) && s.confirmLevelUp()) this.hover.levelUp = false;
+      const b = this._levelButtons(), picked = s.selected >= 0;
+      if (picked && this._inRect(p, b.levelUp)) { if (s.confirmLevelUp()) { this.hover.levelUp = false; s.targetHover = null; } }
+      else if (picked && this._inRect(p, b.back)) s.clearPick();
+      else { const who = s.memberAt(p.x, p.y); if (who) s.pickMember(who); }
     } else if (s.isDialogue) s.advanceDialogue();
     else if (s.isLevelFx) s.skipLevelFx();
     else if (!s.isChoosing) s.collectCoinAt(p.x, p.y);

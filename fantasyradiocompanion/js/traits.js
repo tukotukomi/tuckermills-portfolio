@@ -453,6 +453,7 @@ export function installTraits(P) {
     this._appendHpText(list);
     this._appendStartText(list);
     this._appendSwapText(list);
+    this._appendLevelSelectText(list);
     return list;
   };
 
