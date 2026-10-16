@@ -1275,7 +1275,7 @@ export class PixelScene {
     if (this.starting) { this._drawStartCandidates(g, lw); return; }
     const n = this.party.length;
     const walking = this.marching && this.move > 0.05;
-    const stepB = walking && (this.clock.beatIndex % 2 === 1);
+    const stepPhase = walking ? (this.clock.beatIndex % 4) : 0;   // the walk cycle has four steps, one a beat
     const leaderX = this._leaderX();
     const order = this._lineOrder();   // the members on their feet, then the fainted, who ride in the cart behind them
     const awake = this.party.filter(k => this.hpOf(k) > 0).length;
@@ -1288,19 +1288,19 @@ export class PixelScene {
       const newcomer = this.enc === 'Joining' && kind === this.party[n - 1];
       const slotX = leaderX - i * SPACING;
       let xD = slotX;
-      let legsB = stepB;
+      let phase = stepPhase;
       let mirrored = false;
       if (this.camp > 0.001 && !newcomer) {
         const slot = this._campSlotLeft(i, sprite.w, lw);
         xD = slotX + (slot.x - slotX) * ease(this.camp);
         mirrored = slot.faceLeft && this.camp > 0.5;
-        legsB = this.camp < 0.999 && (Math.trunc(this.time * 5)) % 2 === 1;
+        phase = this.camp < 0.999 ? (Math.trunc(this.time * 5)) % 4 : 0;
       }
       if (newcomer) {
         const doorLeft = this.tavernWorldX - this.scroll + Sprites.tavernDoorX - sprite.w / 2.0;
         const e = this.joinT * this.joinT * (3 - 2 * this.joinT);
         xD = doorLeft + (slotX - doorLeft) * e;
-        legsB = (Math.trunc(this.time * 4)) % 2 === 1;
+        phase = (Math.trunc(this.time * 4)) % 4;
       }
       if (i === 0 && !newcomer) {
         if (this.peckAnim >= 0) xD += 2 * Math.sin(Math.PI * this.peckAnim);
@@ -1321,7 +1321,7 @@ export class PixelScene {
       let breath = 0;
       if (!walking && !dancing && !newcomer && Math.sin(this.time * 2 * Math.PI / IDLE_BREATH_SECONDS - i * 0.6) > 0) breath = 1;
       const y = this.groundY + 1 - sprite.h - breath - Math.round(hop);
-      const frame = mirrored ? (legsB ? sprite.fb : sprite.fa) : (legsB ? sprite.b : sprite.a);
+      const frame = (mirrored ? sprite.ff : sprite.f)[phase & 3];
       g.ellipse(x + Math.trunc((sprite.w - 12) / 2), this.groundY, 12, 2, CA(90, 20, 30, 20));
       g.image(frame, x, y, false, undefined, sprite.w, sprite.h + breath);
       this._noteMemberRect(kind, x, y, sprite.w, sprite.h + breath);

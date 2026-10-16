@@ -30,8 +30,12 @@ export const Sprites = {
     // Party members: two walk frames, plus mirrored copies for the campfire.
     this.party = {};
     for (const k of PARTY) {
+      // Four walk frames (standing / passing, a stride, passing, the other stride), each also mirrored for the campfire.
       const a = this.img['party_' + k + '_a'], b = this.img['party_' + k + '_b'];
-      this.party[k] = { a: a, b: b, fa: flipImage(a), fb: flipImage(b), w: a.width, h: a.height };
+      const c = this.img['party_' + k + '_c'] || a, d = this.img['party_' + k + '_d'] || b;
+      const fr = [a, b, c, d];
+      this.party[k] = { a: a, b: b, c: c, d: d, fa: flipImage(a), fb: flipImage(b), fc: c === a ? flipImage(a) : flipImage(c), fd: d === b ? flipImage(b) : flipImage(d), w: a.width, h: a.height };
+      this.party[k].f = fr; this.party[k].ff = [this.party[k].fa, this.party[k].fb, this.party[k].fc, this.party[k].fd];
     }
     this.oldMan = {
       a: this.img.oldman_a, b: this.img.oldman_b, la: this.img.oldman_left_a, lb: this.img.oldman_left_b,
