@@ -101,6 +101,8 @@ const ES = {
   'Are you prepared to level up your adventure?': '¿Estás listo para subir de nivel tu aventura?',
   'It matters not, for that is your destiny.': 'No importa, pues ese es tu destino.', 'It so happens I have what you need.': 'Da la casualidad de que tengo lo que necesitas.',
   'The Old Man throws you a blue crystal.': 'El Anciano te lanza un cristal azul.', 'Give this to someone in your party.': 'Dale esto a alguien de tu grupo.',
+  'Your party is in danger! Heal them with a potion.': '¡Tu grupo está en peligro! Cúralos con una poción.',
+  'Collect Gold Coins to buy more Healing Potions from the Merchant!': '¡Recoge monedas de oro para comprar más pociones de curación al Mercader!',
   'You found a Fantasy Crystal! Give it to someone in your party.': '¡Encontraste un Cristal de Fantasía! Dáselo a alguien de tu grupo.',
   // Monsters
   'Sheller': 'Caparazón', 'Orc': 'Orco', 'Nightmare': 'Pesadilla', 'Gargogryph': 'Gargogrifo',
@@ -211,6 +213,8 @@ const ZH = {
   'Are you prepared to level up your adventure?': '你准备好提升你的冒险了吗？',
   'It matters not, for that is your destiny.': '这无关紧要，因为这就是你的命运。', 'It so happens I have what you need.': '碰巧我有你需要的东西。',
   'The Old Man throws you a blue crystal.': '老人向你抛来一颗蓝色水晶。', 'Give this to someone in your party.': '把这个交给队伍中的某人。',
+  'Your party is in danger! Heal them with a potion.': '你的队伍有危险了！用药水治疗他们吧。',
+  'Collect Gold Coins to buy more Healing Potions from the Merchant!': '收集金币，向商人购买更多治疗药水！',
   'You found a Fantasy Crystal! Give it to someone in your party.': '你找到了一颗幻想水晶！把它交给队伍中的某人。',
   // Monsters
   'Sheller': '龟壳兽', 'Orc': '兽人', 'Nightmare': '梦魇', 'Gargogryph': '石像鹫',

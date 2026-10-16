@@ -28,6 +28,9 @@ async function main() {
   // The heroes ever used, kept across restarts (the party compendium).
   for (const k of store.get('heroes', '').split(',')) if (PARTY.indexOf(k) >= 0) scene.heroesUsed.add(k);
   scene.onHeroes = list => store.set('heroes', list.join(','));
+  // The new-player tips already shown, kept across restarts (each comes up once, ever).
+  for (const k of store.get('tips', '').split(',')) if (k) scene.tipsSeen.add(k);
+  scene.onTips = list => store.set('tips', list.join(','));
   const player = new Player();
   const canvas = $('scene');
 

@@ -125,6 +125,7 @@ export class Visualizer {
     this.scene.setSpectrum(spec.live, spec.bass, spec.mid, spec.treble, spec.loud);
     const level = this.scene.marching && this.host.level ? this.host.level() : -1;
     this.scene.advance(dt, level);
+    if (this.scene.isTipActive) { this._discOpen = false; this._hotDown = false; }   // no switching potions under a tip
     if (this._hotDown && !this._discOpen && performance.now() - this._hotDownAt >= 450) {   // held: the disc of four
       this._discOpen = true; this._discByPress = true;
       Sound.play('DiscClick');
@@ -179,6 +180,7 @@ export class Visualizer {
     this._drawGameOver(ctx);
     ctx.restore();
     this._drawShop(ctx);
+    this._drawTip(ctx);
   }
 
   _text(ctx, str, x, y, o) {
@@ -866,14 +868,22 @@ export class Visualizer {
   _drawHotButton(ctx) {
     if (!this._hotVisible) return;
     if (this.scene.isWaiting || this.scene.isSwapping) { this._drawTargetUi(ctx); return; }
-    const r = this._hotRect, hot = this._overHot || this._hotDown;
-    const s = this.scene, id = s.hotItem, n = s.itemCount(id);
+    const s = this.scene, r = this._hotRect, tipLit = s.isTipPrompt, hot = this._overHot || this._hotDown || tipLit;
+    const id = s.hotItem, n = s.itemCount(id);
+    if (tipLit) {   // the tutorial: a green glow pulsing out from the button the Old Man points at
+      const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 1000 * 5), cx = r.x + r.w / 2, cy = r.y + r.h / 2;
+      for (let i = 4; i >= 1; i--) {
+        const gr = r.w / 2 + i * 3.5 + pulse * 4;
+        ctx.beginPath(); ctx.arc(cx, cy, gr, 0, Math.PI * 2);
+        ctx.fillStyle = rgba(150, 255, 190, 0.27 * (1.15 - i * 0.2) * (0.55 + 0.45 * pulse)); ctx.fill();
+      }
+    }
     ctx.beginPath(); ctx.arc(r.x + r.w / 2, r.y + r.h / 2, (r.w - 1) / 2, 0, Math.PI * 2);
     ctx.fillStyle = rgba(12, 16, 44, hot ? 0.75 : 0.47); ctx.fill();
     ctx.strokeStyle = hot ? 'rgb(255,214,120)' : rgba(210, 224, 255, 0.75); ctx.lineWidth = 1.6; ctx.stroke();
     this._drawItemIcon(ctx, id, r.x + r.w / 2, r.y + r.h / 2, this._compactDisc ? 1 : 2, n <= 0);
     this._drawCountBadge(ctx, s.isInfinite(id) ? -1 : n, r.x + r.w + 2, r.y + r.h + 2);
-    if (this._overHot && !this._discOpen) this._tip(ctx, t('Tap: use   Hold: switch'), r.x + r.w + 10, r.y + r.h / 2, true);
+    if (this._overHot && !this._discOpen && !tipLit) this._tip(ctx, t('Tap: use   Hold: switch'), r.x + r.w + 10, r.y + r.h / 2, true);
   }
 
   _drawDisc(ctx) {
@@ -1187,6 +1197,81 @@ export class Visualizer {
     }
   }
 
+  /** Where the Old Man and his box go: side by side in the room to the right of the potion button, centred in the view. */
+  _tipLayout(ctx, k) {
+    const s = this.scene, hr = this._hotRect;
+    const left = Math.trunc((hr.x + hr.w) * this.hud + 40 * k), right = this.width - Math.trunc(12 * k);
+    const avail = Math.max(Math.trunc(200 * k), right - left);
+    const sp = Sprites.oldMan;
+    const ph = Math.trunc(Math.min(this.height - 16, 76 * k)), factor = Math.max(1, Math.trunc((ph - 10 * k) / sp.h));
+    const pw = Math.max(Math.trunc(48 * k), sp.w * factor + Math.trunc(14 * k)), gap = Math.trunc(10 * k);
+    const boxW = Math.max(Math.trunc(150 * k), Math.min(avail - pw - gap, Math.trunc(600 * k)));
+    const pad = Math.trunc(14 * k), px = 10.5 * PT * k, innerW = boxW - pad * 2;
+    const who = t('Old Man') + ':', nameW = this._measure(ctx, who, px) + 8 * k;
+    const inline = nameW + this._measure(ctx, s.tipText, px, 400) <= innerW;
+    const lines = inline ? [s.tipText] : this._wrapLines(ctx, s.tipText, innerW, px, 400);
+    const lh = px * 1.25, boxH = inline ? Math.trunc(36 * k) : Math.max(Math.trunc(36 * k), Math.trunc(px * 1.3 + 2 * k + lines.length * lh + 14 * k));
+    const total = boxW + gap + pw, gx = left + Math.max(0, Math.trunc((avail - total) / 2)), cy = Math.trunc(this.height / 2);
+    return {
+      box: { x: gx, y: cy - Math.trunc(boxH / 2), w: boxW, h: boxH },
+      portrait: { x: gx + boxW + gap, y: cy - Math.trunc(ph / 2), w: pw, h: ph },
+      who: who, nameW: nameW, inline: inline, lines: lines, px: px, lh: lh, pad: pad, factor: factor
+    };
+  }
+
+  /** The Old Man's tip: a dark overlay over the whole view, the potion button lit (for the first tip), the Old Man standing beside a
+   *  dialogue box in the style of his story, the words written out a letter at a time. */
+  _drawTip(ctx) {
+    const s = this.scene;
+    if (!s.isTipDialogue) return;
+    const k = this._uiScale(640), hud = this.hud;
+    ctx.fillStyle = 'rgba(0,0,0,0.745)'; ctx.fillRect(0, 0, this.width, this.height);
+    if (s.isTipPrompt) {
+      ctx.save();
+      if (hud !== 1) ctx.scale(hud, hud);
+      this._drawHotButton(ctx);   // lit again over the dark
+      const hr = this._hotRect, ax = hr.x + hr.w + 8 + 3 + 3 * Math.sin(performance.now() / 1000 * 7), ay = hr.y + hr.h / 2;
+      ctx.fillStyle = 'rgb(255,214,120)';
+      ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(ax + 11, ay - 7); ctx.lineTo(ax + 11, ay + 7); ctx.closePath(); ctx.fill();   // a bouncing arrow beside it
+      ctx.restore();
+    }
+    const L = this._tipLayout(ctx, k), b = L.box, p = L.portrait;
+    roundRect(ctx, b.x + 0.5, b.y + 0.5, b.w - 1, b.h - 1, 9 * k);
+    ctx.fillStyle = 'rgba(18,16,46,0.91)'; ctx.fill();
+    ctx.strokeStyle = 'rgba(255,214,120,0.92)'; ctx.lineWidth = 1.8; ctx.stroke();
+    const shown = s.tipShownText, x = b.x + L.pad;
+    if (L.inline) {
+      this._text(ctx, L.who, x, b.y + b.h / 2 + 0.5, { px: L.px, color: 'rgb(255,214,120)' });
+      this._text(ctx, shown, x + L.nameW, b.y + b.h / 2 + 0.5, { px: L.px, color: 'white', weight: 400 });
+    } else {
+      this._text(ctx, L.who, x, b.y + 7 * k + L.px * 0.65, { px: L.px, color: 'rgb(255,214,120)' });
+      const shownLines = this._wrapLines(ctx, s.tipText, b.w - L.pad * 2, L.px, 400);
+      let used = 0;   // only the characters written so far are shown, on the lines they will be wrapped to
+      ctx.font = '400 ' + L.px + 'px ' + FONT; ctx.fillStyle = 'white'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+      shownLines.forEach((line, i) => {
+        const take = Math.max(0, Math.min(line.length, shown.length - used));
+        used += line.length + (isCjk() ? 0 : 1);
+        if (take > 0) ctx.fillText(line.substring(0, take), x, b.y + 7 * k + L.px * 1.3 + 2 * k + i * L.lh);
+      });
+    }
+    if (s.isTipCoins && !s.tipTyping && (Math.trunc(performance.now() / 450)) % 2 === 0) {   // a blinking "click to continue" arrow
+      const ax = b.x + b.w - 18 * k, ay = b.y + b.h - 12 * k, sz = 5 * k;
+      ctx.fillStyle = 'rgb(255,214,120)';
+      ctx.beginPath(); ctx.moveTo(ax - sz, ay - sz * 0.6); ctx.lineTo(ax + sz, ay - sz * 0.6); ctx.lineTo(ax, ay + sz * 0.8); ctx.closePath(); ctx.fill();
+    }
+
+    // The Old Man himself, facing the potion button, bobbing a little as he talks.
+    roundRect(ctx, p.x + 0.5, p.y + 0.5, p.w - 1, p.h - 1, 10 * k);
+    ctx.fillStyle = 'rgba(18,16,46,0.91)'; ctx.fill();
+    ctx.strokeStyle = 'rgba(255,214,120,0.92)'; ctx.lineWidth = 1.8; ctx.stroke();
+    const sp = Sprites.oldMan, f = L.factor, dw = sp.w * f, dh = sp.h * f;
+    const bob = s.tipTyping && (Math.trunc(performance.now() / 140) % 2 === 0) ? Math.max(1, Math.trunc(f / 2)) : 0;
+    ctx.save();
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(sp.la, Math.round(p.x + (p.w - dw) / 2), Math.round(p.y + p.h - 5 * k - dh - bob), dw, dh);
+    ctx.restore();
+  }
+
   /** Where the picked hero's portrait and the LEVEL UP button go: a column in the middle of the scene, sitting just above the party's
    *  heads (the portrait only when there is room for it above the button, under the heading). */
   _levelLayout() {
@@ -1259,6 +1344,11 @@ export class Visualizer {
     const p = this._point(e);
     const h = { x: p.x / this.hud, y: p.y / this.hud };
     const s = this.scene;
+    if (s.isTipDialogue) {   // the Old Man's tip: nothing but the potion button answers the pointer
+      this._overHot = s.isTipPrompt && this._inHot(h);
+      this.canvas.style.cursor = this._overHot || s.isTipCoins ? 'pointer' : 'default';
+      return;
+    }
     if (s.isInn) {
       if (s.isSwapping) {
         const overCancel = this._inHot(h), member = overCancel ? null : s.memberAt(p.x, p.y);
@@ -1331,6 +1421,13 @@ export class Visualizer {
     const p = this._point(e);
     const h = { x: p.x / this.hud, y: p.y / this.hud };
     const s = this.scene;
+    if (s.isTipDialogue) {
+      // Every other tap is blocked. The first tip goes on only with a tap on the potion button (a plain tap: no holding for the disc, so
+      // the potion can't be swapped); the second reads on with a tap anywhere.
+      if (s.isTipPrompt) { if (this._inHot(h)) { s.tipUsePotion(); this._overHot = false; this._hotDown = false; } }
+      else s.advanceTip();
+      return;
+    }
     if (s.isInn) {
       if (s.isSwapping) {   // tap two heroes to swap them; the cross, or a tap anywhere else, backs out
         if (this._inHot(h)) s.innCancel();

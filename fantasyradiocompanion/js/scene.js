@@ -125,7 +125,7 @@ export class PixelScene {
 
     this.onProgress = null;   // callback: the saved progress changed
 
-    this._initCoins(); this._initStory(); this._initTraits(); this._initEnemies(); this._initHealth(); this._initItems(); this._initInn();
+    this._initCoins(); this._initStory(); this._initTraits(); this._initEnemies(); this._initHealth(); this._initItems(); this._initInn(); this._initTips();
     this.starting = false; this.startRects = []; this.signRect = null; this.startHover = -1;
     // The furthest the player has got across all adventures (finished days; the page keeps it) and whether this defeat beat it.
     this.bestDays = 0; this.onBest = null; this.newRecord = false; this.deathCounted = false;
@@ -146,7 +146,9 @@ export class PixelScene {
   // ---- Stepping ---------------------------------------------------------------------------------------
 
   advance(dt, level) {
+    if (this.tip === 'HpTarget' && this.targetItem === null) this._beginCoinTip();   // the tutorial heal was made or cancelled: on to the second tip
     if (this.targetItem !== null) { this.targetT += dt; return; }   // a healing item is waiting for its target: everything stands still
+    if (this.isTipDialogue) { this._advanceTipText(dt); return; }   // the Old Man is talking over the dark overlay: the game is paused
     if (this.isGameOver) {
       // Everyone is down in the cart: no more time passes and the monsters wander off, but the music plays on.
       this.time += dt;
@@ -1192,7 +1194,7 @@ export class PixelScene {
     this.arrived = false; this.tavernVisible = false; this.joinT = 0; this.move = 1; this.groupLeft = NaN;
     this.daysCompleted = 0; this.dayPhase = 0; this.yearDay = 0;
     this.notes.length = 0;
-    this._resetStory(); this._resetCoins(); this._resetTraits(); this._resetItems();
+    this._resetStory(); this._resetTips(); this._resetCoins(); this._resetTraits(); this._resetItems();   // (the tips already seen are remembered: they are for new players)
     this.kills = {};
     this.newRecord = false; this.deathCounted = false;
     this._beginStart();   // and the adventure begins again at the campfire, with a new pair to pick from
@@ -1347,6 +1349,7 @@ import { installEnemies } from './enemies.js';
 import { installItems } from './items.js';
 import { installHealth, setKindNames } from './health.js';
 import { installInn } from './inn.js';
+import { installTutorial } from './tutorial.js';
 setKindNames(k => PARTY_ENUM[k], n => KIND_FROM_ENUM[n]);
 installHealth(PixelScene);
 installInn(PixelScene);
@@ -1355,3 +1358,4 @@ installStory(PixelScene);
 installTraits(PixelScene);
 installEnemies(PixelScene);
 installItems(PixelScene);
+installTutorial(PixelScene);

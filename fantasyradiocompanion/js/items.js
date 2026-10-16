@@ -30,7 +30,7 @@ export function installItems(P) {
   m._initItems = function () {
     this.items = {};
     this.hot = ['SynergyElixir', 'PotionRed', 'PotionBlue', 'PotionGreen'];
-    this.hotSel = 0;
+    this.hotSel = 3;                  // the Healing Potion I is the one selected to begin with
     this.merchantActive = false;      // on the road, drifting in with it
     this.merchantWorldX = 0;
     this.merchantMet = false;         // the party has reached him this visit
@@ -309,7 +309,7 @@ export function installItems(P) {
   m._resetItems = function () {
     this._giveStarterItems();
     this.hot = ['SynergyElixir', 'PotionRed', 'PotionBlue', 'PotionGreen'];
-    this.hotSel = 0;
+    this.hotSel = 3;
     this.merchantActive = false; this.merchantMet = false; this.merchantDay = -1;
     this.itemTexts.length = 0;
     this.synergyFlash = 0; this.buyFlash = 0;

@@ -102,6 +102,7 @@ export function installHealth(P) {
     const r = this._rectOf(kind);
     if (this.hp[kind] === 0) this._addItemText(t('Fainted!'), r.x + r.w / 2.0, r.y - 4, C(255, 170, 160));
     else this._addItemText('-' + (before - this.hp[kind]), r.x + r.w / 2.0, r.y - 4, C(255, 150, 150));
+    this._checkHpTip(kind);   // the first time anyone is low, the Old Man steps in
     this.raiseProgress();
   };
 
