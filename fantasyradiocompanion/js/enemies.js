@@ -541,7 +541,9 @@ export function installEnemies(P) {
     else {
       const walking = !e.engaged;
       const flier = baseOf(e.kind) === 'gargogryph';
-      frame = walking ? ((Math.trunc(e.walkT * (flier ? 7 : 5))) % 2 === 0 ? set.walkA : set.walkB) : ((Math.trunc(this.time * (flier ? 4 : 2))) % 2 === 0 ? set.walkA : set.walkB);
+      // The walk cycle: four frames, a step (or a wing beat) every beat of it; standing still, the first and third (the arm sways, the wings flap).
+      const winged = flier || baseOf(e.kind) === 'toucan';
+      frame = walking ? set.walk[Math.trunc(e.walkT * (winged ? 12 : 8)) & 3] : set.walk[(Math.trunc(this.time * (flier ? 4 : 2)) % 2) * 2];
       if (e.attackAnim >= 0) {
         const u = e.attackAnim;
         if (flier) {   // wings high with the beak open, then thrust forward as the feathers fly; no lunge
