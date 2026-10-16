@@ -1,8 +1,8 @@
 // Caches the app's own files so it opens instantly and works offline. Streams and anything from other sites are never touched.
-const CACHE = 'fmc-v96';
+const CACHE = 'fmc-v97';
 const SHELL = [
   './', 'index.html', 'manifest.webmanifest', 'css/style.css',
-  'js/main.js', 'js/scene.js', 'js/util.js', 'js/sprites.js', 'js/sfx.js', 'js/coins.js', 'js/story.js', 'js/traits.js', 'js/enemies.js', 'js/items.js', 'js/tutorial.js', 'js/health.js', 'js/inn.js',
+  'js/main.js', 'js/scene.js', 'js/util.js', 'js/sprites.js', 'js/sfx.js', 'js/coins.js', 'js/story.js', 'js/traits.js', 'js/enemies.js', 'js/items.js', 'js/tutorial.js', 'js/quality.js', 'js/health.js', 'js/inn.js',
   'js/i18n.js', 'js/icons.js', 'js/themes.js', 'js/support.js', 'js/visualizer.js', 'js/summon.js', 'js/player.js', 'js/ui.js',
   'assets/icon-180.png', 'assets/icon-192.png', 'assets/icon-512.png', 'assets/sprites/manifest.json'
 ];

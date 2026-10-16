@@ -9,6 +9,7 @@ import { css } from './util.js';
 import { Sound } from './sfx.js';
 import { ITEM_DEFS, HOT_SLOT_COUNT } from './items.js';
 import { t, isCjk } from './i18n.js';
+import { QUALITY, QUALITY_MODES, AutoQuality, guessLevel, isLevel } from './quality.js';
 
 export const ZOOMED_SCALE = 5;
 export const PARTY_ZOOM_OUT = 0.8;   // the party is drawn at about 80% of the size it would otherwise be, in every view (20% zoomed out)
@@ -65,7 +66,11 @@ export class Visualizer {
     this._hotDown = false; this._discOpen = false; this._discByPress = false; this._hotDownAt = 0;   // the hot item button and its disc
     this._discHover = -1; this._overHot = false; this._shopHover = null; this._shopInfoId = null;
     this._settingsOpen = false;   // the cog's menu
-    document.addEventListener('visibilitychange', () => { this.last = performance.now(); });
+    // Quality (Auto, Low, Medium, High): see quality.js. Auto starts from a guess about the device and then watches the frames.
+    this._qMode = 'auto'; this._q = QUALITY.high; this._lastDraw = 0;
+    this._auto = new AutoQuality(guessLevel(IS_MOBILE), () => { this._applyQuality(); this._saveQuality(); });
+    this._applyQuality();
+    document.addEventListener('visibilitychange', () => { this.last = performance.now(); this._auto.pause(); });
 
     canvas.addEventListener('pointermove', e => this._onMove(e));
     canvas.addEventListener('pointerleave', () => { this.hover = { button: false, restart: false, tuner: false, comp: false, card: -1, tile: -1, levelUp: false }; canvas.style.cursor = 'default'; });
@@ -88,7 +93,7 @@ export class Visualizer {
   stop() { this.running = false; }
 
   resize() {
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = Math.min(window.devicePixelRatio || 1, this._q.dprMax);   // (Low and Medium draw fewer canvas pixels on a sharp screen)
     const w = Math.max(1, Math.round(this.canvas.clientWidth)), h = Math.max(1, Math.round(this.canvas.clientHeight));
     if (w === this.width && h === this.height && dpr === this.dpr) return;
     this.width = w; this.height = h; this.dpr = dpr;
@@ -111,6 +116,10 @@ export class Visualizer {
   _frame(now) {
     if (!this.running) return;
     requestAnimationFrame(this._frame);
+    const cap = this._q.fps;
+    if (cap && now - this._lastDraw < 1000 / cap - 2) return;   // Low and Medium draw less often (the time carries over: dt runs from the last frame drawn)
+    const frameStart = performance.now(), interval = now - this._lastDraw;
+    this._lastDraw = now;
     let dt = (now - this.last) / 1000;
     this.last = now;
     if (IS_MOBILE && document.visibilityState !== 'visible') {
@@ -131,7 +140,33 @@ export class Visualizer {
       Sound.play('DiscClick');
     }
     this._draw(now / 1000);
+    if (this._qMode === 'auto') {
+      if (this.popupOpen) this._auto.pause(); else this._auto.note(now, interval, performance.now() - frameStart, cap ? 1000 / cap : 16.7);
+    }
   }
+
+  // ---- Quality -------------------------------------------------------------------------------------------
+
+  /** Picks Auto, Low, Medium or High (and, when restoring a saved choice, the level Auto had settled on). */
+  setQuality(mode, autoLevel) {
+    this._qMode = QUALITY_MODES.indexOf(mode) >= 0 ? mode : 'auto';
+    if (isLevel(autoLevel)) this._auto.level = autoLevel;
+    this._auto.pause(); this._auto.good = 0; this._auto.cool = 1;
+    this._applyQuality();
+    this._saveQuality();
+  }
+
+  /** The level in force: the chosen one, or what Auto has settled on. */
+  get qualityLevel() { return this._qMode === 'auto' ? this._auto.level : this._qMode; }
+
+  _applyQuality() {
+    this._q = QUALITY[this.qualityLevel];
+    this.scene.fxDensity = this._q.fx;
+    this.scene.glowHalos = this._q.halos;
+    this.width = 0;   // so the next frame sizes the canvas again for the new density
+  }
+
+  _saveQuality() { if (this.host.qualityChanged) this.host.qualityChanged(this._qMode, this._auto.level); }
 
   // ---- Drawing -------------------------------------------------------------------------------------------
 
@@ -366,8 +401,10 @@ export class Visualizer {
   get _buttonRect() { return { x: this.vw - 68, y: 8, w: 26, h: 26 }; }
   get _compRect() { return { x: this.vw - 102, y: 8, w: 26, h: 26 }; }
   get _tunerRect() { return { x: 8, y: this.vh - 8 - 52, w: 52, h: 52 }; }          // bottom-left
-  get _settingsMenuRect() { const c = this._settingsRect; return { x: c.x + c.w - 118, y: c.y + c.h + 6, w: 118, h: 38 }; }
-  get _restartItemRect() { const m = this._settingsMenuRect; return { x: m.x + 4, y: m.y + 4, w: m.w - 8, h: 30 }; }
+  // The menu: a Quality row of four segments (Auto, Low, Medium, High) over the Restart item.
+  get _settingsMenuRect() { const c = this._settingsRect; return { x: c.x + c.w - 180, y: c.y + c.h + 6, w: 180, h: 86 }; }
+  _qualityItemRect(i) { const m = this._settingsMenuRect, w = (m.w - 8) / 4; return { x: m.x + 4 + i * w, y: m.y + 4 + 16, w: w, h: 26 }; }
+  get _restartItemRect() { const m = this._settingsMenuRect; return { x: m.x + 4, y: m.y + 4 + 16 + 26 + 6, w: m.w - 8, h: 30 }; }
 
   _drawExpandButton(ctx) {
     const r = this._buttonRect, hot = this.hover.button;
@@ -409,6 +446,14 @@ export class Visualizer {
     if (!this._settingsOpen) return;
     const m = this._settingsMenuRect, item = this._restartItemRect;
     this._pill(ctx, m.x, m.y, m.w, m.h, 7, 'rgba(22,18,52,0.92)', 'rgba(255,214,120,0.9)', 1.4);
+    const cap = s => t(s.charAt(0).toUpperCase() + s.slice(1));
+    const auto = this._qMode === 'auto';
+    this._text(ctx, t('Quality') + (auto ? ' (' + cap(this._auto.level) + ')' : ''), m.x + 10, m.y + 4 + 8 + 0.5, { px: 8.5 * PT, color: 'rgb(255,214,120)' });
+    QUALITY_MODES.forEach((mode, i) => {
+      const r = this._qualityItemRect(i), on = mode === this._qMode, hot = this.hover.quality === i;
+      this._pill(ctx, r.x + 1, r.y, r.w - 2, r.h, 5, on ? 'rgb(255,204,82)' : hot ? 'rgba(90,70,150,0.6)' : 'rgba(60,52,110,0.55)', on ? 'rgb(255,244,190)' : 'rgba(170,186,240,0.5)', 1.2);
+      this._text(ctx, cap(mode), r.x + r.w / 2, r.y + r.h / 2 + 0.5, { px: 8.5 * PT, color: on ? 'rgb(70,36,8)' : 'white', align: 'center', weight: on ? 700 : 600 });
+    });
     if (this.hover.restart) this._pill(ctx, item.x, item.y, item.w, item.h, 5, 'rgba(90,70,150,0.47)');
     this._text(ctx, t('Restart'), item.x + item.w / 2, item.y + item.h / 2 + 0.5, { px: 9.5 * PT, color: 'white', align: 'center' });
   }
@@ -1384,6 +1429,7 @@ export class Visualizer {
       button: this._inRect(h, this._buttonRect),
       settings: this._inRect(h, this._settingsRect),
       restart: this._settingsOpen && this._inRect(h, this._restartItemRect),
+      quality: this._settingsOpen ? QUALITY_MODES.findIndex((_, i) => this._inRect(h, this._qualityItemRect(i))) : -1,
       tuner: this._inTuner(h),
       comp: this.zoomed && this._inRect(h, this._compRect),
       card: -1, tile: -1, levelUp: false
@@ -1411,7 +1457,7 @@ export class Visualizer {
     }
     this.hover = hover;
     const overCoin = !s.isLevelSelect && !s.isDialogue && !s.isChoosing && s.isCoinAt(p.x, p.y);
-    this.canvas.style.cursor = hover.button || hover.settings || hover.restart || hover.tuner || hover.comp || this._overHot || this._discHover >= 0 || hover.card >= 0 || hover.tile >= 0 || hover.levelUp || overCoin ? 'pointer' : 'default';
+    this.canvas.style.cursor = hover.button || hover.settings || hover.restart || hover.quality >= 0 || hover.tuner || hover.comp || this._overHot || this._discHover >= 0 || hover.card >= 0 || hover.tile >= 0 || hover.levelUp || overCoin ? 'pointer' : 'default';
   }
 
   _onDown(e) {
@@ -1466,7 +1512,11 @@ export class Visualizer {
       return;
     }
     if (this._settingsOpen) {
+      for (let i = 0; i < QUALITY_MODES.length; i++) {
+        if (this._inRect(h, this._qualityItemRect(i))) { this.setQuality(QUALITY_MODES[i]); Sound.play('DiscClick'); return; }   // (the menu stays open to show the change)
+      }
       if (this._inRect(h, this._restartItemRect)) { this._settingsOpen = false; this.hover.restart = false; this.host.restartRequested && this.host.restartRequested(); return; }
+      if (this._inRect(h, this._settingsMenuRect)) return;   // the menu's own heading and gaps do nothing
       if (!this._inRect(h, this._settingsRect)) { this._settingsOpen = false; return; }   // a click elsewhere just closes it
     }
     if (this._inRect(h, this._settingsRect)) { this._settingsOpen = !this._settingsOpen; Sound.play('DiscClick'); return; }

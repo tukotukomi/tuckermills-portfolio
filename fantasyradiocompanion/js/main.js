@@ -198,8 +198,10 @@ async function main() {
     openCompendium: () => openCompendium(),
     toggleFullscreen: () => toggleFullscreen(),
     restartRequested: () => restartAdventure(),
+    qualityChanged: (mode, autoLevel) => { store.set('quality', mode); store.set('qualityAuto', autoLevel); },   // the settings menu's Quality (and the level Auto settled on)
     startOver: () => { scene.resetProgress(); store.set('save', scene.saveState()); },   // from the game-over card: no confirmation
   });
+  vis.setQuality(store.get('quality', 'auto'), store.get('qualityAuto', ''));
   vis.start();
 
   // The scene reads what is playing every frame.

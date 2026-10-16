@@ -122,6 +122,7 @@ export class PixelScene {
     this.flocks = []; this.flockTimer = 8;
     this.dragonOn = false; this.dragonX = 0; this.dragonY = 0; this.dragonTimer = 225; this.dragonFire = 0; this.dragonFireCool = 0; this.dragonDir = 1;
     this.glow = [];
+    this.fxDensity = 1; this.glowHalos = true;   // the quality level's weather density and light halos (see quality.js)
 
     this.onProgress = null;   // callback: the saved progress changed
 
@@ -839,7 +840,7 @@ export class PixelScene {
 
   _drawGlowSpots(g) {
     for (const s of this.glow) {
-      if (s.halo > 0) g.ellipse(s.x - s.halo, s.y - s.halo, s.halo * 2 + 1, s.halo * 2 + 1, withAlpha(Math.min(255, Math.trunc(s.color.a / 4)), s.color));
+      if (s.halo > 0 && this.glowHalos) g.ellipse(s.x - s.halo, s.y - s.halo, s.halo * 2 + 1, s.halo * 2 + 1, withAlpha(Math.min(255, Math.trunc(s.color.a / 4)), s.color));
       g.rect(s.x, s.y, 1, 1, s.color);
       if (s.plus) { g.rect(s.x - 1, s.y, 1, 1, s.color); g.rect(s.x + 1, s.y, 1, 1, s.color); g.rect(s.x, s.y - 1, 1, 1, s.color); g.rect(s.x, s.y + 1, 1, 1, s.color); }
     }
@@ -850,9 +851,10 @@ export class PixelScene {
 
   _drawWeather(g, lw) {
     const area = lw * Math.max(1, this.groundY);
-    this._drawFalling(g, lw, 11, this.sw[0], Math.trunc(area / 300), PETAL_COLORS, 5, 4, 0.5, false);
-    this._drawFalling(g, lw, 23, this.sw[2], Math.trunc(area / 240), LEAF_COLORS, 7, 6, 0.9, true);
-    this._drawFalling(g, lw, 37, this.sw[3], Math.trunc(area / 110), SNOW_COLORS, 8, 2.5, 0.3, false);
+    const fx = this.fxDensity;
+    this._drawFalling(g, lw, 11, this.sw[0], Math.trunc(area / 300 * fx), PETAL_COLORS, 5, 4, 0.5, false);
+    this._drawFalling(g, lw, 23, this.sw[2], Math.trunc(area / 240 * fx), LEAF_COLORS, 7, 6, 0.9, true);
+    this._drawFalling(g, lw, 37, this.sw[3], Math.trunc(area / 110 * fx), SNOW_COLORS, 8, 2.5, 0.3, false);
     this._drawFireflies(g, lw, this.sw[1] * this.starlight());
   }
 
@@ -872,7 +874,7 @@ export class PixelScene {
 
   _drawFireflies(g, lw, amount) {
     if (amount < 0.02) return;
-    const max = Math.trunc(lw * Math.max(1, this.groundY) / 300);
+    const max = Math.trunc(lw * Math.max(1, this.groundY) / 300 * this.fxDensity);
     for (let i = 0; i < max; i++) {
       if (i / max >= amount) break;
       const h = hash(i, 51);
