@@ -51,7 +51,7 @@ const ES = {
   'Not yet encountered.': 'Aún no encontrado.', 'HP {n}': 'Vida {n}', 'DEFEATED': 'DERROTADOS', 'DISCOVERED {a}/{b}   DEFEATED {n}': 'DESCUBIERTOS {a}/{b}   DERROTADOS {n}',
   "Progress copied. Paste it into Import on another device, or into the Windows app's saved settings.": 'Progreso copiado. Pégalo en Importar en otro dispositivo, o en la configuración guardada de la app de Windows.',
   'Copy your progress:': 'Copia tu progreso:', 'Paste a progress string:': 'Pega una cadena de progreso:',
-  'Progress paused while game was minimized.': 'El progreso se pausó mientras el juego estaba minimizado.',
+  'Progress was paused while tab was minimized or hidden. Please play Fantasy Radio Companion in the foreground.': 'El progreso se pausó mientras la pestaña estaba minimizada u oculta. Juega a Fantasy Radio Companion en primer plano.',
   'RESTART': 'REINICIAR',
   'This resets your adventure: your party goes back to just the Paca, levels, gold and the compendium are cleared, and the day and season start over.\n\nType {word} to confirm.': 'Esto reinicia tu aventura: tu grupo vuelve a ser solo la Alpaca, se borran niveles, oro y compendio, y el día y la estación empiezan de nuevo.\n\nEscribe {word} para confirmar.',
   // The party
@@ -163,7 +163,7 @@ const ZH = {
   'Not yet encountered.': '尚未遇到。', 'HP {n}': '生命 {n}', 'DEFEATED': '已击败', 'DISCOVERED {a}/{b}   DEFEATED {n}': '已发现 {a}/{b}   已击败 {n}',
   "Progress copied. Paste it into Import on another device, or into the Windows app's saved settings.": '进度已复制。可在其他设备的“导入”中粘贴，或粘贴到 Windows 应用的已保存设置中。',
   'Copy your progress:': '复制你的进度：', 'Paste a progress string:': '粘贴进度字符串：',
-  'Progress paused while game was minimized.': '游戏最小化期间进度已暂停。',
+  'Progress was paused while tab was minimized or hidden. Please play Fantasy Radio Companion in the foreground.': '标签页最小化或隐藏期间进度已暂停。请在前台运行 Fantasy Radio Companion。',
   'RESTART': '重新开始',
   'This resets your adventure: your party goes back to just the Paca, levels, gold and the compendium are cleared, and the day and season start over.\n\nType {word} to confirm.': '这将重置你的冒险：队伍只剩下羊驼，等级、金币和图鉴都会清空，日期和季节重新开始。\n\n输入“{word}”以确认。',
   // The party

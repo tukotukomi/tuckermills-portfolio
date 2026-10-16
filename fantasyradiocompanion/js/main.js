@@ -590,20 +590,20 @@ async function main() {
     window.addEventListener(ev, () => { if (Sound.state !== 'running') Sound.unlock(); }, { capture: true, passive: true });
   document.addEventListener('visibilitychange', () => { if (!document.hidden) Sound.unlock(); });
 
-  // On a phone or tablet the game waits while it is minimized (see visualizer.js). Say so when the player comes back, if the
-  // adventure was progressing and they were away long enough to have noticed nothing happening.
+  // The game waits while the tab is minimized or hidden (the browser stops drawing frames; a phone is also stopped in visualizer.js).
+  // Say so when the player comes back, if the adventure was progressing and they were away long enough to have noticed nothing happening.
   let tipTimer = 0;
   function showTip(text) {
     const tip = $('tip');
     tip.textContent = text;
     tip.classList.add('show');
     clearTimeout(tipTimer);
-    tipTimer = setTimeout(() => tip.classList.remove('show'), 4500);
+    tipTimer = setTimeout(() => tip.classList.remove('show'), 7000);
   }
   let hiddenAt = 0, wasProgressing = false;
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) { hiddenAt = Date.now(); wasProgressing = !!scene.progressing; return; }
-    if (IS_MOBILE && hiddenAt && wasProgressing && Date.now() - hiddenAt > 1500) showTip(t('Progress paused while game was minimized.'));
+    if (hiddenAt && wasProgressing && Date.now() - hiddenAt > 1500) showTip(t('Progress was paused while tab was minimized or hidden. Please play Fantasy Radio Companion in the foreground.'));
     hiddenAt = 0;
   });
   // Where the music volume reaches: normally the slider just works. On iPhone and iPad Safari a live stream can play outside Web Audio,
