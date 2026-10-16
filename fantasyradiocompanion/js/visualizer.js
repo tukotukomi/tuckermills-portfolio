@@ -744,8 +744,8 @@ export class Visualizer {
       this._text(ctx, num, x0 + coin.width * cs + 4, cy + 0.5, { px: npx, color: ink, weight: 700 });
       if (!compact) this._text(ctx, sub, r.x + r.w / 2, r.y + r.h - 13, { px: 8.5 * PT, color: ink, align: 'center', weight: 400 });
     };
-    const restSub = s.canRest ? t('Heal the whole party') : (s.anyoneHurt ? t('Not enough gold') : t('Everyone is fine'));
-    const reorgSub = s.canReorganize ? t('Swap two heroes') : t('Not enough gold');
+    const restSub = s.canRest ? t('Fully heals the party.') : (s.anyoneHurt ? t('Not enough gold') : t('Everyone is fine'));
+    const reorgSub = s.canReorganize ? t('Swap the positions of 2 heroes.') : t('Not enough gold');
     button(L.rest, 0, t('Rest'), restSub, 10, s.canRest);
     button(L.reorg, 1, t('Reorganize'), reorgSub, 30, s.canReorganize);
     const lv = L.leave, hotLeave = this._innHover === 2;
