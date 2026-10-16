@@ -9,7 +9,7 @@ import { css } from './util.js';
 import { Sound } from './sfx.js';
 import { ITEM_DEFS, HOT_SLOT_COUNT } from './items.js';
 import { t, isCjk } from './i18n.js';
-import { QUALITY, QUALITY_MODES, AutoQuality, guessLevel, isLevel } from './quality.js';
+import { QUALITY, QUALITY_MODES, QUALITY_LEVELS, AutoQuality, guessLevel, isLevel } from './quality.js';
 
 export const ZOOMED_SCALE = 5;
 export const PARTY_ZOOM_OUT = 0.8;   // the party is drawn at about 80% of the size it would otherwise be, in every view (20% zoomed out)
@@ -67,7 +67,7 @@ export class Visualizer {
     this._discHover = -1; this._overHot = false; this._shopHover = null; this._shopInfoId = null;
     this._settingsOpen = false;   // the cog's menu
     // Quality (Auto, Low, Medium, High): see quality.js. Auto starts from a guess about the device and then watches the frames.
-    this._qMode = 'auto'; this._q = QUALITY.high; this._lastDraw = 0;
+    this._qMode = 'auto'; this._q = QUALITY.high; this._lastDraw = 0; this._sliderDrag = false;
     this._auto = new AutoQuality(guessLevel(IS_MOBILE), () => { this._applyQuality(); this._saveQuality(); });
     this._applyQuality();
     document.addEventListener('visibilitychange', () => { this.last = performance.now(); this._auto.pause(); });
@@ -76,7 +76,7 @@ export class Visualizer {
     canvas.addEventListener('pointerleave', () => { this.hover = { button: false, restart: false, tuner: false, comp: false, card: -1, tile: -1, levelUp: false }; canvas.style.cursor = 'default'; });
     canvas.addEventListener('pointerdown', e => this._onDown(e));
     canvas.addEventListener('pointerup', e => this._onUp(e));
-    canvas.addEventListener('pointercancel', () => { this._hotDown = false; });
+    canvas.addEventListener('pointercancel', () => { this._hotDown = false; this._sliderDrag = false; });
     window.addEventListener('resize', () => this.resize());
   }
 
@@ -156,6 +156,12 @@ export class Visualizer {
     this._saveQuality();
   }
 
+  /** The Auto checkbox: on starts a fresh detection from the device's own hints; off keeps the level Auto had reached, now fixed. */
+  setAuto(on) {
+    if (on) { this._auto.level = guessLevel(IS_MOBILE); this._auto.failed = {}; this.setQuality('auto'); }
+    else this.setQuality(this.qualityLevel);
+  }
+
   /** The level in force: the chosen one, or what Auto has settled on. */
   get qualityLevel() { return this._qMode === 'auto' ? this._auto.level : this._qMode; }
 
@@ -163,7 +169,7 @@ export class Visualizer {
     this._q = QUALITY[this.qualityLevel];
     this.scene.fxDensity = this._q.fx;
     this.scene.glowHalos = this._q.halos;
-    this.width = 0;   // so the next frame sizes the canvas again for the new density
+    this.resize();   // size the canvas again now, for the new density
   }
 
   _saveQuality() { if (this.host.qualityChanged) this.host.qualityChanged(this._qMode, this._auto.level); }
@@ -401,10 +407,41 @@ export class Visualizer {
   get _buttonRect() { return { x: this.vw - 68, y: 8, w: 26, h: 26 }; }
   get _compRect() { return { x: this.vw - 102, y: 8, w: 26, h: 26 }; }
   get _tunerRect() { return { x: 8, y: this.vh - 8 - 52, w: 52, h: 52 }; }          // bottom-left
-  // The menu: a Quality row of four segments (Auto, Low, Medium, High) over the Restart item.
-  get _settingsMenuRect() { const c = this._settingsRect; return { x: c.x + c.w - 180, y: c.y + c.h + 6, w: 180, h: 86 }; }
-  _qualityItemRect(i) { const m = this._settingsMenuRect, w = (m.w - 8) / 4; return { x: m.x + 4 + i * w, y: m.y + 4 + 16, w: w, h: 26 }; }
-  get _restartItemRect() { const m = this._settingsMenuRect; return { x: m.x + 4, y: m.y + 4 + 16 + 26 + 6, w: m.w - 8, h: 30 }; }
+  // The menu: a heading row (Quality, and the level now chosen, the only level label shown), a slider with the Auto checkbox beside it,
+  // and the Restart item. Nothing is a fixed width: the menu is as wide as its words are in the current language (so a longer word, as in
+  // German, just widens it), within the page.
+  _qLabel(level) { return t(level.charAt(0).toUpperCase() + level.slice(1)); }
+
+  _settingsLayout() {
+    const ctx = this.ctx, px = 8.5 * PT, c = this._settingsRect, pad = 10, box = 14, gap = 12, minSlider = 90;
+    const widest = Math.max(...QUALITY_LEVELS.map(l => this._measure(ctx, this._qLabel(l), px)));
+    const headW = this._measure(ctx, t('Quality'), px);
+    const autoW = box + 6 + this._measure(ctx, t('Auto'), px);
+    const restartW = this._measure(ctx, t('Restart'), 9.5 * PT) + 24;
+    let w = Math.ceil(Math.max(headW + gap + widest, minSlider + gap + autoW, restartW) + pad * 2);
+    w = Math.max(150, Math.min(w, Math.trunc(this.vw - 16)));
+    const x = c.x + c.w - w, y = c.y + c.h + 6, rowY = y + 4 + 20;
+    const autoRect = { x: x + w - pad - autoW, y: rowY, w: autoW, h: 28 };
+    const sliderLeft = x + pad + 7, sliderRight = autoRect.x - gap - 7;
+    return {
+      menu: { x: x, y: y, w: w, h: 4 + 20 + 28 + 6 + 30 + 4 },
+      head: { x: x + pad, y: y + 4, w: w - pad * 2, h: 20 },
+      auto: autoRect, box: box,
+      slider: { x: sliderLeft, y: rowY + 14, w: Math.max(20, sliderRight - sliderLeft) },   // the track's centre line; the thumb has a radius of 7
+      sliderHit: { x: x + pad, y: rowY, w: Math.max(20, autoRect.x - gap - (x + pad)), h: 28 },
+      restart: { x: x + 4, y: rowY + 28 + 6, w: w - 8, h: 30 },
+    };
+  }
+  get _settingsMenuRect() { return this._settingsLayout().menu; }
+  get _restartItemRect() { return this._settingsLayout().restart; }
+
+  /** A press or drag on the slider: the thumb goes to the nearest of its three steps (which switches Auto off). */
+  _dragSlider(h) {
+    const L = this._settingsLayout();
+    const idx = Math.max(0, Math.min(QUALITY_LEVELS.length - 1, Math.round((h.x - L.slider.x) / L.slider.w * (QUALITY_LEVELS.length - 1))));
+    const level = QUALITY_LEVELS[idx];
+    if (this._qMode !== level) { this.setQuality(level); Sound.play('DiscClick'); }
+  }
 
   _drawExpandButton(ctx) {
     const r = this._buttonRect, hot = this.hover.button;
@@ -446,14 +483,31 @@ export class Visualizer {
     if (!this._settingsOpen) return;
     const m = this._settingsMenuRect, item = this._restartItemRect;
     this._pill(ctx, m.x, m.y, m.w, m.h, 7, 'rgba(22,18,52,0.92)', 'rgba(255,214,120,0.9)', 1.4);
-    const cap = s => t(s.charAt(0).toUpperCase() + s.slice(1));
-    const auto = this._qMode === 'auto';
-    this._text(ctx, t('Quality') + (auto ? ' (' + cap(this._auto.level) + ')' : ''), m.x + 10, m.y + 4 + 8 + 0.5, { px: 8.5 * PT, color: 'rgb(255,214,120)' });
-    QUALITY_MODES.forEach((mode, i) => {
-      const r = this._qualityItemRect(i), on = mode === this._qMode, hot = this.hover.quality === i;
-      this._pill(ctx, r.x + 1, r.y, r.w - 2, r.h, 5, on ? 'rgb(255,204,82)' : hot ? 'rgba(90,70,150,0.6)' : 'rgba(60,52,110,0.55)', on ? 'rgb(255,244,190)' : 'rgba(170,186,240,0.5)', 1.2);
-      this._text(ctx, cap(mode), r.x + r.w / 2, r.y + r.h / 2 + 0.5, { px: 8.5 * PT, color: on ? 'rgb(70,36,8)' : 'white', align: 'center', weight: on ? 700 : 600 });
-    });
+    const L = this._settingsLayout(), auto = this._qMode === 'auto', level = this.qualityLevel, px = 8.5 * PT;
+    this._text(ctx, t('Quality'), L.head.x, L.head.y + L.head.h / 2 + 0.5, { px: px, color: 'rgb(255,214,120)' });
+    this._text(ctx, this._qLabel(level), L.head.x + L.head.w, L.head.y + L.head.h / 2 + 0.5, { px: px, color: 'white', align: 'right' });   // the one level label: the current one
+    // The slider: a track, a step mark for each level, the part up to the thumb filled, and the thumb itself.
+    const sx = L.slider.x, sy = L.slider.y, sw = L.slider.w, idx = QUALITY_LEVELS.indexOf(level), tx = sx + sw * idx / (QUALITY_LEVELS.length - 1);
+    const lit = this.hover.qslider || this._sliderDrag;
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = 'rgba(150,160,220,0.45)'; ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx + sw, sy); ctx.stroke();
+    ctx.strokeStyle = 'rgb(255,204,82)';
+    ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(tx, sy); ctx.stroke();
+    ctx.fillStyle = 'rgba(22,18,52,0.9)';
+    for (let i = 0; i < QUALITY_LEVELS.length; i++) { ctx.beginPath(); ctx.arc(sx + sw * i / (QUALITY_LEVELS.length - 1), sy, 2, 0, Math.PI * 2); ctx.fill(); }
+    ctx.beginPath(); ctx.arc(tx, sy, lit ? 8 : 7, 0, Math.PI * 2);
+    ctx.fillStyle = lit ? 'rgb(255,226,130)' : 'rgb(255,204,82)'; ctx.fill();
+    ctx.strokeStyle = 'rgb(255,244,190)'; ctx.lineWidth = 1.5; ctx.stroke();
+    // The Auto checkbox, label to its right.
+    const bx = L.auto.x, by = L.auto.y + (L.auto.h - L.box) / 2;
+    this._pill(ctx, bx, by, L.box, L.box, 3, auto ? 'rgb(255,204,82)' : (this.hover.qauto ? 'rgba(90,70,150,0.6)' : 'rgba(60,52,110,0.55)'), auto ? 'rgb(255,244,190)' : 'rgba(170,186,240,0.7)', 1.2);
+    if (auto) {
+      ctx.strokeStyle = 'rgb(70,36,8)'; ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      ctx.beginPath(); ctx.moveTo(bx + 3.5, by + 7.5); ctx.lineTo(bx + 6, by + 10); ctx.lineTo(bx + 10.5, by + 4.5); ctx.stroke();
+    }
+    this._text(ctx, t('Auto'), bx + L.box + 6, L.auto.y + L.auto.h / 2 + 0.5, { px: px, color: 'white' });
+    ctx.lineCap = 'butt'; ctx.lineJoin = 'miter';
     if (this.hover.restart) this._pill(ctx, item.x, item.y, item.w, item.h, 5, 'rgba(90,70,150,0.47)');
     this._text(ctx, t('Restart'), item.x + item.w / 2, item.y + item.h / 2 + 0.5, { px: 9.5 * PT, color: 'white', align: 'center' });
   }
@@ -667,6 +721,7 @@ export class Visualizer {
 
   _onUp(e) {
     if (e.button !== undefined && e.button !== 0) return;
+    if (this._sliderDrag) { this._sliderDrag = false; return; }
     if (this.popupOpen) return;
     const p = this._point(e);
     const h = { x: p.x / this.hud, y: p.y / this.hud };
@@ -1389,6 +1444,7 @@ export class Visualizer {
     const p = this._point(e);
     const h = { x: p.x / this.hud, y: p.y / this.hud };
     const s = this.scene;
+    if (this._sliderDrag) { this._dragSlider(h); this.canvas.style.cursor = 'pointer'; return; }
     if (s.isTipDialogue) {   // the Old Man's tip: nothing but the potion button answers the pointer
       this._overHot = s.isTipPrompt && this._inHot(h);
       this.canvas.style.cursor = this._overHot || s.isTipCoins ? 'pointer' : 'default';
@@ -1429,7 +1485,8 @@ export class Visualizer {
       button: this._inRect(h, this._buttonRect),
       settings: this._inRect(h, this._settingsRect),
       restart: this._settingsOpen && this._inRect(h, this._restartItemRect),
-      quality: this._settingsOpen ? QUALITY_MODES.findIndex((_, i) => this._inRect(h, this._qualityItemRect(i))) : -1,
+      qslider: this._settingsOpen && this._inRect(h, this._settingsLayout().sliderHit),
+      qauto: this._settingsOpen && this._inRect(h, this._settingsLayout().auto),
       tuner: this._inTuner(h),
       comp: this.zoomed && this._inRect(h, this._compRect),
       card: -1, tile: -1, levelUp: false
@@ -1457,7 +1514,7 @@ export class Visualizer {
     }
     this.hover = hover;
     const overCoin = !s.isLevelSelect && !s.isDialogue && !s.isChoosing && s.isCoinAt(p.x, p.y);
-    this.canvas.style.cursor = hover.button || hover.settings || hover.restart || hover.quality >= 0 || hover.tuner || hover.comp || this._overHot || this._discHover >= 0 || hover.card >= 0 || hover.tile >= 0 || hover.levelUp || overCoin ? 'pointer' : 'default';
+    this.canvas.style.cursor = hover.button || hover.settings || hover.restart || hover.qslider || hover.qauto || hover.tuner || hover.comp || this._overHot || this._discHover >= 0 || hover.card >= 0 || hover.tile >= 0 || hover.levelUp || overCoin ? 'pointer' : 'default';
   }
 
   _onDown(e) {
@@ -1512,9 +1569,14 @@ export class Visualizer {
       return;
     }
     if (this._settingsOpen) {
-      for (let i = 0; i < QUALITY_MODES.length; i++) {
-        if (this._inRect(h, this._qualityItemRect(i))) { this.setQuality(QUALITY_MODES[i]); Sound.play('DiscClick'); return; }   // (the menu stays open to show the change)
+      const SL = this._settingsLayout();   // (the menu stays open to show a change)
+      if (this._inRect(h, SL.sliderHit)) {
+        this._sliderDrag = true;
+        try { this.canvas.setPointerCapture(e.pointerId); } catch (err) { /* a drag still works while the pointer stays over the canvas */ }
+        this._dragSlider(h);
+        return;
       }
+      if (this._inRect(h, SL.auto)) { this.setAuto(this._qMode !== 'auto'); Sound.play('DiscClick'); return; }
       if (this._inRect(h, this._restartItemRect)) { this._settingsOpen = false; this.hover.restart = false; this.host.restartRequested && this.host.restartRequested(); return; }
       if (this._inRect(h, this._settingsMenuRect)) return;   // the menu's own heading and gaps do nothing
       if (!this._inRect(h, this._settingsRect)) { this._settingsOpen = false; return; }   // a click elsewhere just closes it
