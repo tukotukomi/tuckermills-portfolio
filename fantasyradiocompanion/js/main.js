@@ -598,7 +598,7 @@ async function main() {
     tip.textContent = text;
     tip.classList.add('show');
     clearTimeout(tipTimer);
-    tipTimer = setTimeout(() => tip.classList.remove('show'), 7000);
+    tipTimer = setTimeout(() => tip.classList.remove('show'), 4500);
   }
   let hiddenAt = 0, wasProgressing = false;
   document.addEventListener('visibilitychange', () => {
