@@ -30,7 +30,9 @@ export const BASIC_ATTACKERS = ['thief', 'fae', 'lightmage', 'firemage'];
 export const BASIC_DAMAGE = 1;
 export function basicInterval(kind) { return { thief: 2, fae: 3, lightmage: 3, firemage: 5 }[kind] || 5; }
 export function fireballDamage(level) { return 5; }
-export function fireballRangeBlocks(level) { return 25; }   // it burns out into ash after travelling this many blocks
+export const SPELL_RANGE_BLOCKS = 25;   // how far a thrown spell goes: the fireball burns out, the toxin falls, after this many blocks
+export function fireballRangeBlocks(level) { return SPELL_RANGE_BLOCKS; }
+export function toxinRangeBlocks(level) { return SPELL_RANGE_BLOCKS; }
 export function axeDamage(level) { return 3; }          // the Warrior's thrown axe
 export function axeInterval(level) { return 3.0; }
 export function axeRangeBlocks(level) { return 10; }   // blocks of grass it travels
@@ -330,10 +332,13 @@ export function installTraits(P) {
       gl.y = gl.startY + (gl.endY - gl.startY) * u - GLOB_ARC * Math.sin(Math.PI * u);
       if (gl.travel < gl.range) continue;
       this.globs.splice(i, 1);
-      if (this.enemy !== null && this.enemy.deathT < 0 && gl.x >= this.enemy.x - 0.5) {
+      if (!gl.falls && this.enemy !== null && this.enemy.deathT < 0 && gl.x >= this.enemy.x - 0.5) {
         this.enemy.poisonTicks = toxinTicks(this.levelOf('druid'));
         this.enemy.poisonTick = 1.0;
         this.bursts.push({ x: gl.x, y: gl.y, kind: 'toxin', age: 0 });
+        Sound.play('ToxinTick');
+      } else {
+        this.bursts.push({ x: gl.x, y: this.groundY - 1, kind: 'toxin', age: 0 });   // it splashes on the floor and is gone
         Sound.play('ToxinTick');
       }
     }
@@ -378,7 +383,10 @@ export function installTraits(P) {
     if (e === null) return;
     const r = this._rectOf('druid'), er = this._enemyRect(e);
     const sx = r.x + r.w - 2, sy = r.y + 5;
-    this.globs.push({ startX: sx, startY: sy, endY: er.y + er.h * 0.45, range: Math.max(6, e.x - sx), travel: 0, x: sx, y: sy, age: 0 });
+    // Out of range (as far as the Fire Mage's fireball goes) it comes down on the floor short of the enemy and is gone.
+    const toEnemy = Math.max(6, e.x - sx), maxRange = toxinRangeBlocks(this.levelOf('druid')) * BLOCK_PIXELS;
+    const reaches = toEnemy <= maxRange;
+    this.globs.push({ startX: sx, startY: sy, endY: reaches ? er.y + er.h * 0.45 : this.groundY - 2, range: reaches ? toEnemy : maxRange, travel: 0, x: sx, y: sy, age: 0, falls: !reaches });
     this.toxinFlash = 0.35;
     Sound.play('ToxinCast');
   };
