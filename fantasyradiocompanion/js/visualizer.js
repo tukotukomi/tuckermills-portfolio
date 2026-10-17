@@ -1239,7 +1239,8 @@ export class Visualizer {
     if (!this._devCache || this._devCache.key !== key) {
       const bullet = this._measure(ctx, '\u2022', npx, 400) + Math.trunc(8 * k), blocks = [];
       let y = 0;
-      for (const e of JOURNAL) {
+      for (const entry of JOURNAL) {
+        const e = { date: entry.date, ...(getLanguage() !== 'en' && entry[getLanguage()] ? entry[getLanguage()] : entry) };   // the day's text in the current language (English where it has none)
         blocks.push({ kind: 'date', y: y, lines: [this._devDate(e.date)], px: dpx, h: Math.round(dpx * lh) });
         y += blocks[blocks.length - 1].h + Math.trunc(2 * k);
         const tl = this._wrapLines(ctx, e.title, view.w, tpx, 700);

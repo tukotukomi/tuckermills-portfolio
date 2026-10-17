@@ -1,104 +1,290 @@
 // The developer journal shown by Settings > Developer Updates, newest day first. ONE ENTRY PER DAY, written for players in plain, friendly
-// words: when more changes land on a day that already has an entry, edit that entry to describe where things ended up (never list the
-// steps we took on the way, or things that were replaced the same day). After editing, run `node tools/gen-journal.js` to refresh the
-// Windows app's copy (src/JournalData.cs) and bump the cache version in web/sw.js.
-// This file is plain data (the generator reads it), so keep it to one object per day: { date: 'YYYY-MM-DD', title, notes: [...] }.
+// words, one SHORT line per change (a few words to one short sentence: long lines cost translation effort and are tiring to read).
+// When more changes land on a day that already has an entry, edit that entry to describe where things ended up (never list the steps we
+// took on the way, or things that were replaced the same day). Every entry has its Spanish (es) and Simplified Chinese (zh) text beside
+// the English: keep the three in step, with the same number of lines in the same order. After editing, run `node tools/gen-journal.js` to
+// refresh the Windows app's copy (src/JournalData.cs) and bump the cache version in web/sw.js.
+// This file is plain data (the generator reads it): { date: 'YYYY-MM-DD', title, notes: [...], es: { title, notes }, zh: { title, notes } }.
 export const JOURNAL = [
   {
     date: '2026-10-17',
-    title: 'New heroes, scrolls and Tavern Stamps',
+    title: 'New heroes, scrolls and stamps',
     notes: [
-      'Meet the Tavern Stamp! Finish a whole year and the tavern gives you a red stamp. You keep your stamps from adventure to adventure, and the count sits next to your gold while you play.',
-      'Before each adventure you can visit the new Tavern Shop (the red stamp button at the top left). Ten stamps unlock a new hero for good: the Paladin or the Shadow Knight.',
-      'The Paladin is dark-skinned, black-bearded and dressed in white and gold plate, with a shield in the hand that faces the monsters. Every minute he raises a Shield Wall over whoever is first in line, and for a while that hero\'s hits land on the Paladin instead. If the Paladin is the one in front, he takes only half damage. At the front he fights up close; from anywhere else in the line he sends out a beam of light that hurts monsters over a couple of seconds.',
-      'The Shadow Knight is a pale, black-haired fighter in dark armour with a violet scarf and cape. He swings a scythe when he is first or second in line, and drains a little life from the monster to heal your weakest hero as his special skill.',
-      'Scrolls have arrived! Tough monsters like the Gargogryph, Wickedgryph and Toucan sometimes drop one, and your party picks it up on its own. Paca\'s skill is now Scroll Storage +1, so with her you can carry two. There is a new Scroll button under the item button: tap it to use a scroll, or hold it to look at your slots. If you are full you choose what to throw away, and you can carry duplicates (each takes a slot).',
-      'The first scroll is the Rereviver. Use it on a hero and for one year, if they faint, they jump straight back up on the spot with half their health.',
-      'The Blue Potion is now the Revive Potion (10 coins at the Merchant, and you start every adventure with one). It wakes a fainted hero with half their health, at the back of the line. Healing Potions no longer work on a hero who has fainted: only a Revive Potion, a Rereviver or a night at the tavern can bring them back.',
-      'You can now read this journal from the Settings menu. Hello!'
-    ]
+      'Tavern Stamps: earn one each year. The count sits by your gold.',
+      'New Tavern Shop: 10 stamps unlock a hero for good.',
+      'Paladin: Shield Wall takes hits for the front hero. Light attacks from behind.',
+      'Shadow Knight: scythe up front, Life Drain heals your weakest hero.',
+      'Scrolls: monsters can drop them. Paca carries one extra.',
+      'The Rereviver scroll gives a hero a year of instant revives.',
+      'The Blue Potion is now the Revive Potion. You start with one.',
+      'Healing Potions no longer wake fainted heroes.',
+      'New: read this journal in Settings!'
+    ],
+    es: {
+      title: 'Nuevos héroes, pergaminos y sellos',
+      notes: [
+        'Sellos de taberna: ganas uno cada año. El total aparece junto a tu oro.',
+        'Nueva Tienda de la taberna: 10 sellos desbloquean un héroe para siempre.',
+        'Paladín: el Muro de escudos recibe los golpes del héroe de delante. Ataca con luz desde atrás.',
+        'Caballero sombrío: guadaña al frente, Drenar vida cura a tu héroe más débil.',
+        'Pergaminos: los monstruos pueden soltarlos. Alpaca lleva uno extra.',
+        'El pergamino de Rerevivir da a un héroe un año de reanimaciones instantáneas.',
+        'La poción azul ahora es la Poción de reanimación. Empiezas con una.',
+        'Las pociones de curación ya no despiertan a los héroes desmayados.',
+        'Novedad: ¡lee este diario en Ajustes!'
+      ]
+    },
+    zh: {
+      title: '新英雄、卷轴和印章',
+      notes: [
+        '酒馆印章：每年可获得一枚，数量显示在金币旁。',
+        '新增酒馆商店：10 枚印章即可永久解锁一名英雄。',
+        '圣骑士：盾墙替最前面的英雄承受伤害，在后排用圣光攻击。',
+        '暗影骑士：在前排挥舞镰刀，生命汲取治疗最虚弱的英雄。',
+        '卷轴：怪物可能掉落。羊驼多携带一个。',
+        '再复活卷轴：让英雄一年内倒下时立即复活。',
+        '蓝色药水变成了复活药水，开局自带一瓶。',
+        '治疗药水不能再唤醒昏倒的英雄。',
+        '新增：在设置中阅读本日志！'
+      ]
+    }
   },
   {
     date: '2026-10-16',
-    title: 'Everyone learns to walk (properly)',
+    title: 'Everyone learns to walk',
     notes: [
-      'Every hero and every monster now has a proper walking animation, with arms swinging and feet taking turns. We tidied the legs on the Light Mage, Fire Mage, Fae and Druid so their feet stay nice and separate, and the Light Mage now looks straight ahead like everyone else.',
-      'The Druid got a makeover: antlers, moss, pointed elf ears and a snug green leather top. Their Natural Toxin now falls to the ground and fades if the monster is too far away.',
-      'A friendly Old Man now steps in the first time a hero gets badly hurt (below 25 HP). He pauses the game and shows you how to use a Healing Potion, then reminds you to collect gold coins for more. Healing Potion I is now selected from the start.',
-      'New Quality setting in the Settings menu. Slide between Low, Medium and High, or tick Auto and let the game choose for you based on how smoothly it is running. It is there on both the web and Windows versions.',
-      'On the web, if you come back to the page after it was hidden or minimized, a short note tells you that the adventure paused while you were away.',
-      'The inn now tells you what each choice does: Rest fully heals the party, and Reorganize swaps the positions of two heroes.'
-    ]
+      'Every hero and monster now has a walk animation.',
+      'The Druid has a new look.',
+      'The Old Man shows how to use potions when a hero is hurt.',
+      'New Quality setting: Low, Medium, High or Auto.',
+      'On the web, a note tells you when the game paused while hidden.',
+      'The inn now explains Rest and Reorganize.'
+    ],
+    es: {
+      title: 'Todos aprenden a caminar',
+      notes: [
+        'Todos los héroes y monstruos tienen ya animación de caminar.',
+        'El druida tiene un nuevo aspecto.',
+        'El Anciano enseña a usar pociones cuando un héroe está herido.',
+        'Nuevo ajuste de calidad: Baja, Media, Alta o Auto.',
+        'En la web, un aviso indica cuándo el juego se pausó estando oculto.',
+        'La posada ahora explica Descansar y Reorganizar.'
+      ]
+    },
+    zh: {
+      title: '大家都学会走路了',
+      notes: [
+        '所有英雄和怪物都有了走路动画。',
+        '德鲁伊换了新造型。',
+        '英雄受伤时，老人会教你使用药水。',
+        '新增画质设置：低、中、高或自动。',
+        '网页版会提示游戏在页面隐藏时已暂停。',
+        '旅店现在会说明“休息”和“重新整队”。'
+      ]
+    }
   },
   {
     date: '2026-10-15',
     title: 'Tougher monsters, stronger heroes',
     notes: [
-      'Heroes now grow stronger when they level up, gaining extra health that depends on their class (the Warrior gains the most). A hero who is hurt when they level up gets the new health too.',
-      'Monsters got sturdier, with more health, and Year 4 brings three brand-new top-tier monsters: the Magma Shellra, the Percussive Orc and the Shadecrow. The Magma Shellra\'s fireball is lobbed through the air and bursts into flames across your first two heroes when it lands.',
-      'The Fire Mage\'s fireball now burns out into ash if it travels too far.',
-      'The level-up screen is clearer: heroes you have not picked dim down, and the LEVEL UP button waits until you choose someone. Giving a crystal now shows your heroes in the scene, glowing crystal-blue.',
-      'We zoomed the scene out a little so a full party and the monsters always fit on screen.',
-      'The DEFEAT and NEW RECORD screens have nicer storybook lettering.',
-      'Windows app: the Compendium cards no longer draw over the title bar or tabs while you scroll.'
-    ]
+      'Heroes gain health when they level up.',
+      'Monsters have more health.',
+      'Year 4 brings three new top monsters.',
+      'The Magma Shellra\'s fireball now bursts into flames.',
+      'The Fire Mage\'s fireball burns out over long distances.',
+      'Clearer level-up screen.',
+      'The scene is zoomed out so everyone fits.',
+      'Nicer DEFEAT and NEW RECORD lettering.'
+    ],
+    es: {
+      title: 'Monstruos más duros, héroes más fuertes',
+      notes: [
+        'Los héroes ganan vida al subir de nivel.',
+        'Los monstruos tienen más vida.',
+        'El Año 4 trae tres monstruos nuevos de alto nivel.',
+        'La bola de fuego del Shellra de magma ahora estalla en llamas.',
+        'La bola de fuego del mago de fuego se apaga a larga distancia.',
+        'Pantalla de subida de nivel más clara.',
+        'La escena se aleja un poco para que quepan todos.',
+        'Letras más bonitas en DERROTA y NUEVO RÉCORD.'
+      ]
+    },
+    zh: {
+      title: '更强的怪物，更强的英雄',
+      notes: [
+        '英雄升级时会获得生命值。',
+        '怪物的生命值更高了。',
+        '第 4 年带来三种新的顶级怪物。',
+        '熔岩龟壳兽的火球现在会爆燃成火海。',
+        '火焰法师的火球飞得太远会熄灭。',
+        '升级界面更清晰。',
+        '画面稍微拉远，让所有人都能入镜。',
+        '“战败”和“新纪录”的字体更好看了。'
+      ]
+    }
   },
   {
     date: '2026-10-14',
     title: 'A new friend and a new foe',
     notes: [
-      'The Druid joins the adventure! Their Natural Toxin poisons a monster for a few seconds, every ten seconds.',
-      'Star Hats are more interesting now: each hero gets either a red hat (it heals a little over time) or a blue hat (it halves the damage they take). It is a coin flip, and the Fae can cast them again every three minutes.',
-      'The Compendium now has two tabs, MONSTERS and PARTY, with how hard everyone hits, how often, and a few notes. There is an eye button to reveal everything at once.',
-      'The Toucan has landed, and from Year 3 on! It slings sharp can tabs that slice through your whole party, so keep an eye on your health.'
-    ]
+      'The Druid joins, poisoning monsters with Natural Toxin.',
+      'Star Hats come in red (heal) or blue (half damage).',
+      'The Compendium has MONSTERS and PARTY tabs.',
+      'The Toucan arrives in Year 3.'
+    ],
+    es: {
+      title: 'Un nuevo amigo y un nuevo enemigo',
+      notes: [
+        'El druida se une y envenena a los monstruos con Toxina natural.',
+        'Los sombreros estelares son rojos (curan) o azules (mitad de daño).',
+        'El Compendio tiene pestañas de MONSTRUOS y GRUPO.',
+        'El Tucán llega en el Año 3.'
+      ]
+    },
+    zh: {
+      title: '新朋友与新敌人',
+      notes: [
+        '德鲁伊加入，用天然毒素毒害怪物。',
+        '星星帽分红色（回血）和蓝色（伤害减半）。',
+        '图鉴新增“怪物”和“队伍”标签页。',
+        '巨嘴鸟在第 3 年登场。'
+      ]
+    }
   },
   {
     date: '2026-10-13',
     title: 'Tavern days and sharper tools',
     notes: [
-      'The Thief now fires a crossbow when he cannot reach a monster in melee, and the Warrior\'s axe flies as soon as a monster is in range. Heroes at the front can now reach flying monsters that hover back.',
-      'Every tavern visit now ends at the inn, where you can Rest or Reorganize. A tavern is waiting on the last day of each year, and from Year 2 there is another on the first day.',
-      'The Merchant now visits only on the second day of each season, so stock up on potions when he arrives.',
-      'The Blood Moon hits harder, and so do the monsters in general (we doubled their damage). The Nightmare has a taller scythe that cuts through the first two heroes in line.',
-      'A borderless DEFEAT / NEW RECORD screen appears when the adventure ends, and fainted heroes no longer show a health bar while they ride in the cart.',
-      'The start sign is now part of the scene, so your party walks in front of it. The Thief is the same height as the mages.',
-      'Windows app: Play with nothing loaded opens the station picker, and the 1X-5X buttons show up in full screen.'
-    ]
+      'The Thief fires a crossbow from afar.',
+      'Every tavern visit ends at the inn.',
+      'The Merchant visits on day 2 of each season.',
+      'Monsters hit harder, and so does the Blood Moon.',
+      'New DEFEAT / NEW RECORD screen.',
+      'Fainted heroes hide their health bar.',
+      'Windows: Play with nothing loaded opens the station picker.'
+    ],
+    es: {
+      title: 'Días de taberna y mejores herramientas',
+      notes: [
+        'El ladrón dispara una ballesta desde lejos.',
+        'Cada visita a la taberna termina en la posada.',
+        'El mercader visita el día 2 de cada estación.',
+        'Los monstruos pegan más fuerte, y la Luna de sangre también.',
+        'Nueva pantalla de DERROTA / NUEVO RÉCORD.',
+        'Los héroes desmayados ocultan su barra de vida.',
+        'Windows: Reproducir sin nada cargado abre el selector de emisoras.'
+      ]
+    },
+    zh: {
+      title: '酒馆日与更趁手的工具',
+      notes: [
+        '盗贼可以用弩远程射击。',
+        '每次酒馆之行都以旅店收尾。',
+        '商人在每个季节的第 2 天来访。',
+        '怪物打得更狠，血月也是。',
+        '全新的“战败 / 新纪录”界面。',
+        '昏倒的英雄不再显示生命条。',
+        'Windows：未加载任何内容时点播放，会打开电台选择器。'
+      ]
+    }
   },
   {
     date: '2026-10-12',
-    title: 'A big day: items, health and smooth radio',
+    title: 'A big day: items, health and radio',
     notes: [
-      'Heroes have health now! Monsters attack your party, hurt heroes show a health bar, and a hero who faints rides in a little pull cart at the back until they recover.',
-      'Meet the Merchant. He sells Healing Potion I, which heals a chosen hero for 10 HP. Open your item disc (the item button) to use it in any view.',
-      'Each adventure now begins at a campfire with a sign reading START THE RADIO, START YOUR ADVENTURE! Two random heroes are waiting there for you to choose from. The Thief, Fae, Light Mage and Fire Mage can now fight up close when they lead the party.',
-      'Year 2 brings tougher monster variants: the Spiked Sheller, Bass Orc, Slasher and Wickedgryph.',
-      'Paca got a whole new look as a tan llama with a colourful blanket, a pom-pom collar and a little black nose, and the Warrior is now orange and bearded.',
-      'The radio got smoother: switching stations keeps the music flowing and cross-fades into the new one, and the scene shows the summoning effect while the next station loads. You can now add your own station by link, and every station has a SUPPORT link so you can tip the people who make it.',
-      'Music and sound effects have separate volume sliders, and coins can only be collected while a radio station is playing. The web version also has a theme picker with eight colour themes.',
-      'The tabs along the top are now Adventure, Radio and Local Music, with new rounded play-control icons.',
-      'Windows app: the Radio tab has a Zone / Battle station picker, with a hotkey (Ctrl+Alt+B) and automatic switching between your zone music and battle music when the game says you are fighting.'
-    ]
+      'Heroes have health, and fainted ones ride in a cart.',
+      'Meet the Merchant and Healing Potion I.',
+      'Adventures start at a campfire with two heroes to pick.',
+      'Year 2 brings tougher monster variants.',
+      'Paca is now a tan llama with a blanket.',
+      'Switching stations now fades smoothly.',
+      'Add your own station by link, and SUPPORT links for stations.',
+      'Separate music and effects volume.',
+      'Tabs: Adventure, Radio, Local Music.',
+      'Windows: Zone / Battle stations switch automatically.'
+    ],
+    es: {
+      title: 'Un gran día: objetos, vida y radio',
+      notes: [
+        'Los héroes tienen vida, y los desmayados viajan en una carreta.',
+        'Conoce al mercader y la Poción de curación I.',
+        'Las aventuras empiezan en una hoguera con dos héroes para elegir.',
+        'El Año 2 trae variantes de monstruos más duras.',
+        'Alpaca ahora es una llama canela con manta.',
+        'Cambiar de emisora ahora se funde suavemente.',
+        'Añade tu propia emisora con un enlace, y enlaces de APOYAR para las emisoras.',
+        'Volumen separado para música y efectos.',
+        'Pestañas: Aventura, Radio, Música local.',
+        'Windows: las emisoras de Zona / Batalla cambian solas.'
+      ]
+    },
+    zh: {
+      title: '大日子：道具、生命值和电台',
+      notes: [
+        '英雄有了生命值，昏倒的英雄会坐上拉车。',
+        '认识商人和治疗药水 I。',
+        '冒险从营火开始，可从两名英雄中选择。',
+        '第 2 年带来更强的怪物变种。',
+        '羊驼变成了披着毯子的棕黄色羊驼。',
+        '切换电台时会平滑淡入淡出。',
+        '可通过链接添加自己的电台，电台还有“支持”链接。',
+        '音乐和音效音量分开调节。',
+        '标签页：冒险、电台、本地音乐。',
+        'Windows：区域 / 战斗电台自动切换。'
+      ]
+    }
   },
   {
     date: '2026-10-11',
     title: 'Hello, Fantasy Radio Companion',
     notes: [
-      'Fantasy Music Companion is now Fantasy Radio Companion!',
-      'The adventure game came to life: monsters wander in, heroes have class traits, there are sound effects, a tuner for picking music and stations, a full-screen mode, and a Compendium of everything.',
-      'The Warrior throws axes and the Gargogryph, a stone-skinned flying beast, makes its first appearance.',
-      'The Merchant opened his shop with the Synergy Elixir, with an item bag and quick-use slots.',
-      'There is now a web version you can play in your browser or add to your phone like an app.',
-      'Spanish and Simplified Chinese are here, on both the web and Windows versions, and you can switch language on the fly.',
-      'A settings cog with a Restart option, a full-screen now-playing pill, and a pop-up tuner that opens on whatever is playing.'
-    ]
+      'New name: Fantasy Radio Companion!',
+      'The adventure game arrived: monsters, class traits, tuner, full screen.',
+      'The Merchant opened his shop.',
+      'A web version you can add to your phone.',
+      'Spanish and Simplified Chinese added.',
+      'A settings cog with Restart.'
+    ],
+    es: {
+      title: 'Hola, Fantasy Radio Companion',
+      notes: [
+        '¡Nuevo nombre: Fantasy Radio Companion!',
+        'Llegó el juego de aventuras: monstruos, rasgos de clase, sintonizador y pantalla completa.',
+        'El mercader abrió su tienda.',
+        'Una versión web que puedes añadir a tu teléfono.',
+        'Añadidos el español y el chino simplificado.',
+        'Un engranaje de ajustes con Reiniciar.'
+      ]
+    },
+    zh: {
+      title: '你好，Fantasy Radio Companion',
+      notes: [
+        '全新名字：Fantasy Radio Companion！',
+        '冒险游戏登场：怪物、职业特性、调谐器和全屏模式。',
+        '商人开张了。',
+        '网页版上线，可添加到手机。',
+        '新增西班牙语和简体中文。',
+        '设置齿轮，内含“重新开始”。'
+      ]
+    }
   },
   {
     date: '2026-10-09',
     title: 'The very first beta',
     notes: [
-      'Fantasy Music Companion takes its first steps, with Folk Alley and DNBRadio as the starting radio stations. Thank you for being here at the beginning!'
-    ]
+      'First beta, with Folk Alley and DNBRadio.'
+    ],
+    es: {
+      title: 'La primerísima beta',
+      notes: [
+        'Primera beta, con Folk Alley y DNBRadio.'
+      ]
+    },
+    zh: {
+      title: '第一个测试版',
+      notes: [
+        '首个测试版，内含 Folk Alley 和 DNBRadio。'
+      ]
+    }
   }
 ];
