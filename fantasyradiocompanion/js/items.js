@@ -17,7 +17,7 @@ export const BERSERK_SECONDS = 120;
 export const ITEM_DEFS = {
   SynergyElixir: { name: 'Synergy Elixir', price: 20, start: 0, blurb: "Resets every party member's skills so they all fire together within a second, Huzzah! first so the damage skills get its full benefit." },
   PotionRed: { name: 'Monster Berserker', price: 0, infinite: true, picks: true, blurb: 'A dev tool: multiplies the damage monsters deal, from 1X to 5X, for 2 minutes. Pick the multiplier after using it; a new use replaces the old one. Never runs out.' },
-  PotionBlue: { name: 'Revive Potion', price: 10, start: 0, revive: true, blurb: 'Revives a fainted party member with 50% HP, at the back of the line. After using it, tap the fainted member.' },
+  PotionBlue: { name: 'Revive Potion', price: 10, start: 1, revive: true, blurb: 'Revives a fainted party member with 50% HP, at the back of the line. After using it, tap the fainted member.' },
   PotionGreen: { name: 'Healing Potion I', price: 5, heal: 10, blurb: "Heals one party member for 10 HP. After using it, tap the member to heal. It can't wake a fainted member: that takes a Revive Potion or a Rest at the inn." },
 };
 

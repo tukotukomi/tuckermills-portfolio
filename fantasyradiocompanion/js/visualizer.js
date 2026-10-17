@@ -8,7 +8,8 @@ import { traitSummary } from './traits.js';
 import { css } from './util.js';
 import { Sound } from './sfx.js';
 import { ITEM_DEFS, HOT_SLOT_COUNT } from './items.js';
-import { t, isCjk } from './i18n.js';
+import { t, isCjk, getLanguage } from './i18n.js';
+import { JOURNAL } from './journal.js';
 import { QUALITY, QUALITY_MODES, QUALITY_LEVELS, AutoQuality, guessLevel, isLevel } from './quality.js';
 import { SCROLL_DEFS } from './scrolls.js';
 import { UNLOCKABLE_HEROES, HERO_UNLOCK_COST, STAMP_TOAST_SECONDS } from './stamps.js';
@@ -75,15 +76,17 @@ export class Visualizer {
     this._scrollDown = false; this._scrollOpen = false; this._scrollByPress = false; this._overScroll = false; this._scrollDownAt = 0;   // the scroll button and its row of slots
     this._scrollHover = -1; this._scrollXHover = -1; this._promptHover = -1;
     this._tshopOpen = false; this._tshopHover = -1; this._overTShop = false;   // the Tavern Shop (before the first hero is picked)
+    this._devOpen = false; this._devScroll = 0; this._devHover = -1; this._devDrag = null; this._devCache = null;   // the Developer Updates journal (Settings)
     this._auto = new AutoQuality(guessLevel(IS_MOBILE), () => { this._applyQuality(); this._saveQuality(); });
     this._applyQuality();
     document.addEventListener('visibilitychange', () => { this.last = performance.now(); this._auto.pause(); });
 
     canvas.addEventListener('pointermove', e => this._onMove(e));
-    canvas.addEventListener('pointerleave', () => { this.hover = { button: false, restart: false, tuner: false, comp: false, card: -1, tile: -1, levelUp: false }; canvas.style.cursor = 'default'; });
+    canvas.addEventListener('pointerleave', () => { this.hover = { button: false, restart: false, dev: false, tuner: false, comp: false, card: -1, tile: -1, levelUp: false }; canvas.style.cursor = 'default'; });
     canvas.addEventListener('pointerdown', e => this._onDown(e));
     canvas.addEventListener('pointerup', e => this._onUp(e));
-    canvas.addEventListener('pointercancel', () => { this._hotDown = false; this._sliderDrag = false; });
+    canvas.addEventListener('pointercancel', () => { this._hotDown = false; this._sliderDrag = false; this._devDrag = null; });
+    canvas.addEventListener('wheel', e => this._onWheel(e), { passive: false });
     window.addEventListener('resize', () => this.resize());
   }
 
@@ -137,7 +140,7 @@ export class Visualizer {
     this.resize();
     const spec = this.host.spectrum ? this.host.spectrum() : { live: false, bass: 0, mid: 0, treble: 0, loud: 0 };
     this.summonAlpha = this.buffering ? Math.min(1, this.summonAlpha + dt / 0.35) : Math.max(0, this.summonAlpha - dt / 0.45);
-    this.scene.suspended = this.popupOpen;
+    this.scene.suspended = this.popupOpen || this._devOpen;
     this.scene.setSpectrum(spec.live, spec.bass, spec.mid, spec.treble, spec.loud);
     const level = this.scene.marching && this.host.level ? this.host.level() : -1;
     this.scene.advance(dt, level);
@@ -238,6 +241,7 @@ export class Visualizer {
     this._drawTip(ctx);
     this._drawScrollPrompt(ctx);
     this._drawTShop(ctx);
+    this._drawDevLog(ctx);
     this._drawStampToast(ctx);
   }
 
@@ -436,19 +440,20 @@ export class Visualizer {
     const widest = Math.max(...QUALITY_LEVELS.map(l => this._measure(ctx, this._qLabel(l), px)));
     const headW = this._measure(ctx, t('Quality'), px);
     const autoW = box + 6 + this._measure(ctx, t('Auto'), px);
-    const restartW = this._measure(ctx, t('Restart'), 9.5 * PT) + 24;
+    const restartW = Math.max(this._measure(ctx, t('Restart'), 9.5 * PT), this._measure(ctx, t('Developer Updates'), 9.5 * PT)) + 24;
     let w = Math.ceil(Math.max(headW + gap + widest, minSlider + gap + autoW, restartW) + pad * 2);
     w = Math.max(150, Math.min(w, Math.trunc(this.vw - 16)));
     const x = c.x + c.w - w, y = c.y + c.h + 6, rowY = y + 4 + 20;
     const autoRect = { x: x + w - pad - autoW, y: rowY, w: autoW, h: 28 };
     const sliderLeft = x + pad + 7, sliderRight = autoRect.x - gap - 7;
     return {
-      menu: { x: x, y: y, w: w, h: 4 + 20 + 28 + 6 + 30 + 4 },
+      menu: { x: x, y: y, w: w, h: 4 + 20 + 28 + 6 + 30 + 30 + 4 },
       head: { x: x + pad, y: y + 4, w: w - pad * 2, h: 20 },
       auto: autoRect, box: box,
       slider: { x: sliderLeft, y: rowY + 14, w: Math.max(20, sliderRight - sliderLeft) },   // the track's centre line; the thumb has a radius of 7
       sliderHit: { x: x + pad, y: rowY, w: Math.max(20, autoRect.x - gap - (x + pad)), h: 28 },
-      restart: { x: x + 4, y: rowY + 28 + 6, w: w - 8, h: 30 },
+      dev: { x: x + 4, y: rowY + 28 + 6, w: w - 8, h: 30 },
+      restart: { x: x + 4, y: rowY + 28 + 6 + 30, w: w - 8, h: 30 },
     };
   }
   get _settingsMenuRect() { return this._settingsLayout().menu; }
@@ -527,6 +532,9 @@ export class Visualizer {
     }
     this._text(ctx, t('Auto'), bx + L.box + 6, L.auto.y + L.auto.h / 2 + 0.5, { px: px, color: 'white' });
     ctx.lineCap = 'butt'; ctx.lineJoin = 'miter';
+    const dv = L.dev;
+    if (this.hover.dev) this._pill(ctx, dv.x, dv.y, dv.w, dv.h, 5, 'rgba(90,70,150,0.47)');
+    this._text(ctx, t('Developer Updates'), dv.x + dv.w / 2, dv.y + dv.h / 2 + 0.5, { px: 9.5 * PT, color: 'white', align: 'center' });
     if (this.hover.restart) this._pill(ctx, item.x, item.y, item.w, item.h, 5, 'rgba(90,70,150,0.47)');
     this._text(ctx, t('Restart'), item.x + item.w / 2, item.y + item.h / 2 + 0.5, { px: 9.5 * PT, color: 'white', align: 'center' });
   }
@@ -748,6 +756,7 @@ export class Visualizer {
   dismissOverlay() {
     if (this.scene.isWaiting) { this.scene.cancelTargeting(); return true; }
     if (this.scene.isSwapping) { this.scene.innCancel(); return true; }
+    if (this._devOpen) { this._closeDev(); return true; }
     if (this._settingsOpen) { this._settingsOpen = false; return true; }
     if (this._tshopOpen) { this._closeTShop(); return true; }
     if (this._scrollOpen) { this._scrollOpen = false; this._scrollDown = false; return true; }
@@ -759,6 +768,7 @@ export class Visualizer {
   _onUp(e) {
     if (e.button !== undefined && e.button !== 0) return;
     if (this._sliderDrag) { this._sliderDrag = false; return; }
+    if (this._devDrag) { this._devUp(this._point(e)); return; }
     if (this.popupOpen) return;
     const p = this._point(e);
     const h = { x: p.x / this.hud, y: p.y / this.hud };
@@ -1200,6 +1210,139 @@ export class Visualizer {
     const bk = L.back, backHot = this._tshopHover === 100;
     this._pill(ctx, bk.x, bk.y, bk.w, bk.h, 8 * k, backHot ? 'rgba(26,22,60,0.92)' : 'rgba(26,22,60,0.8)', backHot ? 'rgb(255,214,120)' : 'rgba(170,186,240,0.78)', 1.5);
     this._text(ctx, t('Back'), bk.x + bk.w / 2, bk.y + bk.h / 2 + 0.5, { px: L.ppx, color: 'white', align: 'center', weight: 700 });
+  }
+
+  // ---- Developer Updates: the journal, in a popup that scrolls. Like the shop, nothing in it has a fixed width: the text is wrapped to
+  // the room the panel has, and what is measured here is what is drawn. ----------------------------------------------------------
+
+  _openDev() { this._devOpen = true; this._devScroll = 0; this._devHover = -1; this._devDrag = null; this._devCache = null; }
+  _closeDev() { this._devOpen = false; this._devDrag = null; this._devHover = -1; this.canvas.style.cursor = 'default'; }
+
+  _devDate(iso) {
+    const [y, m, d] = iso.split('-').map(Number);
+    try { return new Date(y, m - 1, d).toLocaleDateString(getLanguage() === 'zh' ? 'zh-CN' : getLanguage(), { year: 'numeric', month: 'long', day: 'numeric' }); }
+    catch (err) { return iso; }
+  }
+
+  /** The panel, the viewport the journal scrolls in, the Close button and every wrapped block with its height (kept until the width, scale or language changes). */
+  _devLayout(ctx) {
+    const k = this._uiScale(640), pad = Math.trunc(16 * k), gap = Math.trunc(10 * k);
+    const hpx = 12 * PT * k, ppx = 10.5 * PT * k, dpx = 8.5 * PT * k, tpx = 10.5 * PT * k, npx = 9 * PT * k, lh = 1.3;
+    const panelW = Math.min(this.width - 16, Math.trunc(440 * k)), panelH = Math.min(this.height - 16, Math.trunc(500 * k));
+    const titleH = Math.round(hpx * 1.3), closeH = Math.trunc(34 * k);
+    const closeW = Math.round(this._measure(ctx, t('Close'), ppx, 700) + 48 * k);
+    const panel = { x: Math.trunc((this.width - panelW) / 2), y: Math.trunc((this.height - panelH) / 2), w: panelW, h: panelH };
+    const barW = Math.max(4, Math.trunc(6 * k));
+    const view = { x: panel.x + pad, y: panel.y + pad + titleH + gap, w: panelW - pad * 2 - barW - gap, h: 0 };
+    view.h = Math.max(40, panel.y + panelH - pad - closeH - gap - view.y);
+    const key = [view.w, k, getLanguage(), ctx.canvas.width].join('|');
+    if (!this._devCache || this._devCache.key !== key) {
+      const bullet = this._measure(ctx, '\u2022', npx, 400) + Math.trunc(8 * k), blocks = [];
+      let y = 0;
+      for (const e of JOURNAL) {
+        blocks.push({ kind: 'date', y: y, lines: [this._devDate(e.date)], px: dpx, h: Math.round(dpx * lh) });
+        y += blocks[blocks.length - 1].h + Math.trunc(2 * k);
+        const tl = this._wrapLines(ctx, e.title, view.w, tpx, 700);
+        blocks.push({ kind: 'title', y: y, lines: tl, px: tpx, h: Math.round(tl.length * tpx * lh) });
+        y += blocks[blocks.length - 1].h + Math.trunc(6 * k);
+        for (const n of e.notes) {
+          const nl = this._wrapLines(ctx, n, view.w - bullet, npx, 400);
+          blocks.push({ kind: 'note', y: y, lines: nl, px: npx, h: Math.round(nl.length * npx * lh), bullet: bullet });
+          y += blocks[blocks.length - 1].h + Math.trunc(5 * k);
+        }
+        y += Math.trunc(14 * k);   // room before the next day
+      }
+      this._devCache = { key: key, blocks: blocks, height: Math.max(0, y - Math.trunc(14 * k)) };
+    }
+    const maxScroll = Math.max(0, this._devCache.height - view.h);
+    this._devScroll = Math.max(0, Math.min(maxScroll, this._devScroll));
+    return {
+      k, pad, gap, hpx, ppx, panel, view, barW, titleH, maxScroll, blocks: this._devCache.blocks, contentH: this._devCache.height,
+      bar: { x: view.x + view.w + gap, y: view.y, w: barW, h: view.h },
+      close: { x: panel.x + Math.trunc((panelW - closeW) / 2), y: panel.y + panelH - pad - closeH, w: closeW, h: closeH }
+    };
+  }
+
+  _devMove(p) {
+    const L = this._devLayout(this.ctx);
+    if (this._devDrag) {
+      const d = p.y - this._devDrag.y;
+      if (Math.abs(d) > 4) this._devDrag.moved = true;
+      this._devScroll = Math.max(0, Math.min(L.maxScroll, this._devDrag.start - d));
+      this.canvas.style.cursor = 'grabbing';
+      return;
+    }
+    this._devHover = this._inRect(p, L.close) ? 100 : -1;
+    this.canvas.style.cursor = this._devHover === 100 ? 'pointer' : this._inRect(p, L.view) ? 'grab' : 'default';
+  }
+
+  _devDown(p, e) {
+    const L = this._devLayout(this.ctx);
+    if (this._inRect(p, L.view) || this._inRect(p, L.bar)) {
+      this._devDrag = { y: p.y, start: this._devScroll, moved: false };
+      try { this.canvas.setPointerCapture(e.pointerId); } catch (err) { /* a drag still works while the pointer stays over the canvas */ }
+      return;
+    }
+    if (this._inRect(p, L.close) || !this._inRect(p, L.panel)) { this._closeDev(); Sound.play('DiscClick'); }
+  }
+
+  _devUp(p) { this._devDrag = null; if (this._devOpen) this._devMove(p); }
+
+  _onWheel(e) {
+    if (!this._devOpen) return;
+    e.preventDefault();
+    const L = this._devLayout(this.ctx), unit = e.deltaMode === 1 ? 16 * L.k : e.deltaMode === 2 ? L.view.h : 1;
+    this._devScroll = Math.max(0, Math.min(L.maxScroll, this._devScroll + e.deltaY * unit));
+  }
+
+  /** The arrow keys, Page Up / Down, Home and End scroll the journal while it is open. True if the key was used. */
+  devKey(key) {
+    if (!this._devOpen) return false;
+    const L = this._devLayout(this.ctx), line = 40 * L.k, page = L.view.h * 0.9;
+    const to = v => { this._devScroll = Math.max(0, Math.min(L.maxScroll, v)); return true; };
+    switch (key) {
+      case 'ArrowDown': return to(this._devScroll + line);
+      case 'ArrowUp': return to(this._devScroll - line);
+      case 'PageDown': case ' ': return to(this._devScroll + page);
+      case 'PageUp': return to(this._devScroll - page);
+      case 'Home': return to(0);
+      case 'End': return to(L.maxScroll);
+    }
+    return false;
+  }
+
+  _drawDevLog(ctx) {
+    if (!this._devOpen) return;
+    ctx.fillStyle = 'rgba(0,0,0,0.745)'; ctx.fillRect(0, 0, this.width, this.height);
+    const L = this._devLayout(ctx), P = L.panel, V = L.view, k = L.k;
+    roundRect(ctx, P.x + 0.5, P.y + 0.5, P.w - 1, P.h - 1, 10 * k);
+    ctx.fillStyle = 'rgba(22,18,52,0.95)'; ctx.fill();
+    ctx.strokeStyle = 'rgba(255,214,120,0.92)'; ctx.lineWidth = 1.8; ctx.stroke();
+    this._text(ctx, t('Developer Updates'), P.x + L.pad, P.y + L.pad + L.titleH / 2, { px: L.hpx, color: 'rgb(255,214,120)' });
+    // the journal, clipped to its viewport
+    ctx.save();
+    ctx.beginPath(); ctx.rect(V.x, V.y, V.w, V.h); ctx.clip();
+    ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+    const top = this._devScroll, bottom = top + V.h;
+    for (const b of L.blocks) {
+      if (b.y + b.h < top || b.y > bottom) continue;
+      const x = V.x + (b.bullet || 0), y0 = V.y + b.y - top;
+      ctx.font = (b.kind === 'title' ? '700 ' : b.kind === 'date' ? '600 ' : '400 ') + b.px + 'px ' + FONT;
+      ctx.fillStyle = b.kind === 'title' ? 'rgb(255,255,255)' : b.kind === 'date' ? 'rgb(150,190,255)' : 'rgb(214,222,250)';
+      if (b.kind === 'note') { ctx.fillStyle = 'rgb(255,214,120)'; ctx.fillText('\u2022', V.x, y0); ctx.fillStyle = 'rgb(214,222,250)'; }
+      b.lines.forEach((ln, i) => ctx.fillText(ln, x, y0 + i * b.px * 1.3));
+    }
+    ctx.restore();
+    // the scroll bar: a track, and a thumb as long as the part that shows
+    const B = L.bar;
+    ctx.fillStyle = 'rgba(150,160,220,0.25)'; roundRect(ctx, B.x, B.y, B.w, B.h, B.w / 2); ctx.fill();
+    if (L.maxScroll > 0) {
+      const th = Math.max(24 * k, B.h * V.h / L.contentH), ty = B.y + (B.h - th) * (this._devScroll / L.maxScroll);
+      ctx.fillStyle = this._devDrag ? 'rgb(255,226,130)' : 'rgb(255,204,82)'; roundRect(ctx, B.x, ty, B.w, th, B.w / 2); ctx.fill();
+    }
+    const c = L.close, hot = this._devHover === 100;
+    this._pill(ctx, c.x, c.y, c.w, c.h, 8 * k, hot ? 'rgba(26,22,60,0.92)' : 'rgba(26,22,60,0.8)', hot ? 'rgb(255,214,120)' : 'rgba(170,186,240,0.78)', 1.5);
+    this._text(ctx, t('Close'), c.x + c.w / 2, c.y + c.h / 2 + 0.5, { px: L.ppx, color: 'white', align: 'center', weight: 700 });
   }
 
   /** "You received a Tavern Stamp!": a pill under the top corner pills, fading out on its own. */
@@ -1832,6 +1975,7 @@ export class Visualizer {
     const h = { x: p.x / this.hud, y: p.y / this.hud };
     const s = this.scene;
     if (this._sliderDrag) { this._dragSlider(h); this.canvas.style.cursor = 'pointer'; return; }
+    if (this._devOpen) { this._devMove(p); return; }   // the journal is up: only it answers the pointer
     if (this._tshopOpen) {   // the Tavern Shop is up: only it answers the pointer
       const hit = this._tshopHit(p);
       this._tshopHover = hit.hit;
@@ -1883,6 +2027,7 @@ export class Visualizer {
       button: this._inRect(h, this._buttonRect),
       settings: this._inRect(h, this._settingsRect),
       restart: this._settingsOpen && this._inRect(h, this._restartItemRect),
+      dev: this._settingsOpen && this._inRect(h, this._settingsLayout().dev),
       qslider: this._settingsOpen && this._inRect(h, this._settingsLayout().sliderHit),
       qauto: this._settingsOpen && this._inRect(h, this._settingsLayout().auto),
       tuner: this._inTuner(h),
@@ -1916,7 +2061,7 @@ export class Visualizer {
     }
     this.hover = hover;
     const overCoin = !s.isLevelSelect && !s.isDialogue && !s.isChoosing && s.isCoinAt(p.x, p.y);
-    this.canvas.style.cursor = hover.button || hover.settings || hover.restart || hover.qslider || hover.qauto || hover.tuner || hover.comp || this._overHot || this._overScroll || this._overTShop || this._scrollHover >= 0 || this._discHover >= 0 || hover.card >= 0 || hover.tile >= 0 || hover.levelUp || overCoin ? 'pointer' : 'default';
+    this.canvas.style.cursor = hover.button || hover.settings || hover.restart || hover.dev || hover.qslider || hover.qauto || hover.tuner || hover.comp || this._overHot || this._overScroll || this._overTShop || this._scrollHover >= 0 || this._discHover >= 0 || hover.card >= 0 || hover.tile >= 0 || hover.levelUp || overCoin ? 'pointer' : 'default';
   }
 
   _onDown(e) {
@@ -1926,6 +2071,7 @@ export class Visualizer {
     const p = this._point(e);
     const h = { x: p.x / this.hud, y: p.y / this.hud };
     const s = this.scene;
+    if (this._devOpen) { this._devDown(p, e); return; }
     if (this._tshopOpen) {
       const hit = this._tshopHit(p);
       if (hit.hit >= 0 && hit.hit < 100) s.buyHero(UNLOCKABLE_HEROES[hit.hit]);
@@ -1991,6 +2137,7 @@ export class Visualizer {
         return;
       }
       if (this._inRect(h, SL.auto)) { this.setAuto(this._qMode !== 'auto'); Sound.play('DiscClick'); return; }
+      if (this._inRect(h, SL.dev)) { this._settingsOpen = false; this.hover.dev = false; this._openDev(); Sound.play('DiscClick'); return; }
       if (this._inRect(h, this._restartItemRect)) { this._settingsOpen = false; this.hover.restart = false; this.host.restartRequested && this.host.restartRequested(); return; }
       if (this._inRect(h, this._settingsMenuRect)) return;   // the menu's own heading and gaps do nothing
       if (!this._inRect(h, this._settingsRect)) { this._settingsOpen = false; return; }   // a click elsewhere just closes it
