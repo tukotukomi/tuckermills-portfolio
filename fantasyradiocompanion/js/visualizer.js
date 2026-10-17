@@ -11,6 +11,7 @@ import { ITEM_DEFS, HOT_SLOT_COUNT } from './items.js';
 import { t, isCjk } from './i18n.js';
 import { QUALITY, QUALITY_MODES, QUALITY_LEVELS, AutoQuality, guessLevel, isLevel } from './quality.js';
 import { SCROLL_DEFS } from './scrolls.js';
+import { UNLOCKABLE_HEROES, HERO_UNLOCK_COST, STAMP_TOAST_SECONDS } from './stamps.js';
 
 export const ZOOMED_SCALE = 5;
 export const PARTY_ZOOM_OUT = 0.8;   // the party is drawn at about 80% of the size it would otherwise be, in every view (20% zoomed out)
@@ -35,6 +36,8 @@ export const BLURB = {
   fae: 'A glimmering lucky charm who never tires.',
   druid: 'Tends the wild, and the wild answers.',
   paca: 'Fast, loyal and always out front.',
+  paladin: 'Sworn to shield the weak with a steady, holy light.',
+  shadowknight: 'Fights from the dark, and what he takes he gives back.',
 };
 const FONT = '"Segoe UI", "Microsoft YaHei", "PingFang SC", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif';
 const PT = 96 / 72;   // points to CSS pixels
@@ -71,6 +74,7 @@ export class Visualizer {
     this._qMode = 'auto'; this._q = QUALITY.high; this._lastDraw = 0; this._sliderDrag = false;
     this._scrollDown = false; this._scrollOpen = false; this._scrollByPress = false; this._overScroll = false; this._scrollDownAt = 0;   // the scroll button and its row of slots
     this._scrollHover = -1; this._scrollXHover = -1; this._promptHover = -1;
+    this._tshopOpen = false; this._tshopHover = -1; this._overTShop = false;   // the Tavern Shop (before the first hero is picked)
     this._auto = new AutoQuality(guessLevel(IS_MOBILE), () => { this._applyQuality(); this._saveQuality(); });
     this._applyQuality();
     document.addEventListener('visibilitychange', () => { this.last = performance.now(); this._auto.pause(); });
@@ -139,6 +143,7 @@ export class Visualizer {
     this.scene.advance(dt, level);
     if (this.scene.isTipActive) { this._discOpen = false; this._hotDown = false; }   // no switching potions under a tip
     if (this.scene.isTipActive || this.scene.isScrollPrompt || this.scene.isWaiting || this.scene.isSwapping) { this._scrollOpen = false; this._scrollDown = false; }
+    if (this._tshopOpen && !this.scene.starting) this._tshopOpen = false;
     if (this._scrollDown && !this._scrollOpen && performance.now() - this._scrollDownAt >= 450) { this._scrollOpen = true; this._scrollByPress = true; Sound.play('DiscClick'); }   // held: the carried scrolls
     if (this._hotDown && !this._discOpen && performance.now() - this._hotDownAt >= 450) {   // held: the disc of four
       this._discOpen = true; this._discByPress = true;
@@ -220,6 +225,7 @@ export class Visualizer {
     this._drawCompendiumButton(ctx);
     this._drawHotButton(ctx);
     this._drawScrollButton(ctx);
+    this._drawTShopButton(ctx);
     this._drawMultiplierPicker(ctx);
     this._drawDisc(ctx);
     this._drawScrollPanel(ctx);
@@ -230,6 +236,8 @@ export class Visualizer {
     this._drawShop(ctx);
     this._drawTip(ctx);
     this._drawScrollPrompt(ctx);
+    this._drawTShop(ctx);
+    this._drawStampToast(ctx);
   }
 
   _text(ctx, str, x, y, o) {
@@ -722,6 +730,7 @@ export class Visualizer {
     if (this.scene.isWaiting) { this.scene.cancelTargeting(); return true; }
     if (this.scene.isSwapping) { this.scene.innCancel(); return true; }
     if (this._settingsOpen) { this._settingsOpen = false; return true; }
+    if (this._tshopOpen) { this._closeTShop(); return true; }
     if (this._scrollOpen) { this._scrollOpen = false; this._scrollDown = false; return true; }
     if (this._discOpen) { this._discOpen = false; this._hotDown = false; return true; }
     if (this.scene.isShopping) { if (this._shopInfoId) this._shopInfoId = null; else this.scene.leaveShop(); return true; }
@@ -1009,6 +1018,192 @@ export class Visualizer {
     this._drawItemIcon(ctx, id, r.x + r.w / 2, r.y + r.h / 2, this._compactDisc ? 1 : 2, n <= 0);
     this._drawCountBadge(ctx, s.isInfinite(id) ? -1 : n, r.x + r.w + 2, r.y + r.h + 2);
     if (this._overHot && !this._discOpen && !tipLit) this._tip(ctx, t('Tap: use   Hold: switch'), r.x + r.w + 10, r.y + r.h / 2, true);
+  }
+
+  // ---- The Tavern Shop: a round button (just under the top pills, at the left) while the adventure's first hero is still to be picked; it
+  // opens a panel where Tavern Stamps are spent unlocking the Paladin and the Shadow Knight. Nothing here has a fixed width: the panel is
+  // as wide as its words are in the current language. Also the notification for a stamp just earned.
+
+  get _tshopRect() {
+    if (this._compactDisc) return this._hotRect;
+    const L = this._hudLayout(this.ctx);
+    let bottom = 0;
+    for (const r of [L.day, L.gold, L.storage, L.np]) if (r) bottom = Math.max(bottom, r.y + r.h);
+    return { x: 8, y: bottom + 10, w: 44, h: 44 };
+  }
+  get _tshopBtnVisible() { const s = this.scene; return s.starting && !s.isTipActive && !this._tshopOpen && !s.isGameOver; }
+
+  _inTShop(h) {
+    if (!this._tshopBtnVisible) return false;
+    const r = this._tshopRect, dx = h.x - (r.x + r.w / 2), dy = h.y - (r.y + r.h / 2);
+    return dx * dx + dy * dy <= (r.w / 2) * (r.w / 2);
+  }
+
+  _drawStampIcon(ctx, cx, cy, factor) {
+    const img = Sprites.stamp;
+    if (!img) return;
+    const w = img.width * factor, h = img.height * factor;
+    ctx.save();
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(img, Math.round(cx - w / 2), Math.round(cy - h / 2), w, h);
+    ctx.restore();
+  }
+
+  _drawTShopButton(ctx) {
+    if (!this._tshopBtnVisible) return;
+    const r = this._tshopRect, hot = this._overTShop, cx = r.x + r.w / 2, cy = r.y + r.h / 2;
+    ctx.beginPath(); ctx.arc(cx, cy, (r.w - 1) / 2, 0, Math.PI * 2);
+    ctx.fillStyle = rgba(56, 12, 24, hot ? 0.78 : 0.51); ctx.fill();
+    ctx.strokeStyle = hot ? 'rgb(255,150,130)' : rgba(255, 110, 100, 0.82); ctx.lineWidth = 1.6; ctx.stroke();
+    this._drawStampIcon(ctx, cx, cy, this._compactDisc ? 1 : 2);
+    this._drawTextBadge(ctx, String(this.scene.stamps), r.x + r.w + 2, r.y + r.h + 2, false);
+    if (hot) this._tip(ctx, t('Tavern Shop'), r.x + r.w + 10, r.y + r.h / 2, true);
+  }
+
+  _closeTShop() {
+    if (!this._tshopOpen) return;
+    this._tshopOpen = false; this._tshopHover = -1;
+    this.scene.leaveTavernShop();
+  }
+
+  _tshopLayout(ctx, k0) {
+    let k = k0;
+    for (let pass = 0; pass < 3; pass++) {
+      const g = this._tshopLayoutAt(ctx, k);
+      if (g.panel.h <= this.height - 8 || k <= 0.55) return g;
+      k = Math.max(0.55, k * (this.height - 8) / g.panel.h);   // a short view: shrink it all to fit
+    }
+    return this._tshopLayoutAt(ctx, k);
+  }
+
+  _tshopLayoutAt(ctx, k) {
+    const s = this.scene, icon = Sprites.stamp || { width: 12, height: 13 };
+    const pad = Math.trunc(16 * k), gap = Math.trunc(10 * k), rowPad = Math.trunc(7 * k), rowGap = Math.trunc(8 * k);
+    const stampF = Math.max(1, Math.trunc(2 * k)), heroF = Math.max(1, Math.trunc(3 * k));
+    const hpx = 12 * PT * k, npx = 10.5 * PT * k, tpx = 8.5 * PT * k, bpx = 8 * PT * k, ppx = 10.5 * PT * k;
+    const title = t('Tavern Shop'), unlocked = t('Unlocked'), back = t('Back');
+    const titleW = this._measure(ctx, title, hpx), titleH = Math.round(hpx * 1.3);
+    const numW = this._measure(ctx, String(Math.max(s.stamps, 10)), ppx, 700);
+    const balanceW = icon.width * stampF + Math.trunc(6 * k) + numW;
+    const buyW = Math.round(Math.max(this._measure(ctx, unlocked, ppx, 700), icon.width * stampF + 6 * k + this._measure(ctx, String(HERO_UNLOCK_COST), ppx, 700)) + 28 * k), buyH = Math.trunc(34 * k);
+    const portraitW = 16 * heroF, portraitH = 16 * heroF + heroF * 2;
+    const maxPanel = this.width - 16;
+    let textW = Math.trunc(300 * k);
+    const fixedW = pad * 2 + rowPad * 2 + portraitW + gap * 2 + buyW;   // everything in a row but the words
+    let panelW = fixedW + textW;
+    if (panelW > maxPanel) { textW = Math.max(Math.trunc(110 * k), textW - (panelW - maxPanel)); panelW = fixedW + textW; }
+    panelW = Math.min(Math.max(panelW, pad * 2 + titleW + gap * 2 + balanceW), maxPanel);
+    textW = panelW - fixedW;   // the words get exactly the room the row has, so what is measured here is what is drawn
+    const rows = [], rowHeights = [], lines = [];
+    for (const kind of UNLOCKABLE_HEROES) {
+      const trait = traitSummary(kind, 1), blurb = t(BLURB[kind]);
+      const tl = this._wrapLines(ctx, trait, textW, tpx, 600), bl = this._wrapLines(ctx, blurb, textW, bpx, 400, 'italic ');
+      lines.push({ tl, bl });
+      const nameH = Math.round(npx * 1.3), traitH = Math.round(tl.length * tpx * 1.25), blurbH = Math.round(bl.length * bpx * 1.25);
+      rowHeights.push(Math.max(portraitH, nameH + traitH + blurbH + Math.trunc(4 * k)) + rowPad * 2);
+    }
+    const headH = Math.max(titleH, icon.height * stampF), backH = Math.trunc(34 * k), backW = Math.round(this._measure(ctx, back, ppx, 700) + 48 * k);
+    let total = pad + headH + gap;
+    for (const h of rowHeights) total += h + rowGap;
+    total += backH + pad;
+    const panel = { x: Math.trunc((this.width - panelW) / 2), y: Math.max(4, Math.trunc((this.height - total) / 2)), w: panelW, h: total };
+    let y = panel.y + pad + headH + gap;
+    UNLOCKABLE_HEROES.forEach((kind, i) => {
+      const row = { x: panel.x + pad, y: y, w: panelW - pad * 2, h: rowHeights[i] };
+      const buy = { x: row.x + row.w - rowPad - buyW, y: row.y + Math.trunc((row.h - buyH) / 2), w: buyW, h: buyH };
+      const tx = row.x + rowPad + portraitW + gap;
+      rows.push({
+        kind: kind, row: row, buy: buy, lines: lines[i],
+        portrait: { x: row.x + rowPad, y: row.y + Math.trunc((row.h - portraitH) / 2), w: portraitW, h: portraitH },
+        text: { x: tx, y: row.y + rowPad, w: buy.x - gap - tx, h: row.h - rowPad * 2 }
+      });
+      y += rowHeights[i] + rowGap;
+    });
+    return {
+      k, panel, rows, pad, stampF, heroF, hpx, npx, tpx, bpx, ppx, icon, headH, title, titleW, balanceW, numW,
+      back: { x: panel.x + Math.trunc((panelW - backW) / 2), y: y, w: backW, h: backH }
+    };
+  }
+
+  /** What is under a point: the index of a Buy button (0..), 100 for Back, -1 for neither; and whether it is inside the panel. */
+  _tshopHit(p) {
+    const L = this._tshopLayout(this.ctx, this._uiScale(640));
+    let hit = -1;
+    if (this._inRect(p, L.back)) hit = 100;
+    else L.rows.forEach((r, i) => { if (this._inRect(p, r.buy)) hit = i; });
+    return { hit: hit, inside: this._inRect(p, L.panel) };
+  }
+
+  _drawTShop(ctx) {
+    if (!this._tshopOpen) return;
+    const s = this.scene;
+    ctx.fillStyle = 'rgba(0,0,0,0.745)'; ctx.fillRect(0, 0, this.width, this.height);
+    const L = this._tshopLayout(ctx, this._uiScale(640)), k = L.k, P = L.panel;
+    roundRect(ctx, P.x + 0.5, P.y + 0.5, P.w - 1, P.h - 1, 10 * k);
+    ctx.fillStyle = 'rgba(22,14,44,0.93)'; ctx.fill();
+    ctx.strokeStyle = 'rgba(255,130,120,0.92)'; ctx.lineWidth = 1.8; ctx.stroke();
+    this._text(ctx, t('Tavern Shop'), P.x + L.pad, P.y + L.pad + L.headH / 2, { px: L.hpx, color: 'rgb(255,170,150)' });
+    // the balance
+    const bx = P.x + P.w - L.pad - L.balanceW;
+    this._drawStampIcon(ctx, bx + L.icon.width * L.stampF / 2, P.y + L.pad + L.headH / 2, L.stampF);
+    this._text(ctx, String(s.stamps), bx + L.icon.width * L.stampF + 6 * k, P.y + L.pad + L.headH / 2, { px: L.ppx, color: 'white', weight: 700 });
+    L.rows.forEach((r, i) => {
+      const owned = s.isUnlocked(r.kind), can = !owned && s.canAffordHero, hot = this._tshopHover === i && can;
+      roundRect(ctx, r.row.x + 0.5, r.row.y + 0.5, r.row.w - 1, r.row.h - 1, 8 * k);
+      ctx.fillStyle = 'rgba(40,30,80,0.82)'; ctx.fill();
+      ctx.strokeStyle = owned ? 'rgba(150,230,170,0.9)' : 'rgba(170,150,240,0.75)'; ctx.lineWidth = 1.4; ctx.stroke();
+      const spr = Sprites.party[r.kind];
+      if (spr) {
+        ctx.save(); ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(spr.a, Math.round(r.portrait.x + (r.portrait.w - spr.w * L.heroF) / 2), Math.round(r.portrait.y + r.portrait.h - spr.h * L.heroF), spr.w * L.heroF, spr.h * L.heroF);
+        ctx.restore();
+      }
+      const nameH = Math.round(L.npx * 1.3);
+      this._text(ctx, t(PARTY_NAMES[r.kind]), r.text.x, r.text.y + nameH / 2, { px: L.npx, color: 'white' });
+      let y = r.text.y + nameH;
+      ctx.font = '600 ' + L.tpx + 'px ' + FONT; ctx.fillStyle = 'rgb(255,214,120)'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+      r.lines.tl.forEach((ln, j) => ctx.fillText(ln, r.text.x, y + j * L.tpx * 1.25));
+      y += Math.round(r.lines.tl.length * L.tpx * 1.25) + 4 * k;
+      ctx.font = 'italic 400 ' + L.bpx + 'px ' + FONT; ctx.fillStyle = 'rgb(178,190,232)';
+      r.lines.bl.forEach((ln, j) => ctx.fillText(ln, r.text.x, y + j * L.bpx * 1.25));
+      // the Buy button: the price in stamps, or "Unlocked"
+      const b = r.buy, g = ctx.createLinearGradient(0, b.y, 0, b.y + b.h);
+      g.addColorStop(0, owned ? 'rgba(60,90,70,0.47)' : !can ? 'rgba(70,56,80,0.6)' : hot ? 'rgb(255,150,130)' : 'rgb(238,90,84)');
+      g.addColorStop(1, owned ? 'rgba(40,66,52,0.47)' : !can ? 'rgba(46,36,56,0.6)' : hot ? 'rgb(220,60,64)' : 'rgb(180,36,52)');
+      this._pill(ctx, b.x, b.y, b.w, b.h, 8 * k, g, owned ? 'rgba(150,220,170,0.7)' : can ? 'rgb(255,214,200)' : 'rgba(130,120,150,0.63)', can ? 1.8 : 1.2);
+      if (owned) this._text(ctx, t('Unlocked'), b.x + b.w / 2, b.y + b.h / 2 + 0.5, { px: L.ppx, color: 'rgb(190,240,205)', align: 'center', weight: 700 });
+      else {
+        const price = String(HERO_UNLOCK_COST), pw = this._measure(ctx, price, L.ppx, 700), iw = L.icon.width * L.stampF, total = iw + 6 * k + pw, x0 = b.x + (b.w - total) / 2;
+        this._drawStampIcon(ctx, x0 + iw / 2, b.y + b.h / 2, L.stampF);
+        this._text(ctx, price, x0 + iw + 6 * k, b.y + b.h / 2 + 0.5, { px: L.ppx, color: can ? 'white' : 'rgb(255,170,160)', weight: 700 });
+      }
+    });
+    const bk = L.back, backHot = this._tshopHover === 100;
+    this._pill(ctx, bk.x, bk.y, bk.w, bk.h, 8 * k, backHot ? 'rgba(26,22,60,0.92)' : 'rgba(26,22,60,0.8)', backHot ? 'rgb(255,214,120)' : 'rgba(170,186,240,0.78)', 1.5);
+    this._text(ctx, t('Back'), bk.x + bk.w / 2, bk.y + bk.h / 2 + 0.5, { px: L.ppx, color: 'white', align: 'center', weight: 700 });
+  }
+
+  /** "You received a Tavern Stamp!": a pill under the top corner pills, fading out on its own. */
+  _drawStampToast(ctx) {
+    const left = this.scene.stampToast;
+    if (left <= 0) return;
+    const k = this._uiScale(640), a = Math.min(1, left / 0.6, (STAMP_TOAST_SECONDS - left) / 0.25);
+    if (a <= 0) return;
+    const text = t('You received a Tavern Stamp!'), icon = Sprites.stamp || { width: 12, height: 13 }, stampF = Math.max(1, Math.trunc(2 * k)), px = 10.5 * PT * k;
+    const iconW = icon.width * stampF, tw = this._measure(ctx, text, px);
+    const pw = Math.min(this.width - 16, Math.round(iconW + 8 * k + tw + 28 * k)), ph = Math.round(Math.max(px * 1.3, icon.height * stampF) + 10 * k);
+    const L = this._hudLayout(ctx);
+    let bottom = 40;
+    for (const r of [L.day, L.gold, L.storage, L.berserk, L.np]) if (r) bottom = Math.max(bottom, r.y + r.h + 4);
+    const x = Math.max(8, this.width - 12 - pw), y = bottom * this.hud + 8 * k + (1 - a) * -8;
+    ctx.save();
+    ctx.globalAlpha = a;
+    roundRect(ctx, x + 0.5, y + 0.5, pw - 1, ph - 1, ph / 2);
+    ctx.fillStyle = 'rgba(38,12,30,0.91)'; ctx.fill();
+    ctx.strokeStyle = 'rgb(255,130,120)'; ctx.lineWidth = 1.6; ctx.stroke();
+    this._drawStampIcon(ctx, x + 14 * k + iconW / 2, y + ph / 2, stampF);
+    this._text(ctx, text, x + 14 * k + iconW + 8 * k, y + ph / 2 + 0.5, { px: px, color: 'rgb(255,236,226)' });
+    ctx.restore();
   }
 
   // ---- Scrolls: the button under the hot item button, its row of slots, and the storage-full prompt -------------------------
@@ -1618,6 +1813,12 @@ export class Visualizer {
     const h = { x: p.x / this.hud, y: p.y / this.hud };
     const s = this.scene;
     if (this._sliderDrag) { this._dragSlider(h); this.canvas.style.cursor = 'pointer'; return; }
+    if (this._tshopOpen) {   // the Tavern Shop is up: only it answers the pointer
+      const hit = this._tshopHit(p);
+      this._tshopHover = hit.hit;
+      this.canvas.style.cursor = hit.hit >= 0 ? 'pointer' : 'default';
+      return;
+    }
     if (s.isScrollPrompt) {   // the storage is full: only the list of what to throw away answers
       this._promptHover = this._scrollPromptRowAt(p);
       this.canvas.style.cursor = this._promptHover >= 0 ? 'pointer' : 'default';
@@ -1671,6 +1872,7 @@ export class Visualizer {
     };
     this._overHot = this._inHot(h);
     this._overScroll = this._inScroll(h);
+    this._overTShop = this._inTShop(h);
     const rs = this._scrollOpen ? this._scrollSlotAt(h) : { slot: -1, cross: false };
     this._scrollHover = rs.slot; this._scrollXHover = rs.cross ? rs.slot : -1;
     this._discHover = this._discOpen ? this._discSlotAt(h) : -1;
@@ -1695,7 +1897,7 @@ export class Visualizer {
     }
     this.hover = hover;
     const overCoin = !s.isLevelSelect && !s.isDialogue && !s.isChoosing && s.isCoinAt(p.x, p.y);
-    this.canvas.style.cursor = hover.button || hover.settings || hover.restart || hover.qslider || hover.qauto || hover.tuner || hover.comp || this._overHot || this._overScroll || this._scrollHover >= 0 || this._discHover >= 0 || hover.card >= 0 || hover.tile >= 0 || hover.levelUp || overCoin ? 'pointer' : 'default';
+    this.canvas.style.cursor = hover.button || hover.settings || hover.restart || hover.qslider || hover.qauto || hover.tuner || hover.comp || this._overHot || this._overScroll || this._overTShop || this._scrollHover >= 0 || this._discHover >= 0 || hover.card >= 0 || hover.tile >= 0 || hover.levelUp || overCoin ? 'pointer' : 'default';
   }
 
   _onDown(e) {
@@ -1705,6 +1907,13 @@ export class Visualizer {
     const p = this._point(e);
     const h = { x: p.x / this.hud, y: p.y / this.hud };
     const s = this.scene;
+    if (this._tshopOpen) {
+      const hit = this._tshopHit(p);
+      if (hit.hit >= 0 && hit.hit < 100) s.buyHero(UNLOCKABLE_HEROES[hit.hit]);
+      else if (hit.hit === 100 || !hit.inside) this._closeTShop();
+      return;
+    }
+    if (this._inTShop(h)) { this._tshopOpen = true; this._tshopHover = -1; this._overTShop = false; Sound.play('DiscClick'); return; }
     if (s.isScrollPrompt) {
       const row = this._scrollPromptRowAt(p);
       if (row >= 0) { s.resolveScrollPrompt(row); this._promptHover = -1; }

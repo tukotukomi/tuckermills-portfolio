@@ -126,7 +126,7 @@ export class PixelScene {
 
     this.onProgress = null;   // callback: the saved progress changed
 
-    this._initCoins(); this._initStory(); this._initTraits(); this._initEnemies(); this._initHealth(); this._initItems(); this._initInn(); this._initTips(); this._initScroll();
+    this._initCoins(); this._initStory(); this._initTraits(); this._initEnemies(); this._initHealth(); this._initItems(); this._initInn(); this._initTips(); this._initScroll(); this._initStamps();
     this.starting = false; this.startRects = []; this.signRect = null; this.startHover = -1;
     // The furthest the player has got across all adventures (finished days; the page keeps it) and whether this defeat beat it.
     this.bestDays = 0; this.onBest = null; this.newRecord = false; this.deathCounted = false;
@@ -1024,7 +1024,7 @@ export class PixelScene {
 
   /** Two different playable characters, drawn at random, sit at a campfire; the player picks who leads the party. */
   _beginStart() {
-    const all = PARTY.slice(), picks = [];
+    const all = PARTY.filter(k => this.isUnlocked(k)), picks = [];
     while (picks.length < 2) { const k = all[rnd(all.length)]; if (picks.indexOf(k) < 0) picks.push(k); }
     this.offer = picks;
     this.starting = true;
@@ -1150,11 +1150,12 @@ export class PixelScene {
   }
 
   _beginChoosing() {
+    if (this._yearTavernDay()) this._awardYearStamp();       // the tavern that completes a year pays out a Tavern Stamp
     if (!this._recruitDue()) { this._beginInn(); return; }   // nobody to recruit today (a yearly tavern): straight to the inn
     if (this.party.length >= 6) { this._startOldMan(); return; }
     this.enc = 'Waiting';
     if (this.offer === null) {
-      const pool = PARTY.filter(k => this.party.indexOf(k) < 0);
+      const pool = PARTY.filter(k => this.party.indexOf(k) < 0 && this.isUnlocked(k));
       if (pool.length === 0) { this.enc = 'None'; return; }
       const picks = [];
       while (picks.length < Math.min(2, pool.length)) { const k = pool[rnd(pool.length)]; if (picks.indexOf(k) < 0) picks.push(k); }
@@ -1197,7 +1198,7 @@ export class PixelScene {
     this.arrived = false; this.tavernVisible = false; this.joinT = 0; this.move = 1; this.groupLeft = NaN;
     this.daysCompleted = 0; this.dayPhase = 0; this.yearDay = 0;
     this.notes.length = 0;
-    this._resetStory(); this._resetTips(); this._resetCoins(); this._resetTraits(); this._resetItems(); this._resetScroll();   // (the tips already seen are remembered: they are for new players)
+    this._resetStory(); this._resetTips(); this._resetCoins(); this._resetTraits(); this._resetItems(); this._resetScroll(); this._resetStamps();   // (the tips already seen are remembered: they are for new players)
     this.kills = {};
     this.newRecord = false; this.deathCounted = false;
     this._beginStart();   // and the adventure begins again at the campfire, with a new pair to pick from
@@ -1209,7 +1210,7 @@ export class PixelScene {
   saveState() {
     const f5 = this.dayPhase.toFixed(5);
     return ['3', this.party.map(k => PARTY_ENUM[k]).join(','), f5, String(this.daysCompleted), this.offer ? this.offer.map(k => PARTY_ENUM[k]).join(',') : '',
-      this._saveStoryFields(), String(this.gold), this._saveTraitFields(), this._saveBestiaryFields()].concat(this._saveItemFields(), [this._saveHpFields(), this._saveBerserkFields(), this.starting ? '1' : '', this.newRecord ? '1' : '', this._saveScrollFields()]).join('|');
+      this._saveStoryFields(), String(this.gold), this._saveTraitFields(), this._saveBestiaryFields()].concat(this._saveItemFields(), [this._saveHpFields(), this._saveBerserkFields(), this.starting ? '1' : '', this.newRecord ? '1' : '', this._saveScrollFields(), this._saveStampFields()]).join('|');
   }
 
   loadState(state) {
@@ -1254,10 +1255,11 @@ export class PixelScene {
       this._loadTraitFields(p.length > 10 ? p[10] : null);
       this._loadBestiaryFields(p.length > 11 ? p[11] : null);
       this._loadItemFields(p.length > 12 ? p[12] : null, p.length > 13 ? p[13] : null, p.length > 14 ? p[14] : null);   // the bag, the hot slots, the Merchant's last day
-      if (startFlag && this.offer !== null && this.party.length === 1) { this.starting = true; this.enc = 'Waiting'; this.camp = 1; }   // saved at the campfire, before a hero was picked
+      if (startFlag && this.offer !== null && this.party.length === 1) { this.starting = true; this.startOfferFromSave = true; this.enc = 'Waiting'; this.camp = 1; }   // saved at the campfire, before a hero was picked
       this._loadBerserkFields(p.length > 16 ? p[16] : null);   // the Monster Berserker's multiplier and time left (absent in older saves)
       this._loadHpFields(p.length > 15 ? p[15] : null);
-      this._loadScrollFields(p.length > 19 ? p[19] : null);   // the scrolls carried and who has Rerevive (absent in older saves)
+      this._loadScrollFields(p.length > 19 ? p[19] : null);
+      this._loadStampFields(p.length > 20 ? p[20] : null);   // the latest year a stamp was paid out for (absent in older saves)   // the scrolls carried and who has Rerevive (absent in older saves)
       this.newRecord = p.length > 18 && p[18] === '1';   // a reload on the defeat screen keeps its verdict
       this.deathCounted = this.isGameOver;   // members below full health (absent in older saves: everyone is at full)
     } catch (e) { /* a bad save just starts a fresh party */ }
@@ -1340,7 +1342,7 @@ export class PixelScene {
 }
 
 // The exe's save strings name companions with C# enum names.
-export const PARTY_ENUM = { paca: 'Paca', thief: 'Thief', warrior: 'Warrior', lightmage: 'LightMage', firemage: 'FireMage', fae: 'Fae', druid: 'Druid' };
+export const PARTY_ENUM = { paca: 'Paca', thief: 'Thief', warrior: 'Warrior', lightmage: 'LightMage', firemage: 'FireMage', fae: 'Fae', druid: 'Druid', paladin: 'Paladin', shadowknight: 'ShadowKnight' };
 export const KIND_FROM_ENUM = {};
 for (const k of Object.keys(PARTY_ENUM)) KIND_FROM_ENUM[PARTY_ENUM[k]] = k;
 // Saves written before the art rework used the old names; they still load.
@@ -1355,6 +1357,7 @@ import { installHealth, setKindNames } from './health.js';
 import { installInn } from './inn.js';
 import { installTutorial } from './tutorial.js';
 import { installScroll } from './scrolls.js';
+import { installStamps } from './stamps.js';
 setKindNames(k => PARTY_ENUM[k], n => KIND_FROM_ENUM[n]);
 installHealth(PixelScene);
 installInn(PixelScene);
@@ -1365,3 +1368,4 @@ installEnemies(PixelScene);
 installItems(PixelScene);
 installTutorial(PixelScene);
 installScroll(PixelScene);
+installStamps(PixelScene);

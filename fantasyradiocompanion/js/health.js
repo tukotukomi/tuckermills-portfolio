@@ -5,6 +5,7 @@
 import { C, CA } from './util.js';
 import { Sprites } from './sprites.js';
 import { t } from './i18n.js';
+import { auraReduction, AURA_FLOOR } from './traits.js';   // (traits.js imports this file too; each uses the other only inside functions)
 
 /** Hit points at full health. Everyone has 50 for now; the Warrior, the front-liner, has 80. */
 /** The HP a level-up adds, from `fromLevel` to the next. Four tiers, every one at 10 or more in the early levels: the tank (Warrior)
@@ -16,13 +17,15 @@ export function hpGain(kind, fromLevel) {
     case 'warrior': return 14 + (l - 1);
     case 'paca': return 12 + Math.trunc((l - 1) / 2);
     case 'thief': return 11;
+    case 'paladin': return 13 + Math.trunc((l - 1) / 2);       // sturdy, a little under the Warrior
+    case 'shadowknight': return 11 + Math.trunc((l - 1) / 3);
     default: return l <= 5 ? 10 : Math.max(6, 9 - Math.trunc((l - 6) / 3));
   }
 }
 
 /** Hit points at full health at `level`: a base (50; the Warrior, the front-liner, 80) plus what each level-up has added. */
 export function maxHp(kind, level) {
-  let hp = kind === 'warrior' ? 80 : 50;
+  let hp = kind === 'warrior' ? 80 : kind === 'paladin' ? 70 : kind === 'shadowknight' ? 60 : 50;
   for (let l = 1; l < level; l++) hp += hpGain(kind, l);
   return hp;
 }
@@ -92,11 +95,18 @@ export function installHealth(P) {
 
   m._lineIndexOf = function (kind) { return this._lineOrder().indexOf(kind); };
 
+  /** While the Paladin is on his feet every hit on the party does less damage (never below the floor). */
+  m._auraDamage = function (amount) {
+    if (!this._active('paladin')) return amount;
+    return Math.max(Math.min(amount, AURA_FLOOR), amount - auraReduction(this.levelOf('paladin')));
+  };
+
   /** Takes HP off a member. At 0 they faint. */
   m.damageMember = function (kind, amount) {
     if (this.party.indexOf(kind) < 0 || amount <= 0) return;
     const before = this.hpOf(kind);
     if (before <= 0) return;   // already out cold
+    amount = this._auraDamage(amount);        // the Paladin's Holy Aura takes a little off every hit
     amount = this._hatDamage(kind, amount);   // a Blue Hat halves what its wearer takes
     this.hp[kind] = Math.max(0, before - amount);
     if (this.hp[kind] === 0 && this._tryRerevive(kind)) return;   // Rerevive: they get up again on the spot with half their HP

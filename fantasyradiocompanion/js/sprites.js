@@ -2,8 +2,8 @@
 
 import { flipImage, brightenImage } from './util.js';
 
-export const PARTY = ['paca', 'thief', 'warrior', 'lightmage', 'firemage', 'fae', 'druid'];
-export const PARTY_NAMES = { paca: 'Paca', thief: 'Thief', warrior: 'Warrior', lightmage: 'Light Mage', firemage: 'Fire Mage', fae: 'Fae', druid: 'Druid' };
+export const PARTY = ['paca', 'thief', 'warrior', 'lightmage', 'firemage', 'fae', 'druid', 'paladin', 'shadowknight'];
+export const PARTY_NAMES = { paca: 'Paca', thief: 'Thief', warrior: 'Warrior', lightmage: 'Light Mage', firemage: 'Fire Mage', fae: 'Fae', druid: 'Druid', paladin: 'Paladin', shadowknight: 'Shadow Knight' };
 
 function load(src) {
   return new Promise((resolve, reject) => {
@@ -41,6 +41,7 @@ export const Sprites = {
       a: this.img.oldman_a, b: this.img.oldman_b, la: this.img.oldman_left_a, lb: this.img.oldman_left_b,
       w: this.img.oldman_a.width, h: this.img.oldman_a.height
     };
+    this.stamp = this.img.stamp;   // the red Tavern Stamp
     this.crystal = this.img.crystal;
     this.crystalBright = brightenImage(this.crystal, 0.55);
     this.coin = this.img.coin;

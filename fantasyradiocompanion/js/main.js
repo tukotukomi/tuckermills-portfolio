@@ -31,6 +31,12 @@ async function main() {
   // The new-player tips already shown, kept across restarts (each comes up once, ever).
   for (const k of store.get('tips', '').split(',')) if (k) scene.tipsSeen.add(k);
   scene.onTips = list => store.set('tips', list.join(','));
+  // The Tavern Stamps and the heroes unlocked with them belong to the player, not to an adventure: kept across restarts and new rounds.
+  scene.stamps = Math.max(0, parseInt(store.get('stamps', '0'), 10) || 0);
+  scene.onStamps = n => store.set('stamps', String(n));
+  for (const k of store.get('unlocked', '').split(',')) if (k && PARTY.indexOf(k) >= 0) scene.unlocked.add(k);
+  scene.onUnlocked = list => store.set('unlocked', list.join(','));
+  scene.unlockedLoaded();   // (the pair at the fire may have been drawn before this was known)
   const player = new Player();
   const canvas = $('scene');
 

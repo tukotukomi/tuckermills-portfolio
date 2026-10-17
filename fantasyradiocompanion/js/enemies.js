@@ -327,7 +327,7 @@ export function installEnemies(P) {
     }
     for (let i = this.bursts.length - 1; i >= 0; i--) {
       const b = this.bursts[i];
-      b.age += dt / (b.kind === 'death' ? 0.8 : b.kind === 'blood' ? 0.7 : b.kind === 'fire' ? 0.4 : b.kind === 'toxin' ? 0.55 : b.kind === 'shout' ? 0.45 : b.kind === 'ash' ? 0.9 : b.kind === 'flames' ? 0.75 : 0.3);
+      b.age += dt / (b.kind === 'death' ? 0.8 : b.kind === 'blood' ? 0.7 : b.kind === 'fire' ? 0.4 : b.kind === 'toxin' ? 0.55 : b.kind === 'shout' ? 0.45 : b.kind === 'ash' ? 0.9 : b.kind === 'flames' ? 0.75 : b.kind === 'drain' ? 0.6 : 0.3);
       if (b.age >= 1) this.bursts.splice(i, 1);
     }
     if (this.peckAnim >= 0) { this.peckAnim += dt / 0.25; if (this.peckAnim >= 1) this.peckAnim = -1; }
@@ -695,6 +695,14 @@ export function installEnemies(P) {
             g.rect(ax, ay, k % 3 === 0 ? 2 : 1, 1, k % 2 === 0 ? CA(fade, 168, 166, 178) : CA(fade, 120, 118, 130));
           }
           g.rect(x - 1, y - 1, 2, 2, CA(Math.trunc(255 * Math.max(0, 1 - u * 3)), 255, 150, 60));
+          break;
+        }
+        case 'drain': {   // dark purple wisps pulled out of the enemy and drawn away to the left, towards the party
+          for (let k = 0; k < 6; k++) {
+            const ph = Math.min(1, u * 1.2 + k * 0.05);
+            const dx = x + Math.trunc(Math.sin(k * 2.1) * 4) - Math.trunc(ph * (14 + k * 3)), dy = y + Math.trunc(Math.cos(k * 1.7) * 5) - Math.trunc(Math.sin(ph * Math.PI) * 6);
+            g.rect(dx, dy, 2, 2, CA(fade, k % 2 === 0 ? 150 : 214, 70, k % 2 === 0 ? 200 : 255));
+          }
           break;
         }
         case 'toxin': {   // a few green bubbles lifting off where the poison bites

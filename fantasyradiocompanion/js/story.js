@@ -421,10 +421,10 @@ export function installStory(P) {
 
 function px(g, c, x, y) { g.rect(Math.round(x), Math.round(y), 1, 1, c); }
 
-export const ENUM = { paca: 'Paca', thief: 'Thief', warrior: 'Warrior', lightmage: 'LightMage', firemage: 'FireMage', fae: 'Fae', druid: 'Druid' };
+export const ENUM = { paca: 'Paca', thief: 'Thief', warrior: 'Warrior', lightmage: 'LightMage', firemage: 'FireMage', fae: 'Fae', druid: 'Druid', paladin: 'Paladin', shadowknight: 'ShadowKnight' };
 export const FROM_ENUM = {};
 for (const k of Object.keys(ENUM)) FROM_ENUM[ENUM[k]] = k;
 // Saves written before the art rework used the old names; they still load.
 Object.assign(FROM_ENUM, { Chocobo: 'paca', MithraThief: 'thief', WhiteMage: 'lightmage', BlackMage: 'firemage', Moogle: 'fae' });
-const NAMES = { paca: 'Paca', thief: 'Thief', warrior: 'Warrior', lightmage: 'Light Mage', firemage: 'Fire Mage', fae: 'Fae', druid: 'Druid' };
+const NAMES = { paca: 'Paca', thief: 'Thief', warrior: 'Warrior', lightmage: 'Light Mage', firemage: 'Fire Mage', fae: 'Fae', druid: 'Druid', paladin: 'Paladin', shadowknight: 'Shadow Knight' };
 export function displayName(kind) { return t(NAMES[kind] || kind); }

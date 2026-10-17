@@ -7,8 +7,8 @@ import { maxHp, hpGain } from './health.js';
 import { Sound } from './sfx.js';
 import { t } from './i18n.js';
 
-export const TRAIT_OF = { paca: 'ItemStorage', lightmage: 'Heal', firemage: 'Fireball', thief: 'LuckyCoins', warrior: 'Huzzah', fae: 'StarHat', druid: 'NaturalToxin' };
-export const TRAIT_OWNER = { ItemStorage: 'paca', Heal: 'lightmage', Fireball: 'firemage', LuckyCoins: 'thief', Huzzah: 'warrior', StarHat: 'fae', NaturalToxin: 'druid' };
+export const TRAIT_OF = { paca: 'ItemStorage', lightmage: 'Heal', firemage: 'Fireball', thief: 'LuckyCoins', warrior: 'Huzzah', fae: 'StarHat', druid: 'NaturalToxin', paladin: 'HolyAura', shadowknight: 'LifeDrain' };
+export const TRAIT_OWNER = { ItemStorage: 'paca', Heal: 'lightmage', Fireball: 'firemage', LuckyCoins: 'thief', Huzzah: 'warrior', StarHat: 'fae', NaturalToxin: 'druid', HolyAura: 'paladin', LifeDrain: 'shadowknight' };
 
 export function storageSlots(level) { return 1; }
 export function healInterval(level) { return 10; }
@@ -26,9 +26,9 @@ export function starHatDuration(level) { return 60; }
 export function peckDamage(level) { return 1; }
 export function peckInterval(level) { return 1.0; }
 // The basic attacks of the other four: 1 damage every few seconds, but only from the front of the line and right next to the enemy.
-export const BASIC_ATTACKERS = ['thief', 'fae', 'lightmage', 'firemage'];
+export const BASIC_ATTACKERS = ['thief', 'fae', 'lightmage', 'firemage', 'paladin', 'shadowknight'];
 export const BASIC_DAMAGE = 1;
-export function basicInterval(kind) { return { thief: 2, fae: 3, lightmage: 3, firemage: 5 }[kind] || 5; }
+export function basicInterval(kind) { return { thief: 2, fae: 3, lightmage: 3, firemage: 5, paladin: 3, shadowknight: 4 }[kind] || 5; }
 export function fireballDamage(level) { return 5; }
 export const SPELL_RANGE_BLOCKS = 25;   // how far a thrown spell goes: the fireball burns out, the toxin falls, after this many blocks
 export function fireballRangeBlocks(level) { return SPELL_RANGE_BLOCKS; }
@@ -39,6 +39,11 @@ export function axeRangeBlocks(level) { return 10; }   // blocks of grass it tra
 export const BLOCK_PIXELS = 8;                          // one block of grass = one repeat of the ground's pattern
 export function crossbowDamage(level) { return 2; }    // the Thief's crossbow bolt, for when he is out of melee reach
 export function crossbowInterval(level) { return 5.0; }
+export function auraReduction(level) { return 1; }           // the Paladin's Holy Aura: damage the party takes from each hit is cut by this much...
+export const AURA_FLOOR = 1;                                 // ...but never below this
+export function lifeDrainInterval(level) { return 8; }       // the Shadow Knight's Life Drain: seconds of adventuring between drains
+export function lifeDrainDamage(level) { return 3; }         // taken off the enemy...
+export function lifeDrainHeal(level) { return 3; }           // ...and given to the weakest member
 export function toxinInterval(level) { return 10; }   // seconds of adventuring between the Druid's casts
 export function toxinDamage(level) { return 2; }       // taken off the enemy at every tick
 export function toxinTicks(level) { return 5; }        // one tick a second, so 5 seconds
@@ -50,6 +55,7 @@ export function traitInterval(trait, level) {
     case 'Huzzah': return huzzahInterval(level);
     case 'StarHat': return starHatInterval(level);
     case 'NaturalToxin': return toxinInterval(level);
+    case 'LifeDrain': return lifeDrainInterval(level);
   }
   return 0;
 }
@@ -64,6 +70,8 @@ export function traitSummary(kind, level) {
     case 'Huzzah': return t('Huzzah!: party damage x{m} for {d} s every {s} s', { m: huzzahDamageMultiplier(level), d: huzzahDuration(level), s: huzzahInterval(level) });
     case 'StarHat': return t('Star Hat: red (+1 HP / 2 s) or blue (half damage) hats for {d} min every {s} min', { d: starHatDuration(level) / 60, s: starHatInterval(level) / 60 });
     case 'NaturalToxin': return t('Natural Toxin: {d} damage a second for {n} s, every {s} s', { d: toxinDamage(level), n: toxinTicks(level), s: toxinInterval(level) });
+    case 'HolyAura': return t('Holy Aura: the party takes {n} less damage from each hit', { n: auraReduction(level) });
+    case 'LifeDrain': return t('Life Drain: takes {d} HP from the enemy and gives {h} to the weakest ally every {s} s', { d: lifeDrainDamage(level), h: lifeDrainHeal(level), s: lifeDrainInterval(level) });
   }
   return '';
 }
@@ -85,7 +93,7 @@ const AXE_FRAMES = (() => {
   }
   return frames;
 })();
-const TIMED_TRAITS = ['Heal', 'Fireball', 'Huzzah', 'StarHat', 'NaturalToxin'];
+const TIMED_TRAITS = ['Heal', 'Fireball', 'Huzzah', 'StarHat', 'NaturalToxin', 'LifeDrain'];
 const GLOB_SPEED = 100;  // the Druid's toxin glob, scene pixels per second
 const GLOB_ARC = 8;      // how high the lob rises above the straight line
 const SHOUT_SECONDS = 2.2;
@@ -177,7 +185,7 @@ export function installTraits(P) {
       if (left === undefined) left = traitInterval(trait, level);
       left -= dt;
       if (left <= 0) {
-        if (trait === 'NaturalToxin' && !this._toxinTargetReady()) left = 0;   // ready, and waiting for something to cast it on
+        if ((trait === 'NaturalToxin' && !this._toxinTargetReady()) || (trait === 'LifeDrain' && !this._drainTargetReady())) left = 0;   // ready, and waiting for something to cast it on
         else { this._fireTrait(trait, level); left = traitInterval(trait, level); }
       }
       this.traitTimer[trait] = left;
@@ -233,6 +241,9 @@ export function installTraits(P) {
         break;
       case 'NaturalToxin':
         this._castToxin();
+        break;
+      case 'LifeDrain':
+        this._castLifeDrain(level);
         break;
     }
   };
@@ -372,6 +383,21 @@ export function installTraits(P) {
     const er = this._enemyRect(e);
     this.bolts.push({ startX: sx, startY: sy, endY: er.y + er.h * 0.45, range: Math.max(6, e.x - sx), travel: 0, x: sx, y: sy });
     Sound.play('BowShot');
+  };
+
+  m._drainTargetReady = function () { return this.enemy !== null && this.enemy.deathT < 0 && this.enemy.engaged; };
+
+  /** The Shadow Knight's Life Drain: a little of the enemy's life is torn away and given to the weakest member of the party. */
+  m._castLifeDrain = function (level) {
+    const e = this.enemy;
+    if (e === null || e.deathT >= 0) return;
+    this._damageEnemy(e, this._withHuzzah(lifeDrainDamage(level)), false, e.x, 0);
+    const er = this._enemyRect(e);
+    this.bursts.push({ x: er.x + er.w / 2.0, y: er.y + er.h * 0.45, kind: 'drain', age: 0 });
+    const target = this._weakestMember(), amount = lifeDrainHeal(level);
+    this._applyHeal(target, amount);
+    this.heals.push({ from: 'shadowknight', to: target, amount: amount, age: 0 });
+    Sound.play('Heal');
   };
 
   /** The toxin only goes off with something to cast it on: an enemy that is alive and on screen. */

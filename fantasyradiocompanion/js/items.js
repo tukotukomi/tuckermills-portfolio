@@ -331,6 +331,7 @@ export function installItems(P) {
 
   m._advanceItemEffects = function (dt) {
     this._advanceScroll(dt);
+    this._advanceStamps(dt);
     if (this.isShopping) this.shopT += dt;
     if (this.synergyFlash > 0) this.synergyFlash = Math.max(0, this.synergyFlash - dt);
     if (this.buyFlash > 0) this.buyFlash = Math.max(0, this.buyFlash - dt);
