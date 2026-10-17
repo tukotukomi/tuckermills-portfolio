@@ -10,6 +10,7 @@ import { Sound } from './sfx.js';
 import { ITEM_DEFS, HOT_SLOT_COUNT } from './items.js';
 import { t, isCjk } from './i18n.js';
 import { QUALITY, QUALITY_MODES, QUALITY_LEVELS, AutoQuality, guessLevel, isLevel } from './quality.js';
+import { SCROLL_DEFS } from './scrolls.js';
 
 export const ZOOMED_SCALE = 5;
 export const PARTY_ZOOM_OUT = 0.8;   // the party is drawn at about 80% of the size it would otherwise be, in every view (20% zoomed out)
@@ -68,6 +69,8 @@ export class Visualizer {
     this._settingsOpen = false;   // the cog's menu
     // Quality (Auto, Low, Medium, High): see quality.js. Auto starts from a guess about the device and then watches the frames.
     this._qMode = 'auto'; this._q = QUALITY.high; this._lastDraw = 0; this._sliderDrag = false;
+    this._scrollDown = false; this._scrollOpen = false; this._scrollByPress = false; this._overScroll = false; this._scrollDownAt = 0;   // the scroll button and its row of slots
+    this._scrollHover = -1; this._scrollXHover = -1; this._promptHover = -1;
     this._auto = new AutoQuality(guessLevel(IS_MOBILE), () => { this._applyQuality(); this._saveQuality(); });
     this._applyQuality();
     document.addEventListener('visibilitychange', () => { this.last = performance.now(); this._auto.pause(); });
@@ -135,6 +138,8 @@ export class Visualizer {
     const level = this.scene.marching && this.host.level ? this.host.level() : -1;
     this.scene.advance(dt, level);
     if (this.scene.isTipActive) { this._discOpen = false; this._hotDown = false; }   // no switching potions under a tip
+    if (this.scene.isTipActive || this.scene.isScrollPrompt || this.scene.isWaiting || this.scene.isSwapping) { this._scrollOpen = false; this._scrollDown = false; }
+    if (this._scrollDown && !this._scrollOpen && performance.now() - this._scrollDownAt >= 450) { this._scrollOpen = true; this._scrollByPress = true; Sound.play('DiscClick'); }   // held: the carried scrolls
     if (this._hotDown && !this._discOpen && performance.now() - this._hotDownAt >= 450) {   // held: the disc of four
       this._discOpen = true; this._discByPress = true;
       Sound.play('DiscClick');
@@ -214,14 +219,17 @@ export class Visualizer {
     this._drawTunerButton(ctx);
     this._drawCompendiumButton(ctx);
     this._drawHotButton(ctx);
+    this._drawScrollButton(ctx);
     this._drawMultiplierPicker(ctx);
     this._drawDisc(ctx);
+    this._drawScrollPanel(ctx);
     this._drawSettingsMenu(ctx);
     this._drawInnMenu(ctx);
     this._drawGameOver(ctx);
     ctx.restore();
     this._drawShop(ctx);
     this._drawTip(ctx);
+    this._drawScrollPrompt(ctx);
   }
 
   _text(ctx, str, x, y, o) {
@@ -269,7 +277,7 @@ export class Visualizer {
     const L = { day: Object.assign(place(day.w), { leftW: day.leftW, seasonW: day.seasonW }), gold: null, storage: null, berserk: null, np: null };
     const goldW = Math.max(62, Math.round(36 + this._measure(ctx, this.scene.gold.toLocaleString('en-US'), 10.5 * PT) + 10));
     L.gold = place(goldW);
-    if (this.scene.itemStorage > 0) L.storage = place(Math.round(8 + 16 + 6 + this._measure(ctx, '+' + this.scene.itemStorage, 9.5 * PT) + 10));
+    if (!this.scene.starting) L.storage = place(Math.round(8 + 16 + 6 + this._measure(ctx, this.scene.scrollCount + '/' + this.scene.scrollCapacity, 9.5 * PT) + 10));
     if (this.scene.berserkLeft > 0) L.berserk = place(Math.round(this._measure(ctx, this._berserkText(), 9.5 * PT) + 22));
     const n = this._np();
     if (n) {
@@ -539,7 +547,7 @@ export class Visualizer {
   }
 
   _drawStorageChip(ctx) {
-    if (this.scene.itemStorage <= 0) return;
+    if (this.scene.starting) return;   // (the satchel and the scrolls carried, out of how many it holds: 1, and +1 from the Paca)
     const r = this._storageRect(ctx);
     this._pill(ctx, r.x, r.y, r.w, r.h, 6, rgba(12, 16, 44, 0.59), 'rgba(214,168,96,0.86)', 1.4);
     const bx = r.x + 8, by = r.y + 7;
@@ -552,7 +560,7 @@ export class Visualizer {
     ctx.fillStyle = 'rgb(255,218,100)'; ctx.fillRect(bx + 6, by + 4, 4, 4);
     ctx.strokeStyle = 'rgb(70,38,14)'; ctx.lineWidth = 1; ctx.strokeRect(bx + 0.5, by + 1.5, 15, 10);
     ctx.restore();
-    this._text(ctx, '+' + this.scene.itemStorage, r.x + 8 + 16 + 6, r.y + r.h / 2 + 0.5, { px: 9.5 * PT, color: 'white' });
+    this._text(ctx, this.scene.scrollCount + '/' + this.scene.scrollCapacity, r.x + 8 + 16 + 6, r.y + r.h / 2 + 0.5, { px: 9.5 * PT, color: this.scene.scrollCount >= this.scene.scrollCapacity ? 'rgb(255,226,150)' : 'white' });
   }
 
   _drawTunerButton(ctx) {
@@ -714,6 +722,7 @@ export class Visualizer {
     if (this.scene.isWaiting) { this.scene.cancelTargeting(); return true; }
     if (this.scene.isSwapping) { this.scene.innCancel(); return true; }
     if (this._settingsOpen) { this._settingsOpen = false; return true; }
+    if (this._scrollOpen) { this._scrollOpen = false; this._scrollDown = false; return true; }
     if (this._discOpen) { this._discOpen = false; this._hotDown = false; return true; }
     if (this.scene.isShopping) { if (this._shopInfoId) this._shopInfoId = null; else this.scene.leaveShop(); return true; }
     return false;
@@ -725,6 +734,22 @@ export class Visualizer {
     if (this.popupOpen) return;
     const p = this._point(e);
     const h = { x: p.x / this.hud, y: p.y / this.hud };
+    if (this._scrollOpen) {
+      // The release that ends the long press only opens the row. After that: a cross throws an item away, a slot selects it, anywhere else closes.
+      const rs = this._scrollSlotAt(h), opened = this._scrollByPress;
+      this._scrollByPress = false; this._scrollDown = false;
+      if (!opened) {
+        if (rs.slot >= 0 && rs.cross) this.scene.discardScroll(rs.slot);
+        else if (rs.slot >= 0) { this.scene.selectScroll(rs.slot); this._scrollOpen = false; }
+        else this._scrollOpen = false;
+      }
+      return;
+    }
+    if (this._scrollDown) {
+      this._scrollDown = false;
+      if (this._inScroll(h)) this.scene.useScroll();
+      return;
+    }
     if (this._discOpen) {
       const slot = this._discSlotAt(h);
       const opened = this._discByPress;
@@ -777,7 +802,7 @@ export class Visualizer {
     if (this.scene.isPicking && this.vh < 180) return;   // a short view has no room for the words beside the buttons
     const label = t(this.scene.isPicking ? 'Monster damage multiplier'
       : this.scene.isSwapping ? (this.scene.swapFirstKind ? 'Now choose who to swap with' : 'Choose two heroes to swap')
-        : this.scene.targetItem === 'PotionBlue' ? 'Choose who to revive' : 'Choose who to heal'), px = 8.5 * PT, w = Math.round(this._measure(ctx, label, px) + 20);
+        : this.scene.targetScroll !== null ? 'Choose who gets Rerevive' : this.scene.targetItem === 'PotionBlue' ? 'Choose who to revive' : 'Choose who to heal'), px = 8.5 * PT, w = Math.round(this._measure(ctx, label, px) + 20);
     let x = r.x + r.w + 8, y = r.y + (r.h - 24) / 2;
     if (this.scene.isPicking) {   // over the middle of the buttons rather than beside the cross, where it would run into them
       const mr = this._multiplierRects(), mid = Math.trunc((mr[0].x + mr[4].x + mr[4].w) / 2);
@@ -984,6 +1009,154 @@ export class Visualizer {
     this._drawItemIcon(ctx, id, r.x + r.w / 2, r.y + r.h / 2, this._compactDisc ? 1 : 2, n <= 0);
     this._drawCountBadge(ctx, s.isInfinite(id) ? -1 : n, r.x + r.w + 2, r.y + r.h + 2);
     if (this._overHot && !this._discOpen && !tipLit) this._tip(ctx, t('Tap: use   Hold: switch'), r.x + r.w + 10, r.y + r.h / 2, true);
+  }
+
+  // ---- Scrolls: the button under the hot item button, its row of slots, and the storage-full prompt -------------------------
+
+  /** The round button below the hot item button (beside it when there is no room below, as in the short party strip). */
+  get _scrollRect() {
+    const h = this._hotRect;
+    if (!this._compactDisc) {
+      const below = { x: h.x, y: h.y + h.h + 16, w: h.w, h: h.h };
+      if (!this.zoomed || below.y + below.h + 10 <= this._tunerRect.y) return below;
+    }
+    return { x: h.x + h.w + 10, y: h.y, w: h.w, h: h.h };
+  }
+
+  get _scrollVisible() {
+    const s = this.scene;
+    return this._hotVisible && !s.isWaiting && !s.isSwapping && !s.isScrollPrompt && !s.isTipActive && !s.isLevelSelect;
+  }
+
+  _inScroll(h) {
+    if (!this._scrollVisible) return false;
+    const r = this._scrollRect, dx = h.x - (r.x + r.w / 2), dy = h.y - (r.y + r.h / 2);
+    return dx * dx + dy * dy <= (r.w / 2) * (r.w / 2);
+  }
+
+  _scrollSlotCenter(i) { const r = this._scrollRect; return { x: r.x + r.w + 12 + 15 + 4 + i * 38, y: r.y + r.h / 2 }; }
+  get _scrollPanelBounds() { const r = this._scrollRect; return { x: r.x + r.w + 12, y: r.y + r.h / 2 - 21, w: this.scene.scrollCapacity * 38 + 8, h: 42 }; }
+  _scrollXCenter(i) { const c = this._scrollSlotCenter(i); return { x: c.x + 12, y: c.y - 12 }; }
+
+  /** The slot under a point in the open row, and whether the point is on its cross ({ slot: -1 } for none). */
+  _scrollSlotAt(h) {
+    for (let i = this.scene.scrollCount - 1; i >= 0; i--) {
+      const x = this._scrollXCenter(i);
+      if ((h.x - x.x) * (h.x - x.x) + (h.y - x.y) * (h.y - x.y) <= 64) return { slot: i, cross: true };
+    }
+    for (let i = 0; i < this.scene.scrollCapacity; i++) {
+      const c = this._scrollSlotCenter(i);
+      if ((h.x - c.x) * (h.x - c.x) + (h.y - c.y) * (h.y - c.y) <= 17 * 17) return { slot: i < this.scene.scrollCount ? i : -1, cross: false };
+    }
+    return { slot: -1, cross: false };
+  }
+
+  _drawScrollIcon(ctx, id, cx, cy, factor) {
+    const img = Sprites.scroll && Sprites.scroll[id];
+    if (!img) return;
+    const w = img.width * factor, h = img.height * factor;
+    ctx.save();
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(img, Math.round(cx - w / 2), Math.round(cy - h / 2), w, h);
+    ctx.restore();
+  }
+
+  /** A badge with some words in it, hung off the lower right of a button (the count of scrolls carried, out of what fits). */
+  _drawTextBadge(ctx, s, right, bottom, full) {
+    const w = Math.round(this._measure(ctx, s, 8.5 * PT) + 8), x = right - w, y = bottom - 14;
+    this._pill(ctx, x, y, w, 14, 6, 'rgba(22,18,52,0.92)', 'rgba(200,150,255,0.86)', 1);
+    this._text(ctx, s, x + w / 2, y + 7.5, { px: 8.5 * PT, color: full ? 'rgb(255,226,150)' : 'white', align: 'center' });
+  }
+
+  _drawScrollButton(ctx) {
+    if (!this._scrollVisible) return;
+    const s = this.scene, r = this._scrollRect, has = s.scrollCount > 0, hot = this._overScroll || this._scrollDown || this._scrollOpen;
+    const cx = r.x + r.w / 2, cy = r.y + r.h / 2;
+    ctx.beginPath(); ctx.arc(cx, cy, (r.w - 1) / 2, 0, Math.PI * 2);
+    ctx.fillStyle = rgba(28, 14, 52, hot ? 0.75 : 0.47); ctx.fill();
+    ctx.strokeStyle = hot ? 'rgb(235,190,255)' : rgba(190, 150, 255, 0.78); ctx.lineWidth = 1.6;
+    ctx.setLineDash(has ? [] : [2, 3]); ctx.stroke(); ctx.setLineDash([]);
+    if (has) this._drawScrollIcon(ctx, s.scrolls[s.scrollSelected], cx, cy, this._compactDisc ? 1 : 2);
+    else { ctx.fillStyle = 'rgba(200,170,255,0.43)'; ctx.fillRect(cx - 1, cy - 5, 3, 11); ctx.fillRect(cx - 5, cy - 1, 11, 3); }   // an empty slot: a faint star
+    this._drawTextBadge(ctx, s.scrollCount + '/' + s.scrollCapacity, r.x + r.w + 2, r.y + r.h + 2, s.scrollCount >= s.scrollCapacity);
+    if (this._overScroll && !this._scrollOpen) this._tip(ctx, t(has ? 'Scroll: tap to use, hold to choose' : 'Scrolls: none carried'), r.x + r.w + 10, r.y + r.h / 2, true);
+  }
+
+  _drawScrollPanel(ctx) {
+    if (!this._scrollOpen || !this._scrollVisible) return;
+    const s = this.scene, b = this._scrollPanelBounds;
+    this._pill(ctx, b.x, b.y, b.w, b.h, b.h / 2, 'rgba(18,14,46,0.88)', 'rgba(200,150,255,0.9)', 1.8);
+    for (let i = 0; i < s.scrollCapacity; i++) {
+      const c = this._scrollSlotCenter(i), filled = i < s.scrollCount, selected = filled && i === s.scrollSelected, hover = filled && i === this._scrollHover;
+      ctx.beginPath(); ctx.arc(c.x, c.y, 15, 0, Math.PI * 2);
+      ctx.fillStyle = hover ? 'rgba(52,40,110,0.92)' : 'rgba(26,24,74,0.75)'; ctx.fill();
+      ctx.strokeStyle = selected ? 'rgb(255,214,120)' : rgba(170, 150, 240, filled ? 0.78 : 0.43); ctx.lineWidth = selected ? 2.4 : 1.4;
+      ctx.setLineDash(filled ? [] : [2, 3]); ctx.stroke(); ctx.setLineDash([]);
+      if (!filled) continue;
+      this._drawScrollIcon(ctx, s.scrolls[i], c.x, c.y, 1);
+      const x = this._scrollXCenter(i);
+      ctx.beginPath(); ctx.arc(x.x, x.y, 6, 0, Math.PI * 2);
+      ctx.fillStyle = i === this._scrollXHover ? 'rgb(220,70,70)' : 'rgba(70,30,50,0.92)'; ctx.fill();
+      ctx.strokeStyle = 'white'; ctx.lineWidth = 1.6; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(x.x - 2.5, x.y - 2.5); ctx.lineTo(x.x + 2.5, x.y + 2.5); ctx.moveTo(x.x - 2.5, x.y + 2.5); ctx.lineTo(x.x + 2.5, x.y - 2.5); ctx.stroke();
+      ctx.lineCap = 'butt';
+    }
+    // the name, above the row, for the one pointed at (or the selected one)
+    const shown = this._scrollHover >= 0 && this._scrollHover < s.scrollCount ? this._scrollHover : s.scrollSelected;
+    if (shown >= 0 && shown < s.scrollCount) {
+      const label = t(SCROLL_DEFS[s.scrolls[shown]].name) + (this._scrollXHover >= 0 ? '  (' + t('Discard') + ')' : '');
+      this._tip(ctx, label, b.x, b.y - 16, true);
+    }
+  }
+
+  _scrollPromptLayout(ctx) {
+    const s = this.scene, k = this._uiScale(640), items = s.scrollPrompt || [];
+    const pad = Math.trunc(16 * k), rowH = Math.trunc(38 * k), gap = Math.trunc(6 * k), iconF = Math.max(1, Math.trunc(2 * k));
+    const npx = 10.5 * PT * k, spx = 9 * PT * k, tpx = 8.5 * PT * k;
+    const title = t('Scroll storage is full'), sub = t('Choose one to throw away');
+    let maxName = 0;
+    for (const id of items) maxName = Math.max(maxName, this._measure(ctx, t(SCROLL_DEFS[id].name), npx));
+    const tagW = s.scrollPromptNewIndex >= 0 ? Math.round(this._measure(ctx, t('New'), tpx) + 14 * k) : 0;
+    const rowW = 14 * k + 12 * iconF + 10 * k + maxName + (tagW ? 10 * k + tagW : 0) + 14 * k;
+    const inner = Math.max(rowW, this._measure(ctx, title, npx), this._measure(ctx, sub, spx, 400));
+    const w = Math.min(this.width - 16, Math.round(inner + pad * 2)), titleH = Math.round(npx * 1.3), subH = Math.round(spx * 1.3);
+    const h = pad + titleH + subH + gap * 2 + items.length * (rowH + gap) + pad - gap;
+    const panel = { x: Math.trunc((this.width - w) / 2), y: Math.max(4, Math.trunc((this.height - h) / 2)), w: w, h: h };
+    const rows = []; let y = panel.y + pad + titleH + subH + gap * 2;
+    for (let i = 0; i < items.length; i++) { rows.push({ x: panel.x + pad, y: y, w: w - pad * 2, h: rowH }); y += rowH + gap; }
+    return { k, panel, rows, pad, titleH, subH, iconF, npx, spx, tpx, tagW, title, sub, items };
+  }
+
+  _scrollPromptRowAt(p) {
+    const L = this._scrollPromptLayout(this.ctx);
+    for (let i = 0; i < L.rows.length; i++) if (this._inRect(p, L.rows[i])) return i;
+    return -1;
+  }
+
+  _drawScrollPrompt(ctx) {
+    const s = this.scene;
+    if (!s.isScrollPrompt) return;
+    const L = this._scrollPromptLayout(ctx), k = L.k, P = L.panel;
+    ctx.fillStyle = 'rgba(0,0,0,0.745)'; ctx.fillRect(0, 0, this.width, this.height);
+    roundRect(ctx, P.x + 0.5, P.y + 0.5, P.w - 1, P.h - 1, 10 * k);
+    ctx.fillStyle = 'rgba(18,16,46,0.92)'; ctx.fill();
+    ctx.strokeStyle = 'rgba(255,214,120,0.92)'; ctx.lineWidth = 1.8; ctx.stroke();
+    this._text(ctx, L.title, P.x + L.pad, P.y + L.pad + L.titleH / 2, { px: L.npx, color: 'rgb(255,214,120)' });
+    this._text(ctx, L.sub, P.x + L.pad, P.y + L.pad + L.titleH + 4 * k + L.subH / 2, { px: L.spx, color: 'rgb(200,226,255)', weight: 400 });
+    const newAt = s.scrollPromptNewIndex;
+    L.rows.forEach((r, i) => {
+      const hot = i === this._promptHover;
+      roundRect(ctx, r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1, 8 * k);
+      ctx.fillStyle = hot ? 'rgba(96,56,70,0.92)' : 'rgba(40,32,86,0.82)'; ctx.fill();
+      ctx.strokeStyle = hot ? 'rgb(255,150,130)' : 'rgba(170,150,240,0.78)'; ctx.lineWidth = hot ? 2 : 1.4; ctx.stroke();
+      this._drawScrollIcon(ctx, L.items[i], r.x + 14 * k + 6 * L.iconF, r.y + r.h / 2, L.iconF);
+      this._text(ctx, t(SCROLL_DEFS[L.items[i]].name), r.x + 14 * k + 12 * L.iconF + 10 * k, r.y + r.h / 2 + 0.5, { px: L.npx, color: 'white' });
+      if (i === newAt) {
+        const th = Math.round(18 * k), tx = r.x + r.w - L.tagW - 10 * k, ty = r.y + (r.h - th) / 2;
+        this._pill(ctx, tx, ty, L.tagW, th, th / 2, 'rgb(255,204,82)');
+        this._text(ctx, t('New'), tx + L.tagW / 2, ty + th / 2 + 0.5, { px: L.tpx, color: 'rgb(70,36,8)', align: 'center' });
+      }
+    });
   }
 
   _drawDisc(ctx) {
@@ -1445,6 +1618,11 @@ export class Visualizer {
     const h = { x: p.x / this.hud, y: p.y / this.hud };
     const s = this.scene;
     if (this._sliderDrag) { this._dragSlider(h); this.canvas.style.cursor = 'pointer'; return; }
+    if (s.isScrollPrompt) {   // the storage is full: only the list of what to throw away answers
+      this._promptHover = this._scrollPromptRowAt(p);
+      this.canvas.style.cursor = this._promptHover >= 0 ? 'pointer' : 'default';
+      return;
+    }
     if (s.isTipDialogue) {   // the Old Man's tip: nothing but the potion button answers the pointer
       this._overHot = s.isTipPrompt && this._inHot(h);
       this.canvas.style.cursor = this._overHot || s.isTipCoins ? 'pointer' : 'default';
@@ -1492,6 +1670,9 @@ export class Visualizer {
       card: -1, tile: -1, levelUp: false
     };
     this._overHot = this._inHot(h);
+    this._overScroll = this._inScroll(h);
+    const rs = this._scrollOpen ? this._scrollSlotAt(h) : { slot: -1, cross: false };
+    this._scrollHover = rs.slot; this._scrollXHover = rs.cross ? rs.slot : -1;
     this._discHover = this._discOpen ? this._discSlotAt(h) : -1;
     if (s.isShopping) {
       this._shopHover = this._shopHit(p);
@@ -1514,7 +1695,7 @@ export class Visualizer {
     }
     this.hover = hover;
     const overCoin = !s.isLevelSelect && !s.isDialogue && !s.isChoosing && s.isCoinAt(p.x, p.y);
-    this.canvas.style.cursor = hover.button || hover.settings || hover.restart || hover.qslider || hover.qauto || hover.tuner || hover.comp || this._overHot || this._discHover >= 0 || hover.card >= 0 || hover.tile >= 0 || hover.levelUp || overCoin ? 'pointer' : 'default';
+    this.canvas.style.cursor = hover.button || hover.settings || hover.restart || hover.qslider || hover.qauto || hover.tuner || hover.comp || this._overHot || this._overScroll || this._scrollHover >= 0 || this._discHover >= 0 || hover.card >= 0 || hover.tile >= 0 || hover.levelUp || overCoin ? 'pointer' : 'default';
   }
 
   _onDown(e) {
@@ -1524,6 +1705,11 @@ export class Visualizer {
     const p = this._point(e);
     const h = { x: p.x / this.hud, y: p.y / this.hud };
     const s = this.scene;
+    if (s.isScrollPrompt) {
+      const row = this._scrollPromptRowAt(p);
+      if (row >= 0) { s.resolveScrollPrompt(row); this._promptHover = -1; }
+      return;
+    }
     if (s.isTipDialogue) {
       // Every other tap is blocked. The first tip goes on only with a tap on the potion button (a plain tap: no holding for the disc, so
       // the potion can't be swapped); the second reads on with a tap anywhere.
@@ -1583,6 +1769,7 @@ export class Visualizer {
     }
     if (this._inRect(h, this._settingsRect)) { this._settingsOpen = !this._settingsOpen; Sound.play('DiscClick'); return; }
     if (this._discOpen) return;   // a tap on the disc is settled when the pointer comes up
+    if (!this._scrollOpen && this._inScroll(h)) { this._scrollDown = true; this._scrollDownAt = performance.now(); this._scrollByPress = false; return; }
     if (this._inHot(h)) { this._hotDown = true; this._hotDownAt = performance.now(); this._discByPress = false; return; }
     if (s.starting) {
       const sc = s.startCandidateAt(p.x, p.y);   // tapping a hero at the fire picks them (the cards need room a short view hasn't got)

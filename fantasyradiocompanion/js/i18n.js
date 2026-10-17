@@ -69,7 +69,13 @@ const ES = {
   'Fast, loyal and always out front.': 'Veloz, leal y siempre al frente.',
   'Spring': 'Primavera', 'Summer': 'Verano', 'Fall': 'Otoño', 'Winter': 'Invierno', 'Year {y}  Day {d}': 'Año {y}  Día {d}',
   // Traits
-  'Item Storage: +{n} slot for the party': 'Almacenaje: +{n} ranura para el grupo', 'Item Storage: +{n} slots for the party': 'Almacenaje: +{n} ranuras para el grupo',
+  'Scroll Storage: +{n} slot for the party': 'Almacén de pergaminos: +{n} ranura para el grupo', 'Scroll Storage: +{n} slots for the party': 'Almacén de pergaminos: +{n} ranuras para el grupo',
+  'Rereviver Scroll': 'Pergamino de Rerevivir', 'Grants Rerevive to one party member for 1 year: if they faint, they instantly revive on the spot with 50% HP. It is used up when it does.': 'Otorga Rerevivir a un miembro del grupo durante 1 año: si se desmaya, revive al instante en su sitio con el 50% de su vida. Se gasta al hacerlo.',
+  'Scroll: tap to use, hold to choose': 'Pergamino: toca para usar, mantén para elegir', 'Scrolls: none carried': 'Pergaminos: ninguno', 'Discard': 'Tirar',
+  'Scroll storage is full': 'El almacén de pergaminos está lleno', 'Choose one to throw away': 'Elige uno para tirar', 'New': 'Nuevo',
+  'Already carrying {n}': 'Ya llevas {n}', 'Found {n}!': '¡Encontraste {n}!', 'Nobody can take it': 'Nadie puede recibirlo', 'Already fainted': 'Ya está desmayado', 'Already has Rerevive': 'Ya tiene Rerevivir',
+  'Rerevive!': '¡Rerevivir!', 'Rerevived!': '¡Rerevivió!', 'Choose who gets Rerevive': 'Elige quién recibe Rerevivir',
+
   'Heal: {hp} HP to the weakest ally every {s} s': 'Curar: {hp} PV al aliado más débil cada {s} s',
   'Fireball: casts one to the right every {s} s': 'Bola de fuego: lanza una a la derecha cada {s} s',
   'Lucky Coins: {p}% chance of {n} coins together': 'Monedas de la suerte: {p}% de probabilidad de {n} monedas juntas',
@@ -182,7 +188,13 @@ const ZH = {
   'Fast, loyal and always out front.': '迅捷、忠诚，永远冲在最前。',
   'Spring': '春', 'Summer': '夏', 'Fall': '秋', 'Winter': '冬', 'Year {y}  Day {d}': '第 {y} 年  第 {d} 天',
   // Traits
-  'Item Storage: +{n} slot for the party': '物品栏：队伍 +{n} 格', 'Item Storage: +{n} slots for the party': '物品栏：队伍 +{n} 格',
+  'Scroll Storage: +{n} slot for the party': '卷轴栏：队伍 +{n} 格', 'Scroll Storage: +{n} slots for the party': '卷轴栏：队伍 +{n} 格',
+  'Rereviver Scroll': '再复活卷轴', 'Grants Rerevive to one party member for 1 year: if they faint, they instantly revive on the spot with 50% HP. It is used up when it does.': '为一名队员赋予「再复活」，持续1年：若其昏倒，会在原地立即以50%生命复活，触发后即消耗。',
+  'Scroll: tap to use, hold to choose': '卷轴：点按使用，长按选择', 'Scrolls: none carried': '卷轴：未携带', 'Discard': '丢弃',
+  'Scroll storage is full': '卷轴栏已满', 'Choose one to throw away': '选择一件丢弃', 'New': '新',
+  'Already carrying {n}': '已携带{n}', 'Found {n}!': '找到了{n}！', 'Nobody can take it': '没有人能接受', 'Already fainted': '已经昏倒', 'Already has Rerevive': '已有再复活',
+  'Rerevive!': '再复活！', 'Rerevived!': '再复活了！', 'Choose who gets Rerevive': '选择获得再复活的队员',
+
   'Heal: {hp} HP to the weakest ally every {s} s': '治疗：每 {s} 秒为最弱的队友恢复 {hp} 点生命',
   'Fireball: casts one to the right every {s} s': '火球：每 {s} 秒向右发射一枚',
   'Lucky Coins: {p}% chance of {n} coins together': '幸运金币：{p}% 几率同时出现 {n} 枚金币',

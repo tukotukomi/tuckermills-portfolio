@@ -57,7 +57,7 @@ export function traitInterval(trait, level) {
 /** A short line for the tavern's cards: the trait's name and what it does at `level`. */
 export function traitSummary(kind, level) {
   switch (TRAIT_OF[kind]) {
-    case 'ItemStorage': return t(storageSlots(level) === 1 ? 'Item Storage: +{n} slot for the party' : 'Item Storage: +{n} slots for the party', { n: storageSlots(level) });
+    case 'ItemStorage': return t(storageSlots(level) === 1 ? 'Scroll Storage: +{n} slot for the party' : 'Scroll Storage: +{n} slots for the party', { n: storageSlots(level) });
     case 'Heal': return t('Heal: {hp} HP to the weakest ally every {s} s', { hp: healAmount(level), s: healInterval(level) });
     case 'Fireball': return t('Fireball: casts one to the right every {s} s', { s: fireballInterval(level) });
     case 'LuckyCoins': return t('Lucky Coins: {p}% chance of {n} coins together', { p: Math.round(luckyCoinChance(level) * 100), n: luckyCoinCount(level) });

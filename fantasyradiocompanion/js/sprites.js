@@ -54,6 +54,8 @@ export const Sprites = {
       this.enemy[k] = { walkA: g('walk_a'), walkB: g('walk_b'), walk: [g('walk_a'), g('walk_b'), g('walk_c'), g('walk_d')], attackA: g('attack_a'), attackB: g('attack_b'), hurt: g('hurt'), w: g('walk_a').width, h: g('walk_a').height };
     }
     this.merchant = [this.img.merchant_a, this.img.merchant_b];   // already facing left, towards the party
+    this.scroll = {};
+    for (const id of ['Rereviver']) this.scroll[id] = this.img['scroll_' + id.toLowerCase()];
     this.items = {};
     for (const id of ['SynergyElixir', 'PotionRed', 'PotionBlue', 'PotionGreen']) this.items[id] = this.img['item_' + id.toLowerCase()];
     this.dragon = [this.img.dragon_0, this.img.dragon_1, flipImage(this.img.dragon_0), flipImage(this.img.dragon_1)];

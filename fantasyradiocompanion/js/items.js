@@ -59,11 +59,11 @@ export function installItems(P) {
   Object.defineProperties(m, {
     isShopping: { get() { return this.enc === 'Shop'; } },
     /** True while a healing item is waiting for its target: the adventure is paused and the page asks for a tap on a member. */
-    isTargeting: { get() { return this.targetItem !== null && (ITEM_DEFS[this.targetItem].heal > 0 || !!ITEM_DEFS[this.targetItem].revive); } },
+    isTargeting: { get() { return (this.targetItem !== null && (ITEM_DEFS[this.targetItem].heal > 0 || !!ITEM_DEFS[this.targetItem].revive)) || this.targetScroll !== null; } },
     /** True while the Monster Berserker waits for its multiplier: the game is paused and the page shows 1X to 5X. */
     isPicking: { get() { return this.targetItem !== null && !!ITEM_DEFS[this.targetItem].picks; } },
     /** Either kind of wait: something was used and needs a choice (or a cancel) before the game goes on. */
-    isWaiting: { get() { return this.targetItem !== null; } },
+    isWaiting: { get() { return this.targetItem !== null || this.targetScroll !== null; } },
     /** What monster damage is multiplied by right now (1 when no Berserker is running). */
     monsterDamageMultiplier: { get() { return this.berserkLeft > 0 ? this.berserkMult : 1; } },
     hotSelected: { get() { return this.hotSel; } },
@@ -143,6 +143,7 @@ export function installItems(P) {
   /** Uses the waiting healing item on `who`. False when nothing is waiting or the member isn't in the party. */
   m.chooseTarget = function (who) {
     if (!this.isTargeting || this.party.indexOf(who) < 0) return false;
+    if (this.targetScroll !== null) return this._chooseScrollTarget(who);
     const id = this.targetItem;
     if (this.itemCount(id) <= 0) { this.targetItem = null; this.targetHover = null; return false; }
     const r = this._rectOf(who);
@@ -217,8 +218,8 @@ export function installItems(P) {
 
   /** Puts the waiting item back (nothing was spent) and resumes the game. */
   m.cancelTargeting = function () {
-    if (this.targetItem === null) return;
-    this.targetItem = null; this.targetHover = null;
+    if (this.targetItem === null && this.targetScroll === null) return;
+    this.targetItem = null; this.targetScroll = null; this.targetHover = null;
     Sound.play('DiscClick');
   };
 
@@ -329,6 +330,7 @@ export function installItems(P) {
   };
 
   m._advanceItemEffects = function (dt) {
+    this._advanceScroll(dt);
     if (this.isShopping) this.shopT += dt;
     if (this.synergyFlash > 0) this.synergyFlash = Math.max(0, this.synergyFlash - dt);
     if (this.buyFlash > 0) this.buyFlash = Math.max(0, this.buyFlash - dt);
@@ -396,6 +398,7 @@ export function installItems(P) {
 
   /** The Synergy Elixir's light: a gold ring and sparks spreading out from every member of the party. */
   m._drawItemEffects = function (g) {
+    this._drawScrollEffects(g);
     if (this.synergyFlash <= 0) return;
     const u = 1 - this.synergyFlash;
     for (const k in this.memberRects) {

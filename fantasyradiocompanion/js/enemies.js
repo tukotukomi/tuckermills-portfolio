@@ -315,6 +315,7 @@ export function installEnemies(P) {
       this.enemyTimer = 15 + Math.random() * 15;
       // It drops a coin where it fell: a real one, in the road, to be clicked before it drifts off like any other.
       this.coins.push({ worldX: this.scroll + r.x + r.w / 2.0, phase: Math.random() * 6 });
+      if (baseOf(e.kind) === 'gargogryph' || e.kind === 'toucan') this._maybeDropScroll(r);   // the hard ones may also leave a scroll, which the party picks up by itself
     }
   };
 

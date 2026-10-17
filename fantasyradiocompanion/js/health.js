@@ -99,6 +99,7 @@ export function installHealth(P) {
     if (before <= 0) return;   // already out cold
     amount = this._hatDamage(kind, amount);   // a Blue Hat halves what its wearer takes
     this.hp[kind] = Math.max(0, before - amount);
+    if (this.hp[kind] === 0 && this._tryRerevive(kind)) return;   // Rerevive: they get up again on the spot with half their HP
     const r = this._rectOf(kind);
     if (this.hp[kind] === 0) this._addItemText(t('Fainted!'), r.x + r.w / 2.0, r.y - 4, C(255, 170, 160));
     else this._addItemText('-' + (before - this.hp[kind]), r.x + r.w / 2.0, r.y - 4, C(255, 150, 150));
@@ -229,3 +230,5 @@ export function installHealth(P) {
 let PARTY_ENUM_OF = k => k;
 let KIND_FROM = n => n;
 export function setKindNames(toEnum, fromEnum) { PARTY_ENUM_OF = toEnum; KIND_FROM = fromEnum; }
+export function enumOf(kind) { return PARTY_ENUM_OF(kind); }
+export function kindOfEnum(name) { return KIND_FROM(name); }
