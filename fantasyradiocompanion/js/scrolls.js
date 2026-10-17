@@ -1,4 +1,4 @@
-// Scrolls: kept apart from the bag and its hot slots. They do not stack (one of each kind at most), the party carries a limited number
+// Scrolls: kept apart from the bag and its hot slots. Duplicates are allowed, but each one takes a slot of its own: the party carries a limited number
 // (1, plus 1 from the Paca), and they drop from the hardest monsters. A port of src\PixelScroll.cs.
 
 import { C, CA } from './util.js';
@@ -57,14 +57,10 @@ export function installScroll(P) {
     this.scrollDrops.push({ id: id, worldX: this.scroll + r.x + r.w / 2.0, y: r.y + r.h * 0.4, age: 0 });
   };
 
-  /** The party has the item in hand: kept if there is room (and none like it), otherwise the player decides what to give up. */
+  /** The party has the item in hand: kept if there is a free slot (a duplicate takes a slot of its own), otherwise the player decides what to give up. */
   m._offerScroll = function (id) {
     const x = this._leaderCenterX(), y = this.groundY - 26;
     const name = t(SCROLL_DEFS[id].name);
-    if (this.scrolls.indexOf(id) >= 0) {   // scrolls do not stack
-      this._addItemText(t('Already carrying {n}', { n: name }), x, y, C(200, 226, 255));
-      return;
-    }
     if (this.scrolls.length < this.scrollCapacity) {
       this.scrolls.push(id);
       this.scrollSel = this.scrolls.length - 1;
@@ -198,7 +194,7 @@ export function installScroll(P) {
     const colon = field.indexOf(':');
     const items = colon < 0 ? field : field.substring(0, colon), status = colon < 0 ? '' : field.substring(colon + 1);
     for (const name of items.split(',').filter(s => s)) {
-      if (SCROLL_IDS.indexOf(name) >= 0 && this.scrolls.indexOf(name) < 0 && this.scrolls.length < this.scrollCapacity) this.scrolls.push(name);
+      if (SCROLL_IDS.indexOf(name) >= 0 && this.scrolls.length < this.scrollCapacity) this.scrolls.push(name);
     }
     for (const pair of status.split(',').filter(s => s)) {
       const kv = pair.split('='), kind = kv.length === 2 ? kindOfEnum(kv[0]) : null, until = kv.length === 2 ? parseFloat(kv[1]) : NaN;
