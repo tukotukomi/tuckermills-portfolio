@@ -1392,9 +1392,28 @@ export class Visualizer {
     return dx * dx + dy * dy <= (r.w / 2) * (r.w / 2);
   }
 
-  _scrollSlotCenter(i) { const r = this._scrollRect; return { x: r.x + r.w + 12 + 15 + 4 + i * 38, y: r.y + r.h / 2 }; }
+  // The carried scrolls, opened by holding the button: the same round menu as the item disc, with as many slots as the storage holds
+  // (a short view, where the disc would not fit, gets the same row as the item disc's).
+  get _scrollSlotR() { return this._compactDisc ? 15 : 22; }
+  /** How far from the middle the slots sit: none for one slot, side by side for two, and further out as more are added so they never touch. */
+  _scrollRing(n) { return n <= 1 ? 0 : Math.max(26, Math.ceil(26 / Math.sin(Math.PI / n))); }
+  get _scrollOuter() { return this._scrollRing(this.scene.scrollCapacity) + 22 + 6; }
+  /** The middle of the disc: its edge keeps the screen's 8 px margin, and it stays on the screen going up and down. */
+  get _scrollDiscCenter() {
+    const r = this._scrollRect, outer = this._scrollOuter, lo = outer + 4, hi = this.vh - outer - 4;
+    let y = r.y + r.h / 2;
+    if (hi >= lo) y = Math.max(lo, Math.min(hi, y));
+    return { x: 8 + outer, y: y };
+  }
+  _scrollSlotCenter(i) {
+    const r = this._scrollRect;
+    if (this._compactDisc) return { x: r.x + r.w + 12 + 15 + 4 + i * 38, y: r.y + r.h / 2 };
+    const n = Math.max(1, this.scene.scrollCapacity), ring = this._scrollRing(n), c = this._scrollDiscCenter;
+    const a = -Math.PI / 2 + 2 * Math.PI * i / n;   // the first slot at the top, then round clockwise
+    return { x: c.x + Math.round(Math.cos(a) * ring), y: c.y + Math.round(Math.sin(a) * ring) };
+  }
   get _scrollPanelBounds() { const r = this._scrollRect; return { x: r.x + r.w + 12, y: r.y + r.h / 2 - 21, w: this.scene.scrollCapacity * 38 + 8, h: 42 }; }
-  _scrollXCenter(i) { const c = this._scrollSlotCenter(i); return { x: c.x + 12, y: c.y - 12 }; }
+  _scrollXCenter(i) { const c = this._scrollSlotCenter(i), d = Math.trunc(this._scrollSlotR * 0.72); return { x: c.x + d, y: c.y - d }; }
 
   /** The slot under a point in the open row, and whether the point is on its cross ({ slot: -1 } for none). */
   _scrollSlotAt(h) {
@@ -1404,7 +1423,8 @@ export class Visualizer {
     }
     for (let i = 0; i < this.scene.scrollCapacity; i++) {
       const c = this._scrollSlotCenter(i);
-      if ((h.x - c.x) * (h.x - c.x) + (h.y - c.y) * (h.y - c.y) <= 17 * 17) return { slot: i < this.scene.scrollCount ? i : -1, cross: false };
+      const rr = this._scrollSlotR + 2;
+      if ((h.x - c.x) * (h.x - c.x) + (h.y - c.y) * (h.y - c.y) <= rr * rr) return { slot: i < this.scene.scrollCount ? i : -1, cross: false };
     }
     return { slot: -1, cross: false };
   }
@@ -1442,16 +1462,22 @@ export class Visualizer {
 
   _drawScrollPanel(ctx) {
     if (!this._scrollOpen || !this._scrollVisible) return;
-    const s = this.scene, b = this._scrollPanelBounds;
-    this._pill(ctx, b.x, b.y, b.w, b.h, b.h / 2, 'rgba(18,14,46,0.88)', 'rgba(200,150,255,0.9)', 1.8);
+    const s = this.scene, compact = this._compactDisc, slotR = this._scrollSlotR, n = Math.max(1, s.scrollCapacity);
+    const dc = this._scrollDiscCenter, outer = this._scrollOuter, b = this._scrollPanelBounds;
+    if (compact) this._pill(ctx, b.x, b.y, b.w, b.h, b.h / 2, 'rgba(18,14,46,0.88)', 'rgba(200,150,255,0.9)', 1.8);
+    else {
+      ctx.beginPath(); ctx.arc(dc.x, dc.y, outer, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(18,14,46,0.84)'; ctx.fill();
+      ctx.strokeStyle = 'rgba(200,150,255,0.9)'; ctx.lineWidth = 1.8; ctx.stroke();
+    }
     for (let i = 0; i < s.scrollCapacity; i++) {
       const c = this._scrollSlotCenter(i), filled = i < s.scrollCount, selected = filled && i === s.scrollSelected, hover = filled && i === this._scrollHover;
-      ctx.beginPath(); ctx.arc(c.x, c.y, 15, 0, Math.PI * 2);
+      ctx.beginPath(); ctx.arc(c.x, c.y, slotR, 0, Math.PI * 2);
       ctx.fillStyle = hover ? 'rgba(52,40,110,0.92)' : 'rgba(26,24,74,0.75)'; ctx.fill();
       ctx.strokeStyle = selected ? 'rgb(255,214,120)' : rgba(170, 150, 240, filled ? 0.78 : 0.43); ctx.lineWidth = selected ? 2.4 : 1.4;
       ctx.setLineDash(filled ? [] : [2, 3]); ctx.stroke(); ctx.setLineDash([]);
       if (!filled) continue;
-      this._drawScrollIcon(ctx, s.scrolls[i], c.x, c.y, 1);
+      this._drawScrollIcon(ctx, s.scrolls[i], c.x, c.y, compact ? 1 : 2);
       const x = this._scrollXCenter(i);
       ctx.beginPath(); ctx.arc(x.x, x.y, 6, 0, Math.PI * 2);
       ctx.fillStyle = i === this._scrollXHover ? 'rgb(220,70,70)' : 'rgba(70,30,50,0.92)'; ctx.fill();
@@ -1459,11 +1485,24 @@ export class Visualizer {
       ctx.beginPath(); ctx.moveTo(x.x - 2.5, x.y - 2.5); ctx.lineTo(x.x + 2.5, x.y + 2.5); ctx.moveTo(x.x - 2.5, x.y + 2.5); ctx.lineTo(x.x + 2.5, x.y - 2.5); ctx.stroke();
       ctx.lineCap = 'butt';
     }
-    // the name, above the row, for the one pointed at (or the selected one)
+    // The hub (with three or more slots, as on the item disc) shows what is selected.
+    if (!compact && n >= 3 && s.scrollSelected >= 0 && s.scrollSelected < s.scrollCount) {
+      ctx.beginPath(); ctx.arc(dc.x, dc.y, 14, 0, Math.PI * 2); ctx.fillStyle = 'rgba(22,18,52,0.86)'; ctx.fill();
+      this._drawScrollIcon(ctx, s.scrolls[s.scrollSelected], dc.x, dc.y, 1);
+    }
+    // the name, for the one pointed at (or the selected one): above the disc, or beside the row in a short view
     const shown = this._scrollHover >= 0 && this._scrollHover < s.scrollCount ? this._scrollHover : s.scrollSelected;
     if (shown >= 0 && shown < s.scrollCount) {
       const label = t(SCROLL_DEFS[s.scrolls[shown]].name) + (this._scrollXHover >= 0 ? '  (' + t('Discard') + ')' : '');
-      this._tip(ctx, label, b.x, b.y - 16, true);
+      if (compact) this._tip(ctx, label, b.x, b.y - 16, true);
+      else {
+        const px = 8.5 * PT, w = Math.round(this._measure(ctx, label, px) + 20);
+        let ly = dc.y - outer - 30;
+        if (ly < 2) ly = dc.y + outer + 6;   // no room above: below
+        const lx = Math.max(6, dc.x - w / 2);
+        this._pill(ctx, lx, ly, w, 24, 6, 'rgba(22,18,52,0.88)', 'rgba(200,150,255,0.9)', 1.2);
+        this._text(ctx, label, lx + w / 2, ly + 12.5, { px: px, color: 'white', align: 'center' });
+      }
     }
   }
 
