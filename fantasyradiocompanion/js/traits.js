@@ -7,8 +7,8 @@ import { maxHp, hpGain } from './health.js';
 import { Sound } from './sfx.js';
 import { t } from './i18n.js';
 
-export const TRAIT_OF = { paca: 'ItemStorage', lightmage: 'Heal', firemage: 'Fireball', thief: 'LuckyCoins', warrior: 'Huzzah', fae: 'StarHat', druid: 'NaturalToxin', paladin: 'HolyAura', shadowknight: 'LifeDrain' };
-export const TRAIT_OWNER = { ItemStorage: 'paca', Heal: 'lightmage', Fireball: 'firemage', LuckyCoins: 'thief', Huzzah: 'warrior', StarHat: 'fae', NaturalToxin: 'druid', HolyAura: 'paladin', LifeDrain: 'shadowknight' };
+export const TRAIT_OF = { paca: 'ItemStorage', lightmage: 'Heal', firemage: 'Fireball', thief: 'LuckyCoins', warrior: 'Huzzah', fae: 'StarHat', druid: 'NaturalToxin', paladin: 'ShieldWall', shadowknight: 'LifeDrain' };
+export const TRAIT_OWNER = { ItemStorage: 'paca', Heal: 'lightmage', Fireball: 'firemage', LuckyCoins: 'thief', Huzzah: 'warrior', StarHat: 'fae', NaturalToxin: 'druid', ShieldWall: 'paladin', LifeDrain: 'shadowknight' };
 
 export function storageSlots(level) { return 1; }
 export function healInterval(level) { return 10; }
@@ -26,9 +26,9 @@ export function starHatDuration(level) { return 60; }
 export function peckDamage(level) { return 1; }
 export function peckInterval(level) { return 1.0; }
 // The basic attacks of the other four: 1 damage every few seconds, but only from the front of the line and right next to the enemy.
-export const BASIC_ATTACKERS = ['thief', 'fae', 'lightmage', 'firemage', 'paladin', 'shadowknight'];
+export const BASIC_ATTACKERS = ['thief', 'fae', 'lightmage', 'firemage', 'paladin'];
 export const BASIC_DAMAGE = 1;
-export function basicInterval(kind) { return { thief: 2, fae: 3, lightmage: 3, firemage: 5, paladin: 3, shadowknight: 4 }[kind] || 5; }
+export function basicInterval(kind) { return { thief: 2, fae: 3, lightmage: 3, firemage: 5, paladin: 3 }[kind] || 5; }
 export function fireballDamage(level) { return 5; }
 export const SPELL_RANGE_BLOCKS = 25;   // how far a thrown spell goes: the fireball burns out, the toxin falls, after this many blocks
 export function fireballRangeBlocks(level) { return SPELL_RANGE_BLOCKS; }
@@ -39,8 +39,13 @@ export function axeRangeBlocks(level) { return 10; }   // blocks of grass it tra
 export const BLOCK_PIXELS = 8;                          // one block of grass = one repeat of the ground's pattern
 export function crossbowDamage(level) { return 2; }    // the Thief's crossbow bolt, for when he is out of melee reach
 export function crossbowInterval(level) { return 5.0; }
-export function auraReduction(level) { return 1; }           // the Paladin's Holy Aura: damage the party takes from each hit is cut by this much...
-export const AURA_FLOOR = 1;                                 // ...but never below this
+export function shieldWallInterval(level) { return 60; }       // the Paladin's Shield Wall: cast on the first hero this often...
+export function shieldWallDuration(level) { return 30; }       // ...and standing for this many seconds (damage to that hero goes to the Paladin, or is halved if he is that hero)
+export function paladinLightInterval(level) { return 3; }      // from behind the front the Paladin casts light: this often...
+export function paladinLightTicks(level) { return 2; }         // ...for this many seconds...
+export function paladinLightDamage(level) { return 1; }        // ...taking this much off every second (2 damage over 2 seconds)
+export function scytheDamage(level) { return 2; }              // the Shadow Knight's scythe, from the first or second place...
+export function scytheInterval(level) { return 3; }            // ...this often
 export function lifeDrainInterval(level) { return 8; }       // the Shadow Knight's Life Drain: seconds of adventuring between drains
 export function lifeDrainDamage(level) { return 3; }         // taken off the enemy...
 export function lifeDrainHeal(level) { return 3; }           // ...and given to the weakest member
@@ -56,6 +61,7 @@ export function traitInterval(trait, level) {
     case 'StarHat': return starHatInterval(level);
     case 'NaturalToxin': return toxinInterval(level);
     case 'LifeDrain': return lifeDrainInterval(level);
+    case 'ShieldWall': return shieldWallInterval(level);
   }
   return 0;
 }
@@ -70,7 +76,7 @@ export function traitSummary(kind, level) {
     case 'Huzzah': return t('Huzzah!: party damage x{m} for {d} s every {s} s', { m: huzzahDamageMultiplier(level), d: huzzahDuration(level), s: huzzahInterval(level) });
     case 'StarHat': return t('Star Hat: red (+1 HP / 2 s) or blue (half damage) hats for {d} min every {s} min', { d: starHatDuration(level) / 60, s: starHatInterval(level) / 60 });
     case 'NaturalToxin': return t('Natural Toxin: {d} damage a second for {n} s, every {s} s', { d: toxinDamage(level), n: toxinTicks(level), s: toxinInterval(level) });
-    case 'HolyAura': return t('Holy Aura: the party takes {n} less damage from each hit', { n: auraReduction(level) });
+    case 'ShieldWall': return t('Shield Wall: every {s} s the first hero\'s damage goes to the Paladin for {d} s (halved if he leads)', { s: shieldWallInterval(level), d: shieldWallDuration(level) });
     case 'LifeDrain': return t('Life Drain: takes {d} HP from the enemy and gives {h} to the weakest ally every {s} s', { d: lifeDrainDamage(level), h: lifeDrainHeal(level), s: lifeDrainInterval(level) });
   }
   return '';
@@ -93,7 +99,7 @@ const AXE_FRAMES = (() => {
   }
   return frames;
 })();
-const TIMED_TRAITS = ['Heal', 'Fireball', 'Huzzah', 'StarHat', 'NaturalToxin', 'LifeDrain'];
+const TIMED_TRAITS = ['Heal', 'Fireball', 'Huzzah', 'StarHat', 'NaturalToxin', 'LifeDrain', 'ShieldWall'];
 const GLOB_SPEED = 100;  // the Druid's toxin glob, scene pixels per second
 const GLOB_ARC = 8;      // how high the lob rises above the straight line
 const SHOUT_SECONDS = 2.2;
@@ -113,6 +119,7 @@ export function installTraits(P) {
     this.axes = [];
     this.bolts = [];
     this.globs = [];
+    this.beams = []; this.wallLeft = 0; this.wallTarget = 'paladin'; this.lightTimer = 0;
     this.toxinFlash = 0;
     this.heals = [];
     this.inspireLeft = 0; this.hatLeft = 0; this.shoutAge = -1; this.castFlash = 0; this.luckyFlash = 0;
@@ -149,6 +156,8 @@ export function installTraits(P) {
         case 'warrior': return 'Thrown axe ' + axeDamage(1) + ' dmg / ' + axeInterval(1) + ' s, ' + axeRangeBlocks(1) + ' blocks';
         case 'thief': return 'Melee ' + BASIC_DAMAGE + ' dmg / ' + basicInterval(kind) + ' s when leading; crossbow ' + crossbowDamage(1) + ' dmg / ' + crossbowInterval(1) + ' s otherwise';
         case 'druid': return 'None';
+        case 'paladin': return 'Melee ' + BASIC_DAMAGE + ' dmg / ' + basicInterval(kind) + ' s when leading; light ' + (paladinLightDamage(1) * paladinLightTicks(1)) + ' dmg over ' + paladinLightTicks(1) + ' s / ' + paladinLightInterval(1) + ' s otherwise';
+        case 'shadowknight': return 'Scythe ' + scytheDamage(1) + ' dmg / ' + scytheInterval(1) + ' s from the first or second place';
         default: return 'Melee ' + BASIC_DAMAGE + ' dmg / ' + basicInterval(kind) + ' s when leading';
       }
     };
@@ -192,6 +201,7 @@ export function installTraits(P) {
     }
     if (this.berserkLeft > 0) this.berserkLeft = Math.max(0, this.berserkLeft - dt);   // the Monster Berserker runs in adventuring time too
     if (this.inspireLeft > 0) this.inspireLeft = Math.max(0, this.inspireLeft - dt);
+    if (this.wallLeft > 0) { this.wallLeft = Math.max(0, this.wallLeft - dt); if (!this._active(this.wallTarget) || !this._active('paladin')) this.wallLeft = 0; }   // it falls with the hero it guards, or with the Paladin
     if (this.hatLeft > 0) {
       this.hatLeft = Math.max(0, this.hatLeft - dt);
       // Red Hats give 1 HP back every 2 seconds to a wearer who is up and hurt.
@@ -244,6 +254,9 @@ export function installTraits(P) {
         break;
       case 'LifeDrain':
         this._castLifeDrain(level);
+        break;
+      case 'ShieldWall':
+        this._castShieldWall(level);
         break;
     }
   };
@@ -385,6 +398,43 @@ export function installTraits(P) {
     Sound.play('BowShot');
   };
 
+  // ---- The Paladin's Shield Wall --------------------------------------------------------------------
+
+  const SHIELD_ROWS = ['kkkkkkk', 'kbbwbbk', 'kbbwbbk', 'kwwwwwk', 'kbbwbbk', '.kbwbk.', '..kbk..', '...k...'];
+
+  /** True while a Shield Wall stands and the Paladin is on his feet. */
+  m.shieldWallUp = function () { return this.wallLeft > 0 && this._active('paladin') && this._active(this.wallTarget); };
+
+  /** Cast on whoever is first in line: for a while all the damage that hero takes goes to the Paladin (or is halved, if he is the one in front). */
+  m._castShieldWall = function (level) {
+    this.wallTarget = this._frontKind();
+    this.wallLeft = shieldWallDuration(level);
+    const r = this._rectOf(this.wallTarget);
+    this._addItemText(t('Shield Wall!'), r.x + r.w / 2.0, r.y - 10, C(150, 200, 255));
+    Sound.play('StarHat');
+  };
+
+  function dashLine(g, x1, y1, x2, y2, col) {
+    const n = Math.max(Math.abs(x2 - x1), Math.abs(y2 - y1));
+    for (let i = 0; i <= n; i += 3) g.rect(Math.round(x1 + (x2 - x1) * i / n), Math.round(y1 + (y2 - y1) * i / n), 1, 1, col);
+  }
+
+  /** A little shield over the hero it protects, and a dotted line of light from them to the Paladin who takes their blows. */
+  m._drawShieldWall = function (g) {
+    if (!this.shieldWallUp()) return;
+    const tr = this._rectOf(this.wallTarget), pr = this._rectOf('paladin');
+    const pulse = 0.5 + 0.5 * Math.sin(Date.now() / 1000 * 5);
+    if (this.wallTarget !== 'paladin')
+      dashLine(g, tr.x + tr.w / 2, tr.y + tr.h * 0.45, pr.x + pr.w / 2, pr.y + pr.h * 0.45, CA(Math.trunc(70 + 80 * pulse), 140, 200, 255));
+    const hx = tr.x + Math.trunc(tr.w / 2) + 4, hy = tr.y - 6;
+    for (let y = 0; y < SHIELD_ROWS.length; y++)
+      for (let x = 0; x < 7; x++) {
+        const c = SHIELD_ROWS[y][x];
+        if (c === '.') continue;
+        g.rect(hx + x, hy + y, 1, 1, c === 'k' ? C(30, 22, 40) : c === 'w' ? C(244, 248, 255) : CA(Math.trunc(205 + 50 * pulse), 90, 140, 245));
+      }
+  };
+
   m._drainTargetReady = function () { return this.enemy !== null && this.enemy.deathT < 0 && this.enemy.engaged; };
 
   /** The Shadow Knight's Life Drain: a little of the enemy's life is torn away and given to the weakest member of the party. */
@@ -446,7 +496,7 @@ export function installTraits(P) {
 
   m._resetTraits = function () {
     this.traitTimer = {};
-    this.fireballs.length = 0; this.axes.length = 0; this.bolts.length = 0; this.globs.length = 0; this.toxinFlash = 0; this.heals.length = 0;
+    this.fireballs.length = 0; this.axes.length = 0; this.bolts.length = 0; this.globs.length = 0; this.toxinFlash = 0; this.heals.length = 0; this.wallLeft = 0;
     this.hp = {}; this.memberClip = {};
     this.inspireLeft = 0; this.hatLeft = 0; this.hatRed = {}; this.hatRegen = {}; this.shoutAge = -1; this.castFlash = 0; this.luckyFlash = 0;
     this._resetEnemies();
@@ -503,6 +553,7 @@ export function installTraits(P) {
     this._drawAxes(g);
     this._drawBolts(g);
     this._drawToxin(g);
+    this._drawShieldWall(g);
     this._drawLuckyFlash(g);
   };
 

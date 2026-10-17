@@ -5,7 +5,7 @@
 import { C, CA, withAlpha, rnd } from './util.js';
 import { Sprites } from './sprites.js';
 import { Sound } from './sfx.js';
-import { peckDamage, peckInterval, axeInterval, axeRangeBlocks, BLOCK_PIXELS, crossbowInterval, toxinDamage, BASIC_ATTACKERS, BASIC_DAMAGE, basicInterval } from './traits.js';
+import { peckDamage, peckInterval, axeInterval, axeRangeBlocks, BLOCK_PIXELS, crossbowInterval, toxinDamage, BASIC_ATTACKERS, BASIC_DAMAGE, basicInterval, paladinLightInterval, paladinLightTicks, paladinLightDamage, scytheDamage, scytheInterval, SPELL_RANGE_BLOCKS } from './traits.js';
 
 const BOW_FIRST_DELAY = 1.5;   // seconds from the Thief first being able to shoot to his first bolt
 import { t } from './i18n.js';
@@ -155,7 +155,7 @@ export function installEnemies(P) {
 
   m._spawnEnemy = function () {
     const kind = this._pickEnemyKind();
-    this.enemy = { kind: kind, x: this.lastLw + 6, hp: DEFS[kind].hp, maxHp: DEFS[kind].hp, engaged: false, walkT: 0, attackTimer: 0, attackAnim: -1, attackPose: 0, struck: false, peckTimer: 0, axeTimer: 0, axeStarted: false, poisonTicks: 0, poisonTick: 0, bloodMoonUsed: false, hurtFlash: 0, deathT: -1 };
+    this.enemy = { kind: kind, x: this.lastLw + 6, hp: DEFS[kind].hp, maxHp: DEFS[kind].hp, engaged: false, walkT: 0, attackTimer: 0, attackAnim: -1, attackPose: 0, struck: false, peckTimer: 0, axeTimer: 0, axeStarted: false, poisonTicks: 0, poisonTick: 0, lightTicks: 0, lightTick: 0, bloodMoonUsed: false, hurtFlash: 0, deathT: -1 };
     this.basicTimer = {};
     this.bowTimer = BOW_FIRST_DELAY;
     this._noteSeen(kind);
@@ -181,6 +181,17 @@ export function installEnemies(P) {
         e.poisonTick += 1.0;
         e.poisonTicks--;
         this._damageEnemy(e, this._withHuzzah(toxinDamage(this.levelOf('druid'))), false, e.x, 0, true);
+        if (e.deathT >= 0) return;
+      }
+    }
+
+    // The Paladin's light: a tick of damage every second until it has run its course.
+    if (e.lightTicks > 0) {
+      e.lightTick -= dt;
+      if (e.lightTick <= 0) {
+        e.lightTick += 1.0;
+        e.lightTicks--;
+        this._damageEnemy(e, this._withHuzzah(paladinLightDamage(this.levelOf('paladin'))), false, e.x, 0, false, true);
         if (e.deathT >= 0) return;
       }
     }
@@ -254,9 +265,27 @@ export function installEnemies(P) {
         }
         this.basicTimer[who] = left;
       }
+
+      // The Shadow Knight swings a scythe from the first or the second place: its long reach takes in an enemy at the front of the line.
+      {
+        const knight = 'shadowknight', interval = scytheInterval(this.levelOf(knight));
+        if (!this._active(knight) || this._lineIndexOf(knight) > 1 || !adjacent) this.basicTimer[knight] = interval;
+        else {
+          let left = this.basicTimer[knight] === undefined ? interval : this.basicTimer[knight];
+          left -= dt;
+          if (left <= 0) {
+            left += interval;
+            if (knight === lead) this.peckAnim = 0;   // (the leader lunges)
+            Sound.play('Peck');
+            this._damageEnemy(e, this._withHuzzah(scytheDamage(this.levelOf(knight))), false, e.x, 0);
+          }
+          this.basicTimer[knight] = left;
+        }
+      }
     }
 
     this._thiefCrossbow(e, dt);
+    this._paladinLight(e, dt);
 
     // The Warrior throws an axe every few seconds while there is a fight.
     if (this._active('warrior') && e.deathT < 0) {
@@ -271,6 +300,35 @@ export function installEnemies(P) {
 
   /** The Thief's crossbow: whenever he cannot make his basic melee attack (he is not leading the line, or the enemy is still
    *  walking in) and the enemy is on screen, a bolt for 2 damage every 5 seconds. */
+  /** The Paladin from any place but the front: every 3 seconds a beam of light on an enemy in range, 2 damage over the next 2 seconds.
+   * (At the front he strikes in melee instead; see the basic attackers.) */
+  m._paladinLight = function (e, dt) {
+    const level = this.levelOf('paladin'), interval = paladinLightInterval(level);
+    const ready = this._active('paladin') && this._frontKind() !== 'paladin' && e.deathT < 0 && e.x < this.lastLw
+      && e.x - (this._rectOf('paladin').x + this._rectOf('paladin').w) <= SPELL_RANGE_BLOCKS * BLOCK_PIXELS;
+    if (!ready) { this.lightTimer = interval; return; }
+    this.lightTimer = (this.lightTimer === undefined ? interval : this.lightTimer) - dt;
+    if (this.lightTimer > 0) return;
+    this.lightTimer += interval;
+    e.lightTicks = paladinLightTicks(level);
+    e.lightTick = 1.0;
+    const pr = this._rectOf('paladin'), er = this._enemyRect(e);
+    this.beams.push({ x1: pr.x + pr.w - 2, y1: pr.y + pr.h * 0.4, x2: er.x + er.w * 0.3, y2: er.y + er.h * 0.45, age: 0 });
+    Sound.play('StarHat');
+  };
+
+  m._drawBeams = function (g) {
+    for (const b of this.beams) {
+      const a = Math.trunc(235 * Math.max(0, 1 - b.age));
+      const n = Math.max(Math.abs(b.x2 - b.x1), Math.abs(b.y2 - b.y1), 1);
+      for (let i = 0; i <= n; i++) {
+        const x = Math.round(b.x1 + (b.x2 - b.x1) * i / n), y = Math.round(b.y1 + (b.y2 - b.y1) * i / n);
+        g.rect(x, y - 1, 1, 3, CA(Math.trunc(a / 3), 255, 226, 120));
+        g.rect(x, y, 1, 1, CA(a, 255, 250, 214));
+      }
+    }
+  };
+
   m._thiefCrossbow = function (e, dt) {
     const rr = this._rectOf('thief');
     const melee = this._frontKind() === 'thief' && (!!DEFS[e.kind].standoff || e.x - (rr.x + rr.w) <= 4);
@@ -296,17 +354,17 @@ export function installEnemies(P) {
     }
   };
 
-  m._damageEnemy = function (e, amount, fire, fx, fy, toxin) {
+  m._damageEnemy = function (e, amount, fire, fx, fy, toxin, light) {
     if (e.deathT >= 0) return;
     e.hp = Math.max(0, e.hp - amount);
-    if (!toxin) e.hurtFlash = 0.14;   // (a poison tick doesn't blanch it, so the green shows)
+    if (!toxin && !light) e.hurtFlash = 0.14;   // (a poison tick doesn't blanch it, so the green shows)
     if (fire) Sound.play('FireImpact');
     const r = this._enemyRect(e);
     this.damageTexts.push({
       x: r.x + r.w / 2.0 + (fire ? 0 : 2), y: r.y + DEFS[e.kind].headOffset - 4, age: 0, text: String(amount),
-      color: toxin ? C(150, 240, 100) : fire ? C(255, 176, 64) : (this.partyInspired ? C(255, 226, 90) : C(255, 255, 255))
+      color: light ? C(255, 238, 150) : toxin ? C(150, 240, 100) : fire ? C(255, 176, 64) : (this.partyInspired ? C(255, 226, 90) : C(255, 255, 255))
     });
-    this.bursts.push({ x: fire ? Math.min(fx, r.x + r.w / 2.0) : r.x + 2, y: fire ? r.y + r.h * 0.4 : r.y + r.h * 0.35, kind: toxin ? 'toxin' : fire ? 'fire' : 'peck', age: 0 });
+    this.bursts.push({ x: fire ? Math.min(fx, r.x + r.w / 2.0) : r.x + 2, y: fire ? r.y + r.h * 0.4 : r.y + r.h * 0.35, kind: light ? 'light' : toxin ? 'toxin' : fire ? 'fire' : 'peck', age: 0 });
     if (e.hp <= 0) {
       e.deathT = 0;
       Sound.play(DEATH[baseOf(e.kind)]);
@@ -327,9 +385,10 @@ export function installEnemies(P) {
     }
     for (let i = this.bursts.length - 1; i >= 0; i--) {
       const b = this.bursts[i];
-      b.age += dt / (b.kind === 'death' ? 0.8 : b.kind === 'blood' ? 0.7 : b.kind === 'fire' ? 0.4 : b.kind === 'toxin' ? 0.55 : b.kind === 'shout' ? 0.45 : b.kind === 'ash' ? 0.9 : b.kind === 'flames' ? 0.75 : b.kind === 'drain' ? 0.6 : 0.3);
+      b.age += dt / (b.kind === 'death' ? 0.8 : b.kind === 'blood' ? 0.7 : b.kind === 'fire' ? 0.4 : b.kind === 'toxin' ? 0.55 : b.kind === 'shout' ? 0.45 : b.kind === 'ash' ? 0.9 : b.kind === 'flames' ? 0.75 : b.kind === 'drain' ? 0.6 : b.kind === 'light' ? 0.5 : 0.3);
       if (b.age >= 1) this.bursts.splice(i, 1);
     }
+    for (let i = this.beams.length - 1; i >= 0; i--) { this.beams[i].age += dt / 0.4; if (this.beams[i].age >= 1) this.beams.splice(i, 1); }
     if (this.peckAnim >= 0) { this.peckAnim += dt / 0.25; if (this.peckAnim >= 1) this.peckAnim = -1; }
     if (this.flinch > 0) this.flinch = Math.max(0, this.flinch - dt);
 
@@ -465,6 +524,7 @@ export function installEnemies(P) {
     this.enemyAttacks = 0;
     this.damageTexts.length = 0;
     this.bursts.length = 0;
+    this.beams.length = 0; this.lightTimer = 0;
     this.peckAnim = -1;
     this.flinch = 0;
     this.shots.length = 0;
@@ -625,6 +685,7 @@ export function installEnemies(P) {
   };
 
   m._drawEnemyEffects = function (g) {
+    this._drawBeams(g);
     // Spat fireballs: a ball of flame with a hot heart, shedding embers behind it.
     for (const sp of this.spits) {
       const x = Math.round(sp.x), y = Math.round(sp.y);
@@ -695,6 +756,12 @@ export function installEnemies(P) {
             g.rect(ax, ay, k % 3 === 0 ? 2 : 1, 1, k % 2 === 0 ? CA(fade, 168, 166, 178) : CA(fade, 120, 118, 130));
           }
           g.rect(x - 1, y - 1, 2, 2, CA(Math.trunc(255 * Math.max(0, 1 - u * 3)), 255, 150, 60));
+          break;
+        }
+        case 'light': {   // golden motes rising off the enemy where the light lands
+          for (let k = 0; k < 5; k++)
+            g.rect(x - 4 + k * 2 + (k % 2), y - Math.trunc(8 * u) - (k % 3), 2, 2, CA(fade, 255, k % 2 === 0 ? 236 : 255, k % 2 === 0 ? 130 : 220));
+          g.ellipse(x - 5, y - 5, 10, 10, CA(Math.trunc(fade / 3), 255, 236, 140));
           break;
         }
         case 'drain': {   // dark purple wisps pulled out of the enemy and drawn away to the left, towards the party

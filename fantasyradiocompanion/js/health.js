@@ -5,7 +5,6 @@
 import { C, CA } from './util.js';
 import { Sprites } from './sprites.js';
 import { t } from './i18n.js';
-import { auraReduction, AURA_FLOOR } from './traits.js';   // (traits.js imports this file too; each uses the other only inside functions)
 
 /** Hit points at full health. Everyone has 50 for now; the Warrior, the front-liner, has 80. */
 /** The HP a level-up adds, from `fromLevel` to the next. Four tiers, every one at 10 or more in the early levels: the tank (Warrior)
@@ -95,19 +94,14 @@ export function installHealth(P) {
 
   m._lineIndexOf = function (kind) { return this._lineOrder().indexOf(kind); };
 
-  /** While the Paladin is on his feet every hit on the party does less damage (never below the floor). */
-  m._auraDamage = function (amount) {
-    if (!this._active('paladin')) return amount;
-    return Math.max(Math.min(amount, AURA_FLOOR), amount - auraReduction(this.levelOf('paladin')));
-  };
-
   /** Takes HP off a member. At 0 they faint. */
   m.damageMember = function (kind, amount) {
     if (this.party.indexOf(kind) < 0 || amount <= 0) return;
+    if (this.wallLeft > 0 && this.wallTarget === kind && kind !== 'paladin' && this.shieldWallUp()) kind = 'paladin';   // Shield Wall: the Paladin takes the blow
     const before = this.hpOf(kind);
     if (before <= 0) return;   // already out cold
-    amount = this._auraDamage(amount);        // the Paladin's Holy Aura takes a little off every hit
-    amount = this._hatDamage(kind, amount);   // a Blue Hat halves what its wearer takes
+    if (kind === 'paladin' && this.wallLeft > 0 && this.wallTarget === 'paladin') amount = Math.ceil(amount / 2);   // the Paladin in front: the wall halves what he takes
+    amount = this._hatDamage(kind, amount);   // a Blue Hat halves what its wearer takes (on top of that)
     this.hp[kind] = Math.max(0, before - amount);
     if (this.hp[kind] === 0 && this._tryRerevive(kind)) return;   // Rerevive: they get up again on the spot with half their HP
     const r = this._rectOf(kind);
