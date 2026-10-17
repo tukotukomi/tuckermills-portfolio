@@ -11,13 +11,14 @@ export const ITEM_IDS = ['SynergyElixir', 'PotionRed', 'PotionBlue', 'PotionGree
 export const HOT_SLOT_COUNT = 4;
 export const BERSERK_SECONDS = 120;
 
-/** Name, blurb and price (0 = the Merchant doesn't sell it). `heal` is the HP an item restores to the member it is used on. The red and blue
- *  potions are placeholders to prove the item UI; the green one is the Healing Potion I (its id stays PotionGreen so saved bags keep working). */
+/** Name, blurb and price (0 = the Merchant doesn't sell it). `heal` is the HP an item restores to the member it is used on; `revive` marks the
+ *  item that wakes a fainted member (the only one that can, besides a Rest at the inn). The red potion is a dev tool (the Monster Berserker); the
+ *  green one is the Healing Potion I and the blue one the Revive Potion (their ids stay PotionGreen and PotionBlue so saved bags keep working). */
 export const ITEM_DEFS = {
   SynergyElixir: { name: 'Synergy Elixir', price: 20, start: 0, blurb: "Resets every party member's skills so they all fire together within a second, Huzzah! first so the damage skills get its full benefit." },
   PotionRed: { name: 'Monster Berserker', price: 0, infinite: true, picks: true, blurb: 'A dev tool: multiplies the damage monsters deal, from 1X to 5X, for 2 minutes. Pick the multiplier after using it; a new use replaces the old one. Never runs out.' },
-  PotionBlue: { name: 'Blue Potion', price: 0, blurb: 'A placeholder potion. It does nothing yet.' },
-  PotionGreen: { name: 'Healing Potion I', price: 5, heal: 10, blurb: 'Heals one party member for 10 HP. After using it, tap the member to heal.' },
+  PotionBlue: { name: 'Revive Potion', price: 10, start: 0, revive: true, blurb: 'Revives a fainted party member with 50% HP, at the back of the line. After using it, tap the fainted member.' },
+  PotionGreen: { name: 'Healing Potion I', price: 5, heal: 10, blurb: "Heals one party member for 10 HP. After using it, tap the member to heal. It can't wake a fainted member: that takes a Revive Potion or a Rest at the inn." },
 };
 
 const TIMED_TRAITS = ['Heal', 'Fireball', 'Huzzah', 'StarHat', 'NaturalToxin'];
@@ -58,7 +59,7 @@ export function installItems(P) {
   Object.defineProperties(m, {
     isShopping: { get() { return this.enc === 'Shop'; } },
     /** True while a healing item is waiting for its target: the adventure is paused and the page asks for a tap on a member. */
-    isTargeting: { get() { return this.targetItem !== null && ITEM_DEFS[this.targetItem].heal > 0; } },
+    isTargeting: { get() { return this.targetItem !== null && (ITEM_DEFS[this.targetItem].heal > 0 || !!ITEM_DEFS[this.targetItem].revive); } },
     /** True while the Monster Berserker waits for its multiplier: the game is paused and the page shows 1X to 5X. */
     isPicking: { get() { return this.targetItem !== null && !!ITEM_DEFS[this.targetItem].picks; } },
     /** Either kind of wait: something was used and needs a choice (or a cancel) before the game goes on. */
@@ -116,8 +117,12 @@ export function installItems(P) {
       Sound.play('DiscClick');
       return true;
     }
-    if (ITEM_DEFS[id].heal > 0 && this.party.length > 0) {
-      // Nothing is spent yet: the game pauses and the player taps who to heal (or cancels).
+    if ((ITEM_DEFS[id].heal > 0 || ITEM_DEFS[id].revive) && this.party.length > 0) {
+      if (ITEM_DEFS[id].revive && !this.party.some(k => this.hpOf(k) <= 0)) {
+        this._addItemText(t('No one has fainted'), this._leaderCenterX(), this.groundY - 30, C(200, 226, 255));   // nobody to wake: nothing is used
+        return false;
+      }
+      // Nothing is spent yet: the game pauses and the player taps who to heal or revive (or cancels).
       this.targetItem = id; this.targetT = 0; this.targetHover = null;
       Sound.play('DiscClick');
       return true;
@@ -140,9 +145,23 @@ export function installItems(P) {
     if (!this.isTargeting || this.party.indexOf(who) < 0) return false;
     const id = this.targetItem;
     if (this.itemCount(id) <= 0) { this.targetItem = null; this.targetHover = null; return false; }
+    const r = this._rectOf(who);
+    if (ITEM_DEFS[id].revive) {
+      if (this.hpOf(who) > 0) {   // only the fainted can be revived: say so and keep waiting for another choice (or a cancel)
+        this._addItemText(t('Not fainted'), r.x + r.w / 2.0, r.y - 4, C(200, 226, 255));
+        return false;
+      }
+      this.targetItem = null; this.targetHover = null;
+      this._addItem(id, -1);
+      this._reviveMember(who);
+      return true;
+    }
+    if (this.hpOf(who) <= 0) {   // a healing potion can't wake anyone
+      this._addItemText(t('Needs a Revive Potion'), r.x + r.w / 2.0, r.y - 4, C(255, 190, 170));
+      return false;
+    }
     if (this.hpOf(who) >= this.maxHpOf(who)) {
       // A potion isn't wasted on someone in full health: say so and keep waiting for another choice (or a cancel).
-      const r = this._rectOf(who);
       this._addItemText(t('HP full'), r.x + r.w / 2.0, r.y - 4, C(200, 226, 255));
       return false;
     }
@@ -154,6 +173,19 @@ export function installItems(P) {
     Sound.play('Heal');
     this.raiseProgress();
     return true;
+  };
+
+  /** The Revive Potion's effect: the fainted member wakes with half their HP and takes the back of the line (after the others who are up). */
+  m._reviveMember = function (who) {
+    const i = this.party.indexOf(who);
+    if (i >= 0) { this.party.splice(i, 1); this.party.push(who); }
+    const hp = Math.max(1, Math.trunc((this.maxHpOf(who) + 1) / 2));
+    this.hp[who] = hp;
+    this.heals.push({ from: who, to: who, amount: hp, age: 0 });
+    Sound.play('Heal');
+    const r = this._rectOf(who);
+    this._addItemText(t('Revived!'), r.x + r.w / 2.0, r.y - 8, C(160, 255, 190));
+    this.raiseProgress();
   };
 
   /** Applies the chosen multiplier (1 to 5) for two minutes, replacing any Berserker already running, and resumes the game. */

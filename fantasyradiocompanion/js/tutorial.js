@@ -50,7 +50,7 @@ export function installTutorial(P) {
   /** Called after a member takes damage: the first time anyone is below 25 HP, the game stops and the Old Man explains potions. */
   m._checkHpTip = function (who) {
     if (this.tip !== 'None' || this.tipsSeen.has('hp') || this.starting || this.isGameOver) return;
-    if (this.party.indexOf(who) < 0 || this.hpOf(who) >= HP_TIP_BELOW) return;
+    if (this.party.indexOf(who) < 0 || this.hpOf(who) >= HP_TIP_BELOW || this.hpOf(who) <= 0) return;   // (a potion can't wake the fainted, so only someone still up counts)
     this._markTipSeen('hp');
     // The potion button must show the Healing Potion I whatever was selected before.
     const slot = this.hot.indexOf('PotionGreen');

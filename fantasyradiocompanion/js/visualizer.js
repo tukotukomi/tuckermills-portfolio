@@ -777,7 +777,7 @@ export class Visualizer {
     if (this.scene.isPicking && this.vh < 180) return;   // a short view has no room for the words beside the buttons
     const label = t(this.scene.isPicking ? 'Monster damage multiplier'
       : this.scene.isSwapping ? (this.scene.swapFirstKind ? 'Now choose who to swap with' : 'Choose two heroes to swap')
-        : 'Choose who to heal'), px = 8.5 * PT, w = Math.round(this._measure(ctx, label, px) + 20);
+        : this.scene.targetItem === 'PotionBlue' ? 'Choose who to revive' : 'Choose who to heal'), px = 8.5 * PT, w = Math.round(this._measure(ctx, label, px) + 20);
     let x = r.x + r.w + 8, y = r.y + (r.h - 24) / 2;
     if (this.scene.isPicking) {   // over the middle of the buttons rather than beside the cross, where it would run into them
       const mr = this._multiplierRects(), mid = Math.trunc((mr[0].x + mr[4].x + mr[4].w) / 2);
