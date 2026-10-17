@@ -218,6 +218,7 @@ export class Visualizer {
     this._drawSettingsButton(ctx);
     this._drawDayCounter(ctx);
     this._drawGoldCounter(ctx);
+    this._drawStampChip(ctx);
     this._drawStorageChip(ctx);
     this._drawBerserkChip(ctx);
     this._drawNowPlaying(ctx);
@@ -282,9 +283,10 @@ export class Visualizer {
       return r;
     };
     const day = this._dayWidth(ctx);
-    const L = { day: Object.assign(place(day.w), { leftW: day.leftW, seasonW: day.seasonW }), gold: null, storage: null, berserk: null, np: null };
+    const L = { day: Object.assign(place(day.w), { leftW: day.leftW, seasonW: day.seasonW }), gold: null, stamps: null, storage: null, berserk: null, np: null };
     const goldW = Math.max(62, Math.round(36 + this._measure(ctx, this.scene.gold.toLocaleString('en-US'), 10.5 * PT) + 10));
     L.gold = place(goldW);
+    if (!this.scene.starting) L.stamps = place(this._stampChipWidth(ctx));
     if (!this.scene.starting) L.storage = place(Math.round(8 + 16 + 6 + this._measure(ctx, this.scene.scrollCount + '/' + this.scene.scrollCapacity, 9.5 * PT) + 10));
     if (this.scene.berserkLeft > 0) L.berserk = place(Math.round(this._measure(ctx, this._berserkText(), 9.5 * PT) + 22));
     const n = this._np();
@@ -319,7 +321,7 @@ export class Visualizer {
   _multiplierRects() {
     const r = this._hotRect, L = this._hudLayout(this.ctx);
     let bottom = 0;
-    for (const p of [L.day, L.gold, L.storage, L.berserk, L.np]) if (p) bottom = Math.max(bottom, p.y + p.h);
+    for (const p of [L.day, L.gold, L.stamps, L.storage, L.berserk, L.np]) if (p) bottom = Math.max(bottom, p.y + p.h);
     const gap = 8, left = r.x + r.w + 12, avail = Math.max(120, this.vw - left - 12);
     const d = Math.max(28, Math.min(52, Math.min(Math.trunc((avail - 4 * gap) / 5), Math.trunc(this.vh / 2) - 8)));
     const total = 5 * d + 4 * gap, x0 = left + Math.max(0, Math.trunc((avail - total) / 2));
@@ -358,12 +360,13 @@ export class Visualizer {
   _dayPillRect(ctx) { return this._hudLayout(ctx).day; }
   _goldRect(ctx) { return this._hudLayout(ctx).gold; }
   _storageRect(ctx) { return this._hudLayout(ctx).storage; }
+  _stampsRect(ctx) { return this._hudLayout(ctx).stamps; }
 
   /** The left edge of the free space along the top: clear of every pill that sits on the first row. */
   _hudRightPx(ctx) {
     const L = this._hudLayout(ctx);
     let right = L.day.x + L.day.w;
-    for (const r of [L.gold, L.storage, L.berserk, L.np]) if (r && r.y === 8) right = Math.max(right, r.x + r.w);
+    for (const r of [L.gold, L.stamps, L.storage, L.berserk, L.np]) if (r && r.y === 8) right = Math.max(right, r.x + r.w);
     return Math.trunc((right + 10) * this.hud);
   }
   // ---- The now-playing pill (full screen only: the page already shows these in its own controls) ---------------
@@ -554,6 +557,22 @@ export class Visualizer {
     this._text(ctx, s.gold.toLocaleString('en-US'), gr.x + 12 + cw, gr.y + h / 2 + 0.5, { px: 10.5 * PT, color: 'white' });
   }
 
+  _stampChipWidth(ctx) {
+    const icon = Sprites.stamp || { width: 12 };
+    return Math.round(8 + icon.width + 6 + this._measure(ctx, String(this.scene.stamps), 9.5 * PT) + 10);
+  }
+
+  /** The Tavern Stamps the player has, beside the gold, for as long as the adventure is on (the Tavern Shop has them before it starts). */
+  _drawStampChip(ctx) {
+    if (this.scene.starting) return;
+    const r = this._stampsRect(ctx);
+    if (!r) return;
+    const icon = Sprites.stamp || { width: 12, height: 13 };
+    this._pill(ctx, r.x, r.y, r.w, r.h, 6, rgba(12, 16, 44, 0.59), 'rgba(255,110,100,0.82)', 1.4);
+    this._drawStampIcon(ctx, r.x + 8 + icon.width / 2, r.y + r.h / 2, 1);
+    this._text(ctx, String(this.scene.stamps), r.x + 8 + icon.width + 6, r.y + r.h / 2 + 0.5, { px: 9.5 * PT, color: 'white' });
+  }
+
   _drawStorageChip(ctx) {
     if (this.scene.starting) return;   // (the satchel and the scrolls carried, out of how many it holds: 1, and +1 from the Paca)
     const r = this._storageRect(ctx);
@@ -684,7 +703,7 @@ export class Visualizer {
     // A short strip: a smaller button just under the HUD pills, at the left edge (the full-size one would sit over the calendar).
     const size = 32, L = this._hudLayout(this.ctx);
     let bottom = 0;
-    for (const r of [L.day, L.gold, L.storage, L.berserk, L.np]) if (r) bottom = Math.max(bottom, r.y + r.h);
+    for (const r of [L.day, L.gold, L.stamps, L.storage, L.berserk, L.np]) if (r) bottom = Math.max(bottom, r.y + r.h);
     let y = bottom + 6;
     if (y + size + 6 > this.vh) y = Math.max(0, this.vh - size - 6);
     return { x: 6, y: y, w: size, h: size };
@@ -827,7 +846,7 @@ export class Visualizer {
   _innLayout() {
     let top = 40;
     const L = this._hudLayout(this.ctx);
-    for (const r of [L.day, L.gold, L.storage, L.berserk, L.np]) if (r) top = Math.max(top, r.y + r.h + 4);
+    for (const r of [L.day, L.gold, L.stamps, L.storage, L.berserk, L.np]) if (r) top = Math.max(top, r.y + r.h + 4);
     const text = t('Need to rest and reorganize?');
     const bw = Math.min(this.vw - 16, Math.round(this._measure(this.ctx, text, 10.5 * PT) + 32)), bh = 24;
     if (this.vh < 190) {
@@ -897,7 +916,7 @@ export class Visualizer {
       const btnW = 112, left = 14;
       let top = 36;
       const L = this._hudLayout(this.ctx);
-      for (const r of [L.day, L.gold, L.storage, L.berserk, L.np]) if (r) top = Math.max(top, r.y + r.h + 2);   // below the HUD pills, which may have wrapped
+      for (const r of [L.day, L.gold, L.stamps, L.storage, L.berserk, L.np]) if (r) top = Math.max(top, r.y + r.h + 2);   // below the HUD pills, which may have wrapped
       const th = Math.max(26, Math.min(46, this.vh - top - 22));
       const title = { x: left, y: top, w: this.vw - left - btnW - 26, h: th };
       const score = { x: left, y: title.y + title.h, w: title.w, h: 18 };
@@ -1028,7 +1047,7 @@ export class Visualizer {
     if (this._compactDisc) return this._hotRect;
     const L = this._hudLayout(this.ctx);
     let bottom = 0;
-    for (const r of [L.day, L.gold, L.storage, L.np]) if (r) bottom = Math.max(bottom, r.y + r.h);
+    for (const r of [L.day, L.gold, L.stamps, L.storage, L.np]) if (r) bottom = Math.max(bottom, r.y + r.h);
     return { x: 8, y: bottom + 10, w: 44, h: 44 };
   }
   get _tshopBtnVisible() { const s = this.scene; return s.starting && !s.isTipActive && !this._tshopOpen && !s.isGameOver; }
@@ -1194,7 +1213,7 @@ export class Visualizer {
     const pw = Math.min(this.width - 16, Math.round(iconW + 8 * k + tw + 28 * k)), ph = Math.round(Math.max(px * 1.3, icon.height * stampF) + 10 * k);
     const L = this._hudLayout(ctx);
     let bottom = 40;
-    for (const r of [L.day, L.gold, L.storage, L.berserk, L.np]) if (r) bottom = Math.max(bottom, r.y + r.h + 4);
+    for (const r of [L.day, L.gold, L.stamps, L.storage, L.berserk, L.np]) if (r) bottom = Math.max(bottom, r.y + r.h + 4);
     const x = Math.max(8, this.width - 12 - pw), y = bottom * this.hud + 8 * k + (1 - a) * -8;
     ctx.save();
     ctx.globalAlpha = a;
@@ -1529,7 +1548,7 @@ export class Visualizer {
     // The block sits below the HUD pills (which may have wrapped onto a second row), never under them.
     const L0 = this._hudLayout(this.ctx);
     let hudBottom = 0;
-    for (const r of [L0.day, L0.gold, L0.storage, L0.np]) if (r) hudBottom = Math.max(hudBottom, r.y + r.h);
+    for (const r of [L0.day, L0.gold, L0.stamps, L0.storage, L0.np]) if (r) hudBottom = Math.max(hudBottom, r.y + r.h);
     const top0 = Math.trunc(hudBottom * this.hud) + 6, room = this.height - top0 - 8;
     const k0 = Math.max(1.0, Math.min(2.2, this.height / 130.0));
     const kSide = Math.min(k0, (this.width - 40.0) / 660.0);
