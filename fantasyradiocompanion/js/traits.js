@@ -12,7 +12,7 @@ export const TRAIT_OWNER = { ItemStorage: 'paca', Heal: 'lightmage', Fireball: '
 
 export function storageSlots(level) { return 1; }
 export function healInterval(level) { return 10; }
-export function healAmount(level) { return 5; }
+export function healAmount(level) { return 5 + 2 * (Math.min(Math.max(level, 1), 5) - 1); }   // HP: 5 at level 1, 2 more a level, 13 from level 5 on
 export function fireballInterval(level) { return 8; }
 export function luckyCoinChance(level) { return 0.10; }
 export function luckyCoinCount(level) { return 2; }

@@ -19,6 +19,7 @@ export const JOURNAL = [
       'The Rereviver scroll gives a hero a year of instant revives.',
       'The Blue Potion is now the Revive Potion. You start with one.',
       'Healing Potions no longer wake fainted heroes.',
+      'The Light Mage\'s heal grows with each level, up to 13 HP.',
       'New: read this journal in Settings!'
     ],
     es: {
@@ -33,6 +34,7 @@ export const JOURNAL = [
         'El pergamino de Rerevivir da a un héroe un año de reanimaciones instantáneas.',
         'La poción azul ahora es la Poción de reanimación. Empiezas con una.',
         'Las pociones de curación ya no despiertan a los héroes desmayados.',
+        'La curación del mago de luz crece con cada nivel, hasta 13 PV.',
         'Novedad: ¡lee este diario en Ajustes!'
       ]
     },
@@ -48,6 +50,7 @@ export const JOURNAL = [
         '再复活卷轴：让英雄一年内倒下时立即复活。',
         '蓝色药水变成了复活药水，开局自带一瓶。',
         '治疗药水不能再唤醒昏倒的英雄。',
+        '光明法师的治疗随等级提升，最高 13 点生命。',
         '新增：在设置中阅读本日志！'
       ]
     }
