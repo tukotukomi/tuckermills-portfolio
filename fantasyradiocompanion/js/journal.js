@@ -8,23 +8,26 @@
 export const JOURNAL = [
   {
     date: '2026-10-18',
-    title: 'Rarer scrolls, clearer level-ups',
+    title: 'Rarer scrolls, clearer level-ups, a cuter stamp',
     notes: [
       'Scrolls drop less often: about 1 in 5.',
-      'The level-up screen shows what your hero will gain: HP, attacks and heals.'
+      'The level-up screen shows what your hero will gain: HP, attacks and heals.',
+      'The Tavern Stamp is now a cute round seal.'
     ],
     es: {
-      title: 'Pergaminos más escasos, subidas de nivel más claras',
+      title: 'Pergaminos más escasos, subidas de nivel más claras, un sello más mono',
       notes: [
         'Los pergaminos caen con menos frecuencia: más o menos 1 de cada 5.',
-        'La pantalla de subida de nivel muestra lo que ganará tu héroe: PS, ataques y curaciones.'
+        'La pantalla de subida de nivel muestra lo que ganará tu héroe: PS, ataques y curaciones.',
+        'El sello de taberna ahora es un sello redondo y adorable.'
       ]
     },
     zh: {
-      title: '更稀有的卷轴，更清晰的升级',
+      title: '更稀有的卷轴，更清晰的升级，更可爱的印章',
       notes: [
         '卷轴掉落变少了：大约五次一个。',
-        '升级界面会显示英雄的成长：HP、攻击和治疗。'
+        '升级界面会显示英雄的成长：HP、攻击和治疗。',
+        '酒馆印章变成了可爱的圆形印。'
       ]
     }
   },
