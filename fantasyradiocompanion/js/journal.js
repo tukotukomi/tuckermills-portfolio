@@ -8,7 +8,7 @@
 export const JOURNAL = [
   {
     date: '2026-10-17',
-    title: 'New heroes, scrolls and stamps',
+    title: 'New heroes, scrolls and oozy poison',
     notes: [
       'Tavern Stamps: earn one each year. The count sits by your gold.',
       'New Tavern Shop: 10 stamps unlock a hero for good.',
@@ -23,10 +23,11 @@ export const JOURNAL = [
       'Basic attacks hit 1 harder with every level.',
       'The Druid\'s poison is a big oozy glob that splats onto monsters.',
       'Windows: the FFXI addon is now loaded with /addon load fantasyradiocompanion.',
-      'New: read this journal in Settings!'
+      'Windows: a clear title now sits above the Zone / Battle settings.',
+      'New: read this journal in Settings, in your language!'
     ],
     es: {
-      title: 'Nuevos héroes, pergaminos y sellos',
+      title: 'Nuevos héroes, pergaminos y veneno viscoso',
       notes: [
         'Sellos de taberna: ganas uno cada año. El total aparece junto a tu oro.',
         'Nueva Tienda de la taberna: 10 sellos desbloquean un héroe para siempre.',
@@ -41,11 +42,12 @@ export const JOURNAL = [
         'Los ataques básicos pegan 1 más fuerte con cada nivel.',
         'El veneno del druida es una gran bola viscosa que se estampa en los monstruos.',
         'Windows: el complemento de FFXI ahora se carga con /addon load fantasyradiocompanion.',
-        'Novedad: ¡lee este diario en Ajustes!'
+        'Windows: un título claro encabeza ahora los ajustes de Zona / Batalla.',
+        'Novedad: ¡lee este diario en Ajustes, en tu idioma!'
       ]
     },
     zh: {
-      title: '新英雄、卷轴和印章',
+      title: '新英雄、卷轴和黏糊糊的毒液',
       notes: [
         '酒馆印章：每年可获得一枚，数量显示在金币旁。',
         '新增酒馆商店：10 枚印章即可永久解锁一名英雄。',
@@ -60,7 +62,8 @@ export const JOURNAL = [
         '普通攻击每升一级伤害 +1。',
         '德鲁伊的毒液变成黏稠的大团软泥，会啪地粘在怪物身上。',
         'Windows：FFXI 插件现在用 /addon load fantasyradiocompanion 加载。',
-        '新增：在设置中阅读本日志！'
+        'Windows：区域 / 战斗设置上方新增了醒目的标题。',
+        '新增：在设置中用你的语言阅读本日志！'
       ]
     }
   },
