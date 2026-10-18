@@ -23,28 +23,31 @@ export function starHatInterval(level) { return 3 * 60; }
 export function redHatRegenHp(level) { return 1; }            // a Red Hat gives this much back...
 export function redHatRegenSeconds(level) { return 2; }       // ...every this many seconds
 export function starHatDuration(level) { return 60; }
-export function peckDamage(level) { return 1; }
+export function peckDamage(level) { return 1 + levelBonus(level); }
 export function peckInterval(level) { return 1.0; }
 // The basic attacks of the other four: 1 damage every few seconds, but only from the front of the line and right next to the enemy.
 export const BASIC_ATTACKERS = ['thief', 'fae', 'lightmage', 'firemage', 'paladin'];
 export const BASIC_DAMAGE = 1;
+/** Every basic attack hits 1 harder for each level gained (level 1 has the base damage). */
+export function levelBonus(level) { return Math.max(0, level - 1); }
+export function basicDamage(level) { return BASIC_DAMAGE + levelBonus(level); }
 export function basicInterval(kind) { return { thief: 2, fae: 3, lightmage: 3, firemage: 5, paladin: 3 }[kind] || 5; }
 export function fireballDamage(level) { return 5; }
 export const SPELL_RANGE_BLOCKS = 25;   // how far a thrown spell goes: the fireball burns out, the toxin falls, after this many blocks
 export function fireballRangeBlocks(level) { return SPELL_RANGE_BLOCKS; }
 export function toxinRangeBlocks(level) { return SPELL_RANGE_BLOCKS; }
-export function axeDamage(level) { return 3; }          // the Warrior's thrown axe
+export function axeDamage(level) { return 3 + levelBonus(level); }          // the Warrior's thrown axe
 export function axeInterval(level) { return 3.0; }
 export function axeRangeBlocks(level) { return 10; }   // blocks of grass it travels
 export const BLOCK_PIXELS = 8;                          // one block of grass = one repeat of the ground's pattern
-export function crossbowDamage(level) { return 2; }    // the Thief's crossbow bolt, for when he is out of melee reach
+export function crossbowDamage(level) { return 2 + levelBonus(level); }    // the Thief's crossbow bolt, for when he is out of melee reach
 export function crossbowInterval(level) { return 5.0; }
 export function shieldWallInterval(level) { return 60; }       // the Paladin's Shield Wall: cast on the first hero this often...
 export function shieldWallDuration(level) { return 30; }       // ...and standing for this many seconds (damage to that hero goes to the Paladin, or is halved if he is that hero)
 export function paladinLightInterval(level) { return 3; }      // from behind the front the Paladin casts light: this often...
 export function paladinLightTicks(level) { return 2; }         // ...for this many seconds...
 export function paladinLightDamage(level) { return 1; }        // ...taking this much off every second (2 damage over 2 seconds)
-export function scytheDamage(level) { return 2; }              // the Shadow Knight's scythe, from the first or second place...
+export function scytheDamage(level) { return 2 + levelBonus(level); }              // the Shadow Knight's scythe, from the first or second place...
 export function scytheInterval(level) { return 3; }            // ...this often
 export function lifeDrainInterval(level) { return 8; }       // the Shadow Knight's Life Drain: seconds of adventuring between drains
 export function lifeDrainDamage(level) { return 3; }         // taken off the enemy...
@@ -104,6 +107,26 @@ const GLOB_SPEED = 100;  // the Druid's toxin glob, scene pixels per second
 const GLOB_ARC = 8;      // how high the lob rises above the straight line
 const SHOUT_SECONDS = 2.2;
 const HAT_ROWS = ['...y...', '..bbb..', '..byb..', '.bbybb.', 'BBBBBBB'];
+
+/** Fills an ellipse with 1 px rows (pixel art, no smoothing). */
+function gooRows(g, col, cx, cy, rx, ry) {
+  const r = Math.ceil(ry);
+  for (let dy = -r; dy <= r; dy++) {
+    const tt = ry > 0 ? dy / ry : 0;
+    if (Math.abs(tt) > 1) continue;
+    const hw = rx * Math.sqrt(1 - tt * tt);
+    g.rect(Math.round(cx - hw), Math.round(cy) + dy, Math.max(1, Math.round(hw * 2)), 1, col);
+  }
+}
+
+/** A blob of green ooze: a dark rim, a green body, a lighter top and a glint. */
+export function goo(g, cx, cy, rx, ry, a) {
+  a = Math.max(0, Math.min(255, a));
+  gooRows(g, CA(a, 24, 90, 48), cx, cy, rx + 1, ry + 1);
+  gooRows(g, CA(a, 96, 200, 66), cx, cy, rx, ry);
+  gooRows(g, CA(a, 160, 236, 110), cx - rx * 0.25, cy - ry * 0.35, rx * 0.55, ry * 0.45);
+  if (rx >= 2.5) g.rect(Math.round(cx - rx * 0.5), Math.round(cy - ry * 0.6), 1, 1, CA(a, 230, 255, 190));
+}
 
 function plus(g, c, x, y) { g.rect(x - 1, y, 3, 1, c); g.rect(x, y - 1, 1, 3, c); }
 
@@ -359,7 +382,7 @@ export function installTraits(P) {
       if (!gl.falls && this.enemy !== null && this.enemy.deathT < 0 && gl.x >= this.enemy.x - 0.5) {
         this.enemy.poisonTicks = toxinTicks(this.levelOf('druid'));
         this.enemy.poisonTick = 1.0;
-        this.bursts.push({ x: gl.x, y: gl.y, kind: 'toxin', age: 0 });
+        this.bursts.push({ x: gl.x, y: gl.y, kind: 'splat', age: 0, stick: true, off: gl.x - this.enemy.x });   // it glops onto the enemy
         Sound.play('ToxinTick');
       } else {
         this.bursts.push({ x: gl.x, y: this.groundY - 1, kind: 'toxin', age: 0 });   // it splashes on the floor and is gone
@@ -460,7 +483,7 @@ export function installTraits(P) {
     const r = this._rectOf('druid'), er = this._enemyRect(e);
     const sx = r.x + r.w - 2, sy = r.y + 5;
     // Out of range (as far as the Fire Mage's fireball goes) it comes down on the floor short of the enemy and is gone.
-    const toEnemy = Math.max(6, e.x - sx), maxRange = toxinRangeBlocks(this.levelOf('druid')) * BLOCK_PIXELS;
+    const toEnemy = Math.max(6, e.x + er.w * 0.3 - sx), maxRange = toxinRangeBlocks(this.levelOf('druid')) * BLOCK_PIXELS;
     const reaches = toEnemy <= maxRange;
     this.globs.push({ startX: sx, startY: sy, endY: reaches ? er.y + er.h * 0.45 : this.groundY - 2, range: reaches ? toEnemy : maxRange, travel: 0, x: sx, y: sy, age: 0, falls: !reaches });
     this.toxinFlash = 0.35;
@@ -469,12 +492,15 @@ export function installTraits(P) {
 
   m._drawToxin = function (g) {
     for (const gl of this.globs) {
-      const x = Math.round(gl.x), y = Math.round(gl.y);
-      g.rect(x + 3, y + 1, 1, 1, CA(130, 110, 220, 80));
-      g.rect(x + 5, y, 1, 1, CA(130, 110, 220, 80));
-      g.rect(x - 1, y - 1, 4, 4, C(30, 100, 50));
-      g.rect(x, y, 2, 2, C(124, 232, 84));
-      g.rect(x, y, 1, 1, C(220, 255, 170));
+      // The ooze trails behind: smaller blobs hanging back along the path, drooping a little more the further back they are.
+      for (let k = 4; k >= 1; k--) {
+        const tr = Math.max(0, gl.travel - k * 5), uu = gl.range > 0 ? tr / gl.range : 1;
+        const tx = gl.startX + tr, ty = gl.startY + (gl.endY - gl.startY) * uu - GLOB_ARC * Math.sin(Math.PI * uu) + k * 0.9;
+        goo(g, tx, ty, Math.max(1, 3.2 - k * 0.6), Math.max(1, 2.6 - k * 0.5), 230 - k * 45);
+      }
+      // The glob itself wobbles as it flies, stretching and squashing.
+      const wob = Math.sin(gl.age * 16);
+      goo(g, gl.x, gl.y, 4.2 + 0.8 * wob, 3.4 - 0.6 * wob, 255);
     }
     if (this.toxinFlash > 0 && this.party.indexOf('druid') >= 0) {
       const r = this._rectOf('druid');

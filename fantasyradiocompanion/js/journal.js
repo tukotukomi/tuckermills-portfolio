@@ -20,6 +20,9 @@ export const JOURNAL = [
       'The Blue Potion is now the Revive Potion. You start with one.',
       'Healing Potions no longer wake fainted heroes.',
       'The Light Mage\'s heal grows with each level, up to 13 HP.',
+      'Basic attacks hit 1 harder with every level.',
+      'The Druid\'s poison is a big oozy glob that splats onto monsters.',
+      'Windows: the FFXI addon is now loaded with /addon load fantasyradiocompanion.',
       'New: read this journal in Settings!'
     ],
     es: {
@@ -35,6 +38,9 @@ export const JOURNAL = [
         'La poción azul ahora es la Poción de reanimación. Empiezas con una.',
         'Las pociones de curación ya no despiertan a los héroes desmayados.',
         'La curación del mago de luz crece con cada nivel, hasta 13 PV.',
+        'Los ataques básicos pegan 1 más fuerte con cada nivel.',
+        'El veneno del druida es una gran bola viscosa que se estampa en los monstruos.',
+        'Windows: el complemento de FFXI ahora se carga con /addon load fantasyradiocompanion.',
         'Novedad: ¡lee este diario en Ajustes!'
       ]
     },
@@ -51,6 +57,9 @@ export const JOURNAL = [
         '蓝色药水变成了复活药水，开局自带一瓶。',
         '治疗药水不能再唤醒昏倒的英雄。',
         '光明法师的治疗随等级提升，最高 13 点生命。',
+        '普通攻击每升一级伤害 +1。',
+        '德鲁伊的毒液变成黏稠的大团软泥，会啪地粘在怪物身上。',
+        'Windows：FFXI 插件现在用 /addon load fantasyradiocompanion 加载。',
         '新增：在设置中阅读本日志！'
       ]
     }

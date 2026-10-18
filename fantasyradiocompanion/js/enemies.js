@@ -5,7 +5,7 @@
 import { C, CA, withAlpha, rnd } from './util.js';
 import { Sprites } from './sprites.js';
 import { Sound } from './sfx.js';
-import { peckDamage, peckInterval, axeInterval, axeRangeBlocks, BLOCK_PIXELS, crossbowInterval, toxinDamage, BASIC_ATTACKERS, BASIC_DAMAGE, basicInterval, paladinLightInterval, paladinLightTicks, paladinLightDamage, scytheDamage, scytheInterval, SPELL_RANGE_BLOCKS } from './traits.js';
+import { peckDamage, peckInterval, axeInterval, axeRangeBlocks, BLOCK_PIXELS, crossbowInterval, toxinDamage, BASIC_ATTACKERS, basicDamage, goo, basicInterval, paladinLightInterval, paladinLightTicks, paladinLightDamage, scytheDamage, scytheInterval, SPELL_RANGE_BLOCKS } from './traits.js';
 
 const BOW_FIRST_DELAY = 1.5;   // seconds from the Thief first being able to shoot to his first bolt
 import { t } from './i18n.js';
@@ -261,7 +261,7 @@ export function installEnemies(P) {
           left += interval;
           this.peckAnim = 0;   // the leader lunges
           Sound.play('Peck');
-          this._damageEnemy(e, this._withHuzzah(BASIC_DAMAGE), false, e.x, 0);
+          this._damageEnemy(e, this._withHuzzah(basicDamage(this.levelOf(who))), false, e.x, 0);
         }
         this.basicTimer[who] = left;
       }
@@ -385,7 +385,8 @@ export function installEnemies(P) {
     }
     for (let i = this.bursts.length - 1; i >= 0; i--) {
       const b = this.bursts[i];
-      b.age += dt / (b.kind === 'death' ? 0.8 : b.kind === 'blood' ? 0.7 : b.kind === 'fire' ? 0.4 : b.kind === 'toxin' ? 0.55 : b.kind === 'shout' ? 0.45 : b.kind === 'ash' ? 0.9 : b.kind === 'flames' ? 0.75 : b.kind === 'drain' ? 0.6 : b.kind === 'light' ? 0.5 : 0.3);
+      if (b.stick && this.enemy !== null) b.x = this.enemy.x + b.off;   // the slime goes where the enemy goes
+      b.age += dt / (b.kind === 'death' ? 0.8 : b.kind === 'blood' ? 0.7 : b.kind === 'fire' ? 0.4 : b.kind === 'toxin' ? 0.55 : b.kind === 'shout' ? 0.45 : b.kind === 'ash' ? 0.9 : b.kind === 'flames' ? 0.75 : b.kind === 'drain' ? 0.6 : b.kind === 'light' ? 0.5 : b.kind === 'splat' ? 0.95 : 0.3);
       if (b.age >= 1) this.bursts.splice(i, 1);
     }
     for (let i = this.beams.length - 1; i >= 0; i--) { this.beams[i].age += dt / 0.4; if (this.beams[i].age >= 1) this.beams.splice(i, 1); }
@@ -684,6 +685,8 @@ export function installEnemies(P) {
       g.rect(0, 0, lw, this.lh, CA(Math.trunc(120 * (1 - (this.bloodMoonT - 0.5) / 0.12)), 255, 60, 60));
   };
 
+  const SPLAT_VX = [-16, -12, -9, -6, -14, -5, -11], SPLAT_VY = [-14, 6, -8, 12, -2, -16, 14], SPLAT_DRIP_X = [-2, 0, 2], SPLAT_DRIP_LEN = [8, 12, 6];
+
   m._drawEnemyEffects = function (g) {
     this._drawBeams(g);
     // Spat fireballs: a ball of flame with a hot heart, shedding embers behind it.
@@ -769,6 +772,28 @@ export function installEnemies(P) {
             const ph = Math.min(1, u * 1.2 + k * 0.05);
             const dx = x + Math.trunc(Math.sin(k * 2.1) * 4) - Math.trunc(ph * (14 + k * 3)), dy = y + Math.trunc(Math.cos(k * 1.7) * 5) - Math.trunc(Math.sin(ph * Math.PI) * 6);
             g.rect(dx, dy, 2, 2, CA(fade, k % 2 === 0 ? 150 : 214, 70, k % 2 === 0 ? 200 : 255));
+          }
+          break;
+        }
+        case 'splat': {   // the glob hits: it squashes flat against the enemy, flings spatters, and the slime drips down
+          const sq = Math.min(1, u / 0.2), a = u < 0.6 ? 255 : Math.trunc(255 * (1 - (u - 0.6) / 0.4));
+          if (u < 0.25) {
+            const rad = 3 + Math.trunc(8 * u / 0.25);
+            g.ring(x - rad, y - rad, rad * 2, rad * 2, CA(Math.trunc(200 * (1 - u / 0.25)), 160, 236, 110));
+          }
+          goo(g, x, y, 4 - 2.2 * sq, 3.2 + 2.6 * sq, a);
+          if (sq > 0.5) { goo(g, x - 1, y - 3.5 * sq, 1.6, 1.8, a); goo(g, x - 1, y + 3.5 * sq, 1.6, 1.8, a); }
+          const tt = Math.min(u, 0.6) * 0.8;
+          for (let k = 0; k < SPLAT_VX.length; k++) {
+            const sz = k % 2 === 0 ? 2 : 1;
+            g.rect(x + Math.trunc(SPLAT_VX[k] * tt), y + Math.trunc(SPLAT_VY[k] * tt + 40 * tt * tt), sz, sz, CA(a, 96, 200, 66));
+          }
+          const ease = Math.min(1, Math.max(0, (u - 0.12) / 0.55));
+          for (let j = 0; j < SPLAT_DRIP_X.length; j++) {
+            const len = Math.trunc(SPLAT_DRIP_LEN[j] * ease);
+            if (len < 1) continue;
+            g.rect(x + SPLAT_DRIP_X[j], y + 5, 1, len, CA(a, 96, 200, 66));
+            g.rect(x + SPLAT_DRIP_X[j] - 1, y + 5 + len, 2, 2, CA(a, 110, 214, 74));
           }
           break;
         }
