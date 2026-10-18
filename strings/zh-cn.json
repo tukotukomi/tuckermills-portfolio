@@ -25,7 +25,7 @@
   "sideProjects.kaomoji.title": "Kaomoji Alt Emporium",
   "sideProjects.kaomoji.description": "<p>Kaomoji Alt Emporium 是为《最终幻想 XI》聊天准备的工具箱：可直接复制粘贴的日式颜文字，以及用键盘输入它们的参考表。<a href=\"https://ffxi-kaomoji.com\" target=\"_blank\" rel=\"noopener noreferrer\">点此访问</a>！</p><p>FFXI 的聊天窗口只能显示部分字符，因此每个条目都会根据我在游戏中的测试，标记为 Verified、Untested 或 Unsupported。Face Builder 收集了由确认可在聊天中显示的 Alt 代码组成的表情，Alt Code Reference 则是可搜索的 Windows Alt+小键盘代码列表。</p><p>所有条目都来自同一份电子表格，我每测试一个新字符就会更新它。</p>",
   "sideProjects.radioCompanion.title": "Fantasy Radio Companion",
-  "sideProjects.radioCompanion.description": "<p>Fantasy Radio Companion 是一款 Windows 应用，用于聆听和修改 HorizonXI（一个《最终幻想 XI》私服）的音乐与音效。</p><p>它可以播放和浏览游戏的 BGW 与 SPW 音频文件，将其转换为 WAV，也能把你自己的音频转换成游戏格式，以便换上自己的曲目。此外还有实时电台标签页、波形与派对可视化效果，以及灵感来自 FFXI 窗口样式的主题。</p><p>Adventure 标签页是一个小小的像素风场景，里面有一位冒险者和一只陆行鸟。</p>",
+  "sideProjects.radioCompanion.description": "<p>Fantasy Radio Companion 是一款由音乐驱动的像素风放置型 RPG。<a href=\"https://fantasyradiocompanion.com\" target=\"_blank\" rel=\"noopener noreferrer\">点此试玩</a>，电脑或手机浏览器都能玩，也可以添加到主屏幕。</p><p>收听网络电台，你的小队就会在音乐播放期间持续冒险：昼夜交替、四季轮转，同伴会在酒馆加入你的 Paca，怪物会一路游荡而来等你迎战。你可以升级、赚金币、向商人购物、使用卷轴，还能用酒馆印章解锁新英雄，而且越往后，怪物越凶猛。如果播放的是本地音乐，小队只会在篝火旁休息。</p><p>电台页内置 Materia FM、DNBRadio、Folk Alley 和 Radio Rivendell 等电台，也可以通过播放列表文件或链接添加自己的电台。在允许的电台上，场景还会随节拍律动。每个电台旁都有“SUPPORT”按钮，点击即可打开该电台的捐助或支持页面，方便你回馈那些让音乐持续播放的人。</p><p>另有 Windows 版本，提供 HorizonXI（一个《最终幻想 XI》私服）音乐与音效文件的播放和转换工具。</p>",
   "professional.summary.title": "个人简介",
   "professional.summary.body": "全球本地化专家、游戏制作人及项目经理，拥有丰富的国际化经验，曾带领多元文化团队顺利完成多个制作周期。擅长优化流程、落实最佳实践、主动识别风险并排除障碍，以打造成功的产品与体验，同时营造重视问责与诚信的工作氛围。\n\n精通中文（普通话），擅长与多元化的跨国团队合作，作为国际合作伙伴与IP相关方之间值得信赖的联络人，在保持清晰沟通、问责制、项目推进力与文化尊重的同时推动合作。",
   "professional.skills.title": "技能",
