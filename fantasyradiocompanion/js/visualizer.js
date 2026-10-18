@@ -4,7 +4,7 @@
 import { DESIGN_HEIGHT } from './scene.js';
 import { Sprites, PARTY_NAMES } from './sprites.js';
 import { roundRect, SummonEffect } from './summon.js';
-import { traitSummary } from './traits.js';
+import { traitSummary, levelGrowth } from './traits.js';
 import { css } from './util.js';
 import { Sound } from './sfx.js';
 import { ITEM_DEFS, HOT_SLOT_COUNT } from './items.js';
@@ -1969,6 +1969,27 @@ export class Visualizer {
       ? t('Level up {name} to Lv. {n}?', { name: t(PARTY_NAMES[kind]), n: s.levelOf(kind) + 1 })
       : t('Give the crystal to someone in your party'), false);
     if (picked && portrait) {
+      // beside the picked hero, a small box with what the level-up adds (HP and every attack or heal that grows), in arrows
+      const rows = levelGrowth(kind, s.levelOf(kind)), spx = 8.5 * PT * k, padS = Math.trunc(10 * k), gapS = Math.trunc(8 * k), lineH = Math.round(spx * 1.55);
+      let labelW = 0, valW = 0;
+      for (const r of rows) {
+        labelW = Math.max(labelW, this._measure(ctx, t(r.label), spx));
+        valW = Math.max(valW, this._measure(ctx, r.from + ' \u2192 ' + r.to, spx, 700));
+      }
+      const boxW = Math.min(this.width - 16 - portrait.w - gapS, Math.round(padS * 2 + labelW + gapS + valW));
+      portrait.x -= Math.trunc((boxW + gapS) / 2);   // the hero and the box are centred together
+      const box = { x: portrait.x + portrait.w + gapS, y: portrait.y, w: boxW, h: portrait.h };
+      roundRect(ctx, box.x + 0.5, box.y + 0.5, box.w - 1, box.h - 1, 10 * k);
+      ctx.fillStyle = 'rgba(18,26,66,0.92)'; ctx.fill();
+      ctx.strokeStyle = 'rgb(150,210,255)'; ctx.lineWidth = 2.2; ctx.stroke();
+      const top0 = box.y + Math.trunc((box.h - rows.length * lineH) / 2);
+      rows.forEach((r, i) => {
+        const cy = top0 + i * lineH + lineH / 2, right = box.x + box.w - padS;
+        const fromTxt = r.from + ' \u2192 ', toW = this._measure(ctx, String(r.to), spx, 700), fromW = this._measure(ctx, fromTxt, spx, 700);
+        this._text(ctx, t(r.label), box.x + padS, cy, { px: spx, color: 'rgb(190,226,255)' });
+        this._text(ctx, fromTxt, right - toW - fromW, cy, { px: spx, color: 'white', weight: 700 });
+        this._text(ctx, String(r.to), right - toW, cy, { px: spx, color: 'rgb(150,240,170)', weight: 700 });
+      });
       roundRect(ctx, portrait.x + 0.5, portrait.y + 0.5, portrait.w - 1, portrait.h - 1, 10 * k);
       ctx.fillStyle = 'rgba(18,26,66,0.92)'; ctx.fill();
       ctx.strokeStyle = 'rgb(150,210,255)'; ctx.lineWidth = 2.2; ctx.stroke();

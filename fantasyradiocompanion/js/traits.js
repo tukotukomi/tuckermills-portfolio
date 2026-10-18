@@ -69,6 +69,21 @@ export function traitInterval(trait, level) {
   return 0;
 }
 
+/** What one more level adds, for the level-up screen: [{ label, from, to }] for the HP and every attack or heal that grows. */
+export function levelGrowth(kind, level) {
+  const rows = [{ label: 'HP', from: maxHp(kind, level), to: maxHp(kind, level + 1) }];
+  const add = (label, f) => { const a = f(level), b = f(level + 1); if (a !== b) rows.push({ label: label, from: a, to: b }); };
+  switch (kind) {
+    case 'paca': add('Peck', peckDamage); break;
+    case 'warrior': add('Thrown axe', axeDamage); break;
+    case 'thief': add('Melee', basicDamage); add('Crossbow', crossbowDamage); break;
+    case 'lightmage': add('Melee', basicDamage); add('Heal', healAmount); break;
+    case 'firemage': case 'fae': case 'paladin': add('Melee', basicDamage); break;
+    case 'shadowknight': add('Scythe', scytheDamage); break;
+  }
+  return rows;
+}
+
 /** A short line for the tavern's cards: the trait's name and what it does at `level`. */
 export function traitSummary(kind, level) {
   switch (TRAIT_OF[kind]) {

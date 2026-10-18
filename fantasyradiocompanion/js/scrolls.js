@@ -13,7 +13,7 @@ export const SCROLL_DEFS = {
 };
 
 /** The chance that a defeated Gargogryph, Wickedgryph or Toucan leaves a scroll. */
-export const SCROLL_DROP_CHANCE = 0.5;
+export const SCROLL_DROP_CHANCE = 0.2;
 const SCROLL_FLY_SECONDS = 1.1, REREVIVE_PULSE_SECONDS = 1.3, SEASON_DAYS = 5;
 /** How long Rerevive lasts: one year of playing time (four seasons of five days). */
 export const REREVIVE_PLAY_DAYS = SEASON_DAYS * 4;
