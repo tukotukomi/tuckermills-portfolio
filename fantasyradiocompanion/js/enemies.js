@@ -36,7 +36,7 @@ DEFS.shadecrow = Object.assign({}, DEFS.nightmare, { base: 'nightmare', name: 'S
 
 // The Year 5 desert monsters: the only ones that turn up in Year 5. Their specials are in the attack code below.
 DEFS.sandcrab = { name: 'Sand Crab', hp: 110, damage: 10, attackInterval: 1.5, walkSpeed: 16, nightOnly: false, headOffset: 0, habitat: 'Roams the Year 5 desert, day and night', note: 'A big tan crab with a cactus-ridged shell. Its claw pinches the first in line, and at half health it kicks up a Sand Blast: it hurts the whole party and Blinds every hero, so their next attack misses.' };
-DEFS.venomflayer = { name: 'Venom Flayer', hp: 70, damage: 8, attackInterval: 5.0, walkSpeed: 22, nightOnly: false, headOffset: 0, habitat: 'Roams the Year 5 desert, day and night', note: 'An imposing cobra with glinting fangs. Its bite poisons the first in line, and at 30% health it spits Venom over the first three, poisoning each of them.' };
+DEFS.venomflayer = { name: 'Venom Flayer', hp: 140, damage: 8, attackInterval: 5.0, walkSpeed: 22, nightOnly: false, headOffset: 0, habitat: 'Roams the Year 5 desert, day and night', note: 'An imposing cobra with glinting fangs. Its bite poisons the first in line, and at 30% health it spits Venom over the first three, poisoning each of them.' };
 
 /** The original a variant is built on (an original is its own): a variant behaves, sounds and moves like it. */
 const baseOf = kind => DEFS[kind].base || kind;
