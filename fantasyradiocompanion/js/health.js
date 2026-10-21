@@ -95,20 +95,85 @@ export function installHealth(P) {
   m._lineIndexOf = function (kind) { return this._lineOrder().indexOf(kind); };
 
   /** Takes HP off a member. At 0 they faint. */
-  m.damageMember = function (kind, amount) {
+  m.damageMember = function (kind, amount, pure) {   // pure: poison, which no Shield Wall or hat softens
     if (this.party.indexOf(kind) < 0 || amount <= 0) return;
-    if (this.wallLeft > 0 && this.wallTarget === kind && kind !== 'paladin' && this.shieldWallUp()) kind = 'paladin';   // Shield Wall: the Paladin takes the blow
+    if (!pure && this.wallLeft > 0 && this.wallTarget === kind && kind !== 'paladin' && this.shieldWallUp()) kind = 'paladin';   // Shield Wall: the Paladin takes the blow
     const before = this.hpOf(kind);
     if (before <= 0) return;   // already out cold
-    if (kind === 'paladin' && this.wallLeft > 0 && this.wallTarget === 'paladin') amount = Math.ceil(amount / 2);   // the Paladin in front: the wall halves what he takes
-    amount = this._hatDamage(kind, amount);   // a Blue Hat halves what its wearer takes (on top of that)
+    if (!pure && kind === 'paladin' && this.wallLeft > 0 && this.wallTarget === 'paladin') amount = Math.ceil(amount / 2);   // the Paladin in front: the wall halves what he takes
+    if (!pure) amount = this._hatDamage(kind, amount);   // a Blue Hat halves what its wearer takes (on top of that)
     this.hp[kind] = Math.max(0, before - amount);
     if (this.hp[kind] === 0 && this._tryRerevive(kind)) return;   // Rerevive: they get up again on the spot with half their HP
     const r = this._rectOf(kind);
     if (this.hp[kind] === 0) this._addItemText(t('Fainted!'), r.x + r.w / 2.0, r.y - 4, C(255, 170, 160));
-    else this._addItemText('-' + (before - this.hp[kind]), r.x + r.w / 2.0, r.y - 4, C(255, 150, 150));
+    else this._addItemText('-' + (before - this.hp[kind]), r.x + r.w / 2.0, r.y - 4, pure ? C(206, 140, 244) : C(255, 150, 150));
     this._checkHpTip(kind);   // the first time anyone is low, the Old Man steps in
     this.raiseProgress();
+  };
+
+  // ---- What the Year 5 desert monsters can do to a hero besides plain damage. Poison: a few HP lost every second for a few seconds, which no
+  // hat or Shield Wall softens. Blind: sand in the eyes, so the hero's next attack misses (used up by that attempt). Neither is saved.
+
+  m._st = function (kind, make) {
+    if (!this.status) this.status = {};
+    if (!this.status[kind] && make) this.status[kind] = { poisonTicks: 0, poisonDamage: 0, poisonTimer: 0, blind: false };
+    return this.status[kind];
+  };
+  m.isPoisoned = function (kind) { const s = this._st(kind); return !!s && s.poisonTicks > 0; };
+  m.isBlind = function (kind) { const s = this._st(kind); return !!s && s.blind; };
+
+  /** Poisons a hero: `damage` HP a second for `ticks` seconds (a new poison renews the old). */
+  m._applyPoison = function (kind, damage, ticks) {
+    if (this.party.indexOf(kind) < 0 || this.hpOf(kind) <= 0 || damage <= 0) return;
+    const s = this._st(kind, true);
+    s.poisonTicks = ticks; s.poisonDamage = damage; s.poisonTimer = 1.0;
+  };
+  m._applyBlind = function (kind) {
+    if (this.party.indexOf(kind) < 0 || this.hpOf(kind) <= 0) return;
+    this._st(kind, true).blind = true;
+  };
+  /** A hero is about to attack: if sand is in their eyes the attack misses (and the blindness is spent). True when it misses. */
+  m._takeBlind = function (who) {
+    const s = this._st(who);
+    if (!s || !s.blind) return false;
+    s.blind = false;
+    const r = this._rectOf(who);
+    this._addItemText(t('Miss!'), r.x + r.w / 2.0, r.y - 10, C(236, 206, 140));
+    return true;
+  };
+  m._advanceStatus = function (dt) {
+    if (!this.status) return;
+    for (const kind of Object.keys(this.status)) {
+      const s = this.status[kind];
+      if (this.hpOf(kind) <= 0 || this.party.indexOf(kind) < 0) { s.poisonTicks = 0; s.blind = false; continue; }   // out cold: it all stops
+      if (s.poisonTicks <= 0) continue;
+      s.poisonTimer -= dt;
+      if (s.poisonTimer > 0) continue;
+      s.poisonTimer += 1.0;
+      s.poisonTicks--;
+      this.damageMember(kind, s.poisonDamage, true);
+    }
+  };
+  m._resetStatuses = function () { this.status = {}; };
+
+  /** Purple bubbles rising off a poisoned hero, and a little ring of sand circling the head of a blinded one. */
+  m._drawStatus = function (g) {
+    if (!this.status) return;
+    for (const kind of Object.keys(this.status)) {
+      const s = this.status[kind];
+      if (this.party.indexOf(kind) < 0 || this.hpOf(kind) <= 0) continue;
+      const r = this._rectOf(kind);
+      if (s.poisonTicks > 0)
+        for (let i = 0; i < 3; i++) {
+          const ph = (this.time * 1.4 + i * 0.33) % 1.0;
+          g.rect(r.x + 3 + Math.trunc(i * (r.w - 7) / 2) + Math.trunc(Math.sin(this.time * 3 + i) * 1.5), r.y + r.h - 4 - Math.trunc(ph * (r.h - 4)), 2, 2, CA(Math.trunc(220 * (1 - ph)), i % 2 === 0 ? 170 : 206, 90, i % 2 === 0 ? 226 : 244));
+        }
+      if (s.blind)
+        for (let i = 0; i < 4; i++) {
+          const a = this.time * 4.5 + i * Math.PI / 2;
+          g.rect(r.x + Math.trunc(r.w / 2) - 1 + Math.trunc(Math.cos(a) * 6), r.y - 3 + Math.trunc(Math.sin(a) * 2), 2, 2, CA(235, i % 2 === 0 ? 226 : 255, i % 2 === 0 ? 188 : 232, i % 2 === 0 ? 120 : 170));
+        }
+    }
   };
 
   /** Gives HP back, up to full. A member brought up from 0 wakes and takes their place in the line again. */

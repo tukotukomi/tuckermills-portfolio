@@ -240,7 +240,7 @@ export function installStory(P) {
     }
     this.enc = 'None';
     this.arrived = false;
-    this.nextCrystalDay = (Math.trunc(this.daysCompleted / 2) + 1) * 2;
+    this.nextCrystalDay = (Math.trunc(this.daysCompleted / 4) + 1) * 4;
     this.raiseProgress();
   };
 

@@ -50,7 +50,7 @@ export const Sprites = {
 
     // Enemies already face left, towards the party.
     this.enemy = {};
-    for (const k of ['sheller', 'orc', 'nightmare', 'gargogryph', 'spikedsheller', 'bassorc', 'slasher', 'wickedgryph', 'toucan', 'magmashellra', 'percussiveorc', 'shadecrow']) {
+    for (const k of ['sheller', 'orc', 'nightmare', 'gargogryph', 'spikedsheller', 'bassorc', 'slasher', 'wickedgryph', 'toucan', 'magmashellra', 'percussiveorc', 'shadecrow', 'sandcrab', 'venomflayer']) {
       const g = n => this.img['enemy_' + k + '_' + n];
       this.enemy[k] = { walkA: g('walk_a'), walkB: g('walk_b'), walk: [g('walk_a'), g('walk_b'), g('walk_c'), g('walk_d')], attackA: g('attack_a'), attackB: g('attack_b'), hurt: g('hurt'), w: g('walk_a').width, h: g('walk_a').height };
     }

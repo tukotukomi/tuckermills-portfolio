@@ -51,6 +51,7 @@ export function installInn(P) {
       this._restoreHp(k, missing);
       this.heals.push({ from: k, to: k, amount: missing, age: 0 });
     }
+    this._resetStatuses();   // a good rest clears the poison and the sand from the eyes
     Sound.play('Heal');
     const r = this._rectOf(this._frontKind());
     this._addItemText(t('Rested!'), r.x + r.w / 2.0, r.y - 6, C(160, 255, 190));
@@ -109,7 +110,7 @@ export function installInn(P) {
     this.dayPhase = 0;
     if (this.innAfterOldMan) {
       this.innAfterOldMan = false;
-      this.nextCrystalDay = (Math.trunc(this.daysCompleted / 2) + 1) * 2;   // the next even-numbered day boundary
+      this.nextCrystalDay = (Math.trunc(this.daysCompleted / 4) + 1) * 4;   // the next day boundary divisible by four
     }
     this.raiseProgress();
   };

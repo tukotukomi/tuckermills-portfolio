@@ -2,19 +2,19 @@
 // One enemy at a time walks in from the right, closes the gap while the party keeps walking, stops in front of the first member and
 // attacks it (for now only as an animation); the Paca pecks and the Fire Mage's fireballs fly into it.
 
-import { C, CA, withAlpha, rnd } from './util.js';
+import { C, CA, withAlpha, rnd, hash } from './util.js';
 import { Sprites } from './sprites.js';
 import { Sound } from './sfx.js';
-import { peckDamage, peckInterval, axeInterval, axeRangeBlocks, BLOCK_PIXELS, crossbowInterval, toxinDamage, BASIC_ATTACKERS, basicDamage, goo, basicInterval, paladinLightInterval, paladinLightTicks, paladinLightDamage, scytheDamage, scytheInterval, SPELL_RANGE_BLOCKS } from './traits.js';
+import { peckDamage, peckInterval, axeInterval, axeRangeBlocks, BLOCK_PIXELS, crossbowInterval, toxinDamage, BASIC_ATTACKERS, basicDamage, goo, GOO_PALETTES, basicInterval, paladinLightInterval, paladinLightTicks, paladinLightDamage, scytheDamage, scytheInterval, SPELL_RANGE_BLOCKS } from './traits.js';
 
 const BOW_FIRST_DELAY = 1.5;   // seconds from the Thief first being able to shoot to his first bolt
 import { t } from './i18n.js';
 
 // The four originals, then the variant of each that takes over half the spawns from Year 2 (same moves, twice the damage) and all of
 // them from Year 3, then the Toucan (no variant: it joins them from Year 3).
-export const ENEMY_KINDS = ['sheller', 'orc', 'nightmare', 'gargogryph', 'spikedsheller', 'bassorc', 'slasher', 'wickedgryph', 'toucan', 'magmashellra', 'percussiveorc', 'shadecrow'];
-export const ENEMY_ENUM = { sheller: 'Sheller', orc: 'Orc', nightmare: 'Nightmare', gargogryph: 'Gargogryph', spikedsheller: 'SpikedSheller', bassorc: 'BassOrc', slasher: 'Slasher', wickedgryph: 'Wickedgryph', toucan: 'Toucan', magmashellra: 'MagmaShellra', percussiveorc: 'PercussiveOrc', shadecrow: 'Shadecrow' };
-const ENEMY_FROM_ENUM = { Sheller: 'sheller', Orc: 'orc', Nightmare: 'nightmare', Gargogryph: 'gargogryph', SpikedSheller: 'spikedsheller', BassOrc: 'bassorc', Slasher: 'slasher', Wickedgryph: 'wickedgryph', Toucan: 'toucan', MagmaShellra: 'magmashellra', PercussiveOrc: 'percussiveorc', Shadecrow: 'shadecrow' };
+export const ENEMY_KINDS = ['sheller', 'orc', 'nightmare', 'gargogryph', 'spikedsheller', 'bassorc', 'slasher', 'wickedgryph', 'toucan', 'magmashellra', 'percussiveorc', 'shadecrow', 'sandcrab', 'venomflayer'];
+export const ENEMY_ENUM = { sheller: 'Sheller', orc: 'Orc', nightmare: 'Nightmare', gargogryph: 'Gargogryph', spikedsheller: 'SpikedSheller', bassorc: 'BassOrc', slasher: 'Slasher', wickedgryph: 'Wickedgryph', toucan: 'Toucan', magmashellra: 'MagmaShellra', percussiveorc: 'PercussiveOrc', shadecrow: 'Shadecrow', sandcrab: 'SandCrab', venomflayer: 'VenomFlayer' };
+const ENEMY_FROM_ENUM = { Sheller: 'sheller', Orc: 'orc', Nightmare: 'nightmare', Gargogryph: 'gargogryph', SpikedSheller: 'spikedsheller', BassOrc: 'bassorc', Slasher: 'slasher', Wickedgryph: 'wickedgryph', Toucan: 'toucan', MagmaShellra: 'magmashellra', PercussiveOrc: 'percussiveorc', Shadecrow: 'shadecrow', SandCrab: 'sandcrab', VenomFlayer: 'venomflayer' };
 
 const DEFS = {
   toucan: { name: 'Toucan', hp: 48, attackInterval: 1.0, walkSpeed: 22, nightOnly: false, headOffset: 0, hover: 6, habitat: 'Roams day and night, from Year 3', note: 'A purple toucan made of two tin cans, with metal talons. It slings a can tab that slices through the whole party.' },
@@ -34,6 +34,10 @@ DEFS.magmashellra = Object.assign({}, DEFS.sheller, { base: 'sheller', name: 'Ma
 DEFS.percussiveorc = Object.assign({}, DEFS.orc, { base: 'orc', name: 'Percussive Orc', hp: 72, damage: 4, attackInterval: 1.0, habitat: 'Roams day and night, from Year 4', note: 'Hammers a drum slung at its belly and bellows between beats. Hits fast and hard.' });
 DEFS.shadecrow = Object.assign({}, DEFS.nightmare, { base: 'nightmare', name: 'Shadecrow', hp: 48, damage: 6, attackInterval: 4.0, reach: 3, headOffset: 4, habitat: 'Roams after dark, from Year 4', note: 'A cloaked scarecrow that watches from the field. Its long pitchfork spears the first three in line.' });
 
+// The Year 5 desert monsters: the only ones that turn up in Year 5. Their specials are in the attack code below.
+DEFS.sandcrab = { name: 'Sand Crab', hp: 80, damage: 10, attackInterval: 3.0, walkSpeed: 16, nightOnly: false, headOffset: 0, habitat: 'Roams the Year 5 desert, day and night', note: 'A big tan crab with a cactus-ridged shell. Its claw pinches the first in line, and at half health it kicks up a Sand Blast: it hurts the whole party and Blinds every hero, so their next attack misses.' };
+DEFS.venomflayer = { name: 'Venom Flayer', hp: 70, damage: 8, attackInterval: 5.0, walkSpeed: 22, nightOnly: false, headOffset: 0, habitat: 'Roams the Year 5 desert, day and night', note: 'An imposing cobra with glinting fangs. Its bite poisons the first in line, and at 30% health it spits Venom over the first three, poisoning each of them.' };
+
 /** The original a variant is built on (an original is its own): a variant behaves, sounds and moves like it. */
 const baseOf = kind => DEFS[kind].base || kind;
 const isVariant = kind => baseOf(kind) !== kind;
@@ -50,13 +54,16 @@ const bloodMoonDamage = kind => (isVariant(kind) ? 10 : 5);   // the Gargogryph'
 
 export function enemyDef(kind) { return DEFS[kind]; }
 
-const ROAR = { sheller: 'ShellerRoar', orc: 'OrcRoar', nightmare: 'NightmareRoar', gargogryph: 'GargogryphRoar', toucan: 'ToucanRoar' };
-const DEATH = { sheller: 'ShellerDeath', orc: 'OrcDeath', nightmare: 'NightmareDeath', gargogryph: 'GargogryphDeath', toucan: 'ToucanDeath' };
+const ROAR = { sheller: 'ShellerRoar', orc: 'OrcRoar', nightmare: 'NightmareRoar', gargogryph: 'GargogryphRoar', toucan: 'ToucanRoar', sandcrab: 'ShellerRoar', venomflayer: 'NightmareRoar' };
+const DEATH = { sheller: 'ShellerDeath', orc: 'OrcDeath', nightmare: 'NightmareDeath', gargogryph: 'GargogryphDeath', toucan: 'ToucanDeath', sandcrab: 'ShellerDeath', venomflayer: 'NightmareDeath' };
 const BLOOD_MOON_SECONDS = 3.2;
+const SAND_BLAST_HP_FRACTION = 0.5, VENOM_SPIT_HP_FRACTION = 0.3, SAND_BLAST_SECONDS = 1.8, VENOM_SPIT_SECONDS = 0.6;
+const SAND_BLAST_DAMAGE = 5, VENOM_SPIT_DAMAGE = 3, VENOM_SPIT_TICKS = 3;
 const BLOOD_MOON_HP_FRACTION = 0.55;   // it is called down once, when the Gargogryph is hurt this badly
 function attackFx(kind, pose, hit) {
   if (kind === 'magmashellra') return hit ? 'MagmaSpit' : 'FireCast';   // the fire gathers, then is spat
   if (kind === 'percussiveorc') return pose === 0 ? (hit ? 'OrcSmashHit' : 'OrcSmashSwing') : (hit ? 'OrcShout' : 'OrcSweepSwing');   // the drumstick, then the shout
+  if (kind === 'venomflayer') return hit ? 'NightmareChopHit' : 'NightmareChopSwing';
   kind = baseOf(kind);
   if (kind === 'gargogryph') return hit ? 'GargogryphShot' : 'GargogryphFlap';
   if (kind === 'toucan') return hit ? 'ToucanSling' : 'ToucanSwing';   // (the tab's own clang plays as it cuts a member)
@@ -68,6 +75,8 @@ function attackFx(kind, pose, hit) {
 function strikeEffect(kind, pose) {
   if (kind === 'magmashellra') return 'fireball';
   if (kind === 'percussiveorc') return pose === 0 ? 'impact' : 'shout';
+  if (kind === 'sandcrab') return 'claws';
+  if (kind === 'venomflayer') return 'fangs';
   kind = baseOf(kind);
   if (kind === 'gargogryph') return 'feathers';
   if (kind === 'nightmare') return 'scythe';
@@ -117,6 +126,8 @@ export function installEnemies(P) {
     this.flinch = 0;
     this.shots = [];   // the Gargogryph's feathers in flight
     this.tabs = [];    // the Toucan's can tabs in flight
+    this.sandT = -1; this.sandStruck = false;   // the Sand Crab's Sand Blast: 0..1 while it plays out
+    this.venomSpits = [];   // the Venom Flayer's globs in flight
     this.spits = [];   // the Magma Shellra's fireballs in flight (lobbed, to come down on the ground and burst into flames)
     this.bloodMoonT = -1;   // 0..1 while the Blood Moon plays out, <0 otherwise
     this.bloodMoonStruck = false;
@@ -133,6 +144,7 @@ export function installEnemies(P) {
   };
 
   m._pickEnemyKind = function () {
+    if (this.year === 5) return Math.random() < 0.5 ? 'sandcrab' : 'venomflayer';   // the whole of Year 5 is spent in the desert, with only its own monsters
     // Twice the old weights (the Sheller and the Nightmare 4, the Orc and the Gargogryph 2) so that the Toucan, at 1, turns up
     // half as often as the rarest of the others.
     const pool = this.isNight
@@ -155,7 +167,7 @@ export function installEnemies(P) {
 
   m._spawnEnemy = function () {
     const kind = this._pickEnemyKind();
-    this.enemy = { kind: kind, x: this.lastLw + 6, hp: DEFS[kind].hp, maxHp: DEFS[kind].hp, engaged: false, walkT: 0, attackTimer: 0, attackAnim: -1, attackPose: 0, struck: false, peckTimer: 0, axeTimer: 0, axeStarted: false, poisonTicks: 0, poisonTick: 0, lightTicks: 0, lightTick: 0, bloodMoonUsed: false, hurtFlash: 0, deathT: -1 };
+    this.enemy = { kind: kind, x: this.lastLw + 6, hp: DEFS[kind].hp, maxHp: DEFS[kind].hp, engaged: false, walkT: 0, attackTimer: 0, attackAnim: -1, attackPose: 0, struck: false, peckTimer: 0, axeTimer: 0, axeStarted: false, poisonTicks: 0, poisonTick: 0, lightTicks: 0, lightTick: 0, bloodMoonUsed: false, specialUsed: false, hurtFlash: 0, deathT: -1 };
     this.basicTimer = {};
     this.bowTimer = BOW_FIRST_DELAY;
     this._noteSeen(kind);
@@ -165,6 +177,7 @@ export function installEnemies(P) {
   /** Enemy logic in adventuring time: the walk-in, the attack timer, the Paca's pecks. */
   m._advanceEnemies = function (dt, paused) {
     if (paused) return;
+    this._advanceStatus(dt);   // poison ticks, in adventuring time
     if (this.enemy === null) {
       if (!this._canSpawnEnemy()) return;
       this.enemyTimer -= dt;
@@ -226,8 +239,25 @@ export function installEnemies(P) {
       Sound.play('BloodMoon');
     }
 
+    // The Year 5 specials, once each, in place of an attack: the Sand Crab's Sand Blast at half health, the Venom Flayer's Venom Spit at 30%.
+    if (!e.specialUsed && e.attackAnim < 0 && this.bloodMoonT < 0 && this.sandT < 0) {
+      if (e.kind === 'sandcrab' && e.hp <= e.maxHp * SAND_BLAST_HP_FRACTION) {
+        e.specialUsed = true;
+        this.sandT = 0; this.sandStruck = false;
+        e.attackAnim = 0; e.struck = true; e.attackPose = 1;   // it rears up, claws high (nothing lands from the animation itself)
+        e.attackTimer = DEFS[e.kind].attackInterval + 1.5;
+        Sound.play('GargogryphFlap');
+      } else if (e.kind === 'venomflayer' && e.hp <= e.maxHp * VENOM_SPIT_HP_FRACTION) {
+        e.specialUsed = true;
+        e.attackAnim = 0; e.struck = true; e.attackPose = 0;
+        e.attackTimer = DEFS[e.kind].attackInterval + 1.0;
+        this._spitVenom(e);
+        Sound.play('ToxinCast');
+      }
+    }
+
     e.attackTimer -= dt;
-    if (e.attackTimer <= 0 && e.attackAnim < 0 && this.bloodMoonT < 0) {
+    if (e.attackTimer <= 0 && e.attackAnim < 0 && this.bloodMoonT < 0 && this.sandT < 0) {
       e.attackAnim = 0;
       e.struck = false;
       e.attackPose = this.enemyAttacks++ % 2;
@@ -241,8 +271,10 @@ export function installEnemies(P) {
       if (e.peckTimer <= 0) {
         e.peckTimer += peckInterval(level);
         this.peckAnim = 0;
-        Sound.play('Peck');
-        this._damageEnemy(e, this._withHuzzah(peckDamage(level)), false, e.x, 0);
+        if (!this._takeBlind('paca')) {
+          Sound.play('Peck');
+          this._damageEnemy(e, this._withHuzzah(peckDamage(level)), false, e.x, 0);
+        }
       }
     }
 
@@ -260,8 +292,10 @@ export function installEnemies(P) {
         if (left <= 0) {
           left += interval;
           this.peckAnim = 0;   // the leader lunges
-          Sound.play('Peck');
-          this._damageEnemy(e, this._withHuzzah(basicDamage(this.levelOf(who))), false, e.x, 0);
+          if (!this._takeBlind(who)) {
+            Sound.play('Peck');
+            this._damageEnemy(e, this._withHuzzah(basicDamage(this.levelOf(who))), false, e.x, 0);
+          }
         }
         this.basicTimer[who] = left;
       }
@@ -276,8 +310,10 @@ export function installEnemies(P) {
           if (left <= 0) {
             left += interval;
             if (knight === lead) this.peckAnim = 0;   // (the leader lunges)
-            Sound.play('Peck');
-            this._damageEnemy(e, this._withHuzzah(scytheDamage(this.levelOf(knight))), false, e.x, 0);
+            if (!this._takeBlind(knight)) {
+              Sound.play('Peck');
+              this._damageEnemy(e, this._withHuzzah(scytheDamage(this.levelOf(knight))), false, e.x, 0);
+            }
           }
           this.basicTimer[knight] = left;
         }
@@ -310,6 +346,7 @@ export function installEnemies(P) {
     this.lightTimer = (this.lightTimer === undefined ? interval : this.lightTimer) - dt;
     if (this.lightTimer > 0) return;
     this.lightTimer += interval;
+    if (this._takeBlind('paladin')) return;   // sand in the eyes: it misses
     e.lightTicks = paladinLightTicks(level);
     e.lightTick = 1.0;
     const pr = this._rectOf('paladin'), er = this._enemyRect(e);
@@ -386,7 +423,7 @@ export function installEnemies(P) {
     for (let i = this.bursts.length - 1; i >= 0; i--) {
       const b = this.bursts[i];
       if (b.stick && this.enemy !== null) b.x = this.enemy.x + b.off;   // the slime goes where the enemy goes
-      b.age += dt / (b.kind === 'death' ? 0.8 : b.kind === 'blood' ? 0.7 : b.kind === 'fire' ? 0.4 : b.kind === 'toxin' ? 0.55 : b.kind === 'shout' ? 0.45 : b.kind === 'ash' ? 0.9 : b.kind === 'flames' ? 0.75 : b.kind === 'drain' ? 0.6 : b.kind === 'light' ? 0.5 : b.kind === 'splat' ? 0.95 : 0.3);
+      b.age += dt / (b.kind === 'death' ? 0.8 : b.kind === 'blood' ? 0.7 : b.kind === 'fire' ? 0.4 : b.kind === 'toxin' ? 0.55 : b.kind === 'shout' ? 0.45 : b.kind === 'ash' ? 0.9 : b.kind === 'flames' ? 0.75 : b.kind === 'drain' ? 0.6 : b.kind === 'light' ? 0.5 : b.kind === 'splat' ? 0.95 : b.kind === 'sand' ? 0.7 : 0.3);
       if (b.age >= 1) this.bursts.splice(i, 1);
     }
     for (let i = this.beams.length - 1; i >= 0; i--) { this.beams[i].age += dt / 0.4; if (this.beams[i].age >= 1) this.beams.splice(i, 1); }
@@ -456,6 +493,41 @@ export function installEnemies(P) {
       if (tb.x < -8) this.tabs.splice(i, 1);
     }
 
+    // The Sand Crab's Sand Blast: a wall of sand sweeps over the whole party; at the peak it hurts everyone and blinds them.
+    if (this.sandT >= 0) {
+      this.sandT += dt / SAND_BLAST_SECONDS;
+      if (this.enemy !== null && this.enemy.deathT >= 0) this.sandT = Math.max(this.sandT, 0.8);   // it ends with the Sand Crab
+      if (!this.sandStruck && this.sandT >= 0.4) {
+        this.sandStruck = true;
+        for (const k of this.party) {
+          const mr = this._rectOf(k);
+          this.bursts.push({ x: mr.x + mr.w / 2.0, y: mr.y + mr.h * 0.45, kind: 'sand', age: 0 });
+        }
+        for (const k of this.party.slice()) {
+          this.damageMember(k, SAND_BLAST_DAMAGE * this.monsterDamageMultiplier);
+          if (this.hpOf(k) > 0) this._applyBlind(k);   // their next attack will miss
+        }
+        this.flinch = 0.5;
+      }
+      if (this.sandT >= 1) this.sandT = -1;
+    }
+
+    // The Venom Flayer's spit: purple globs lobbed at each of the first three, poisoning them where they land.
+    for (let i = this.venomSpits.length - 1; i >= 0; i--) {
+      const sp = this.venomSpits[i];
+      if (sp.delay > 0) { sp.delay -= dt; continue; }
+      sp.age += dt;
+      const u = Math.min(1, sp.age / VENOM_SPIT_SECONDS);
+      sp.x = sp.startX + (sp.endX - sp.startX) * u;
+      sp.y = sp.startY + (sp.endY - sp.startY) * u - 14 * Math.sin(Math.PI * u);
+      if (u < 1) continue;
+      this.venomSpits.splice(i, 1);
+      this.bursts.push({ x: sp.endX, y: sp.endY, kind: 'splat', pal: 1, age: 0 });
+      Sound.play('ToxinTick');
+      this._applyPoison(sp.target, VENOM_SPIT_DAMAGE * this.monsterDamageMultiplier, VENOM_SPIT_TICKS);
+      this.flinch = 0.14;
+    }
+
     // The Blood Moon: a red moon rises, the sky bleeds, and at the peak a wave of red light breaks over the whole party.
     if (this.bloodMoonT >= 0) {
       this.bloodMoonT += dt / BLOOD_MOON_SECONDS;
@@ -509,13 +581,27 @@ export function installEnemies(P) {
           if (hit.length === 0) hit.push(this._frontKind());
           for (const k of hit) {
             const hr = this._rectOf(k);
-            this.bursts.push({ x: hr.x + hr.w * 0.72, y: hr.y + hr.h * 0.45, kind: effect, age: 0 });
+            this.bursts.push({ x: hr.x + hr.w * 0.72, y: hr.y + hr.h * 0.45, kind: effect === 'fangs' ? 'claws' : effect, age: 0 });
           }
           this.flinch = 0.18;
           for (const k of hit) this.damageMember(k, enemyDamage(e.kind) * this.monsterDamageMultiplier);
+          if (e.kind === 'venomflayer') for (const k of hit) this._applyPoison(k, 2 * this.monsterDamageMultiplier, 2);   // and the bite poisons: 2 a second for 2 seconds
         }
       }
       if (e.attackAnim >= 1) e.attackAnim = -1;
+    }
+  };
+
+  /** The Venom Flayer rears back and spits at each of the first three in line. */
+  m._spitVenom = function (e) {
+    const er = this._enemyRect(e), sx = er.x + 4, sy = er.y + er.h * 0.2;
+    let n = 0;
+    for (const k of this._lineOrder()) {
+      if (n >= 3) break;
+      if (this.hpOf(k) <= 0) continue;
+      const hr = this._rectOf(k);
+      this.venomSpits.push({ target: k, startX: sx, startY: sy, x: sx, y: sy, endX: hr.x + hr.w * 0.55, endY: hr.y + hr.h * 0.4, age: 0, delay: n * 0.12 });
+      n++;
     }
   };
 
@@ -531,6 +617,7 @@ export function installEnemies(P) {
     this.shots.length = 0;
     this.tabs.length = 0;
     this.spits.length = 0;
+    this.venomSpits.length = 0; this.sandT = -1;
     this.bloodMoonT = -1;
     this.bloodMoonStruck = false;
   };
@@ -689,6 +776,20 @@ export function installEnemies(P) {
 
   m._drawEnemyEffects = function (g) {
     this._drawBeams(g);
+    if (this.sandT >= 0) {   // the Sand Blast: a tan wash and streaks of sand blown from the monster across the party
+      const su = Math.min(1, this.sandT), env = Math.sin(Math.PI * su), lw = this.lastLw;
+      g.rect(0, 0, lw, this.lh, CA(Math.trunc(110 * env), 226, 188, 120));
+      for (let i = 0; i < 70; i++) {
+        const hh = hash(i, 913), speed = 140 + (hh % 120);
+        let x = (((hh >>> 4) % (lw + 40)) - this.sandT * 1.8 * speed) % (lw + 40);
+        if (x < 0) x += lw + 40;
+        g.rect(Math.trunc(x) - 20, (hh >>> 12) % Math.max(8, this.groundY), 3 + (hh % 6), 1, CA(Math.trunc(210 * env), (hh & 1) === 0 ? 232 : 214, (hh & 1) === 0 ? 200 : 170, (hh & 1) === 0 ? 140 : 100));
+      }
+    }
+    for (const vs of this.venomSpits) {   // the Venom Flayer's globs in flight
+      if (vs.delay > 0) continue;
+      goo(g, vs.x, vs.y, 3.4, 2.8, 255, 1);
+    }
     // Spat fireballs: a ball of flame with a hot heart, shedding embers behind it.
     for (const sp of this.spits) {
       const x = Math.round(sp.x), y = Math.round(sp.y);
@@ -781,19 +882,27 @@ export function installEnemies(P) {
             const rad = 3 + Math.trunc(8 * u / 0.25);
             g.ring(x - rad, y - rad, rad * 2, rad * 2, CA(Math.trunc(200 * (1 - u / 0.25)), 160, 236, 110));
           }
-          goo(g, x, y, 4 - 2.2 * sq, 3.2 + 2.6 * sq, a);
-          if (sq > 0.5) { goo(g, x - 1, y - 3.5 * sq, 1.6, 1.8, a); goo(g, x - 1, y + 3.5 * sq, 1.6, 1.8, a); }
+          const gp = GOO_PALETTES[b.pal || 0];
+          goo(g, x, y, 4 - 2.2 * sq, 3.2 + 2.6 * sq, a, b.pal);
+          if (sq > 0.5) { goo(g, x - 1, y - 3.5 * sq, 1.6, 1.8, a, b.pal); goo(g, x - 1, y + 3.5 * sq, 1.6, 1.8, a, b.pal); }
           const tt = Math.min(u, 0.6) * 0.8;
           for (let k = 0; k < SPLAT_VX.length; k++) {
             const sz = k % 2 === 0 ? 2 : 1;
-            g.rect(x + Math.trunc(SPLAT_VX[k] * tt), y + Math.trunc(SPLAT_VY[k] * tt + 40 * tt * tt), sz, sz, CA(a, 96, 200, 66));
+            g.rect(x + Math.trunc(SPLAT_VX[k] * tt), y + Math.trunc(SPLAT_VY[k] * tt + 40 * tt * tt), sz, sz, CA(a, ...gp[1]));
           }
           const ease = Math.min(1, Math.max(0, (u - 0.12) / 0.55));
           for (let j = 0; j < SPLAT_DRIP_X.length; j++) {
             const len = Math.trunc(SPLAT_DRIP_LEN[j] * ease);
             if (len < 1) continue;
-            g.rect(x + SPLAT_DRIP_X[j], y + 5, 1, len, CA(a, 96, 200, 66));
-            g.rect(x + SPLAT_DRIP_X[j] - 1, y + 5 + len, 2, 2, CA(a, 110, 214, 74));
+            g.rect(x + SPLAT_DRIP_X[j], y + 5, 1, len, CA(a, ...gp[1]));
+            g.rect(x + SPLAT_DRIP_X[j] - 1, y + 5 + len, 2, 2, CA(a, ...gp[4]));
+          }
+          break;
+        }
+        case 'sand': {   // a puff of sand where the blast hits a hero
+          for (let k = 0; k < 8; k++) {
+            const ang = k * Math.PI / 4;
+            g.rect(x + Math.trunc(Math.cos(ang) * (3 + 9 * u)), y + Math.trunc(Math.sin(ang) * (3 + 7 * u)), 2, 2, CA(fade, 226, 190, 124));
           }
           break;
         }

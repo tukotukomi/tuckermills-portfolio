@@ -6,6 +6,7 @@ import { C, CA, withAlpha, mix, clamp255, hash, ease, rnd, Pix, tintImage } from
 import { Sprites, PARTY, PARTY_NAMES } from './sprites.js';
 import { t } from './i18n.js';
 import { Sound } from './sfx.js';
+import { installDesert, SAND_KEYS, SAND_DARK_KEYS, DESERT_DIRT_KEYS, DESERT_DIRT_DARK_KEYS, DESERT_FAR_KEYS, DESERT_NEAR_KEYS, DUST_COLORS } from './desert.js';
 
 export const DESIGN_HEIGHT = 33;
 export const DAY_LENGTH_SECONDS = 120;
@@ -346,7 +347,7 @@ export class PixelScene {
     let f = p - Math.floor(p);
     f = f * f * (3 - 2 * f);
     const result = [];
-    for (let b = 0; b < 7; b++) result.push(this._seasonTint(mix(SKY_KEYS[i][b], SKY_KEYS[(i + 1) % 4][b], f)));
+    for (let b = 0; b < 7; b++) result.push(this._desertWash(this._seasonTint(mix(SKY_KEYS[i][b], SKY_KEYS[(i + 1) % 4][b], f)), 0.8 * (this.desert || 0)));
     return result;
   }
 
@@ -379,6 +380,7 @@ export class PixelScene {
     for (let s = 0; s < 4; s++) this.sw[s] = (this.sa === s ? 1 - this.sf : 0) + (this.sb === s ? this.sf : 0);
     this.mr = this._sbNum(MUL_R); this.mg = this._sbNum(MUL_G); this.mb = this._sbNum(MUL_B); this.gray = this._sbNum(GRAY_AMT);
     this.shade = this._key(SHADE_KEYS);
+    this._updateDesert();
   }
 
   _seasonTint(c) {
@@ -450,28 +452,33 @@ export class PixelScene {
   }
 
   _drawMountains(g, lw) {
-    const farC = this._seasonTint(this._key(FAR_KEYS)), nearC = this._seasonTint(this._key(NEAR_KEYS));
-    const snow = this.sw[3];
+    const d = this.desert || 0;
+    const farC = this._seasonTint(mix(this._key(FAR_KEYS), this._key(DESERT_FAR_KEYS), d)), nearC = this._seasonTint(mix(this._key(NEAR_KEYS), this._key(DESERT_NEAR_KEYS), d));
+    const snow = this.sw[3] * (1 - 0.7 * d);
     const snowC = this._shadeColor(C(244, 248, 255));
     const farCap = mix(farC, snowC, snow * 0.9), nearCap = mix(nearC, snowC, snow * 0.8);
     const so = Math.trunc(this.scroll * 0.12), no = Math.trunc(this.scroll * 0.35);
     const k = 1 + (this.groundY / 27.0 - 1) * 0.5;
     const lift = Math.trunc(4 * k);
     for (let x = 0; x < lw; x++) {
-      const hFar = Math.trunc(k * (7 + 5 * Math.sin((x + so) * 0.07) + 2 * Math.sin((x + so) * 0.19)));
+      let hFar = Math.trunc(k * (7 + 5 * Math.sin((x + so) * 0.07) + 2 * Math.sin((x + so) * 0.19)));
+      if (d > 0.02) hFar = Math.trunc(hFar + (Math.min(hFar, Math.trunc(k * 9)) - hFar) * d);   // flat-topped mesas
       g.rect(x, this.groundY - hFar - lift, 1, hFar + lift + 1, farC);
       if (snow > 0.03) g.rect(x, this.groundY - hFar - lift, 1, 2, farCap);
     }
-    this._drawTowns(g, lw, so, k, lift, farC);
+    if (d < 0.5) this._drawTowns(g, lw, so, k, lift, farC);   // villages on the far ridge (none in the desert)
     for (let x = 0; x < lw; x++) {
-      const hNear = Math.trunc(k * (3 + 2 * Math.sin((x + no) * 0.05 + 2) + 1.5 * Math.sin((x + no) * 0.17)));
+      let hNear = Math.trunc(k * (3 + 2 * Math.sin((x + no) * 0.05 + 2) + 1.5 * Math.sin((x + no) * 0.17)));
+      if (d > 0.02) hNear = Math.trunc(hNear + (Math.min(hNear, Math.trunc(k * 4.5)) - hNear) * d);
       g.rect(x, this.groundY - hNear, 1, hNear + 1, nearC);
       if (snow > 0.03) g.rect(x, this.groundY - hNear, 1, 1, nearCap);
     }
   }
 
   _drawGround(g, lw) {
-    const grass = this._sbColor(GRASS_KEYS), grassDark = this._sbColor(GRASS_DARK_KEYS), dirt = this._sbColor(DIRT_KEYS), dirtDark = this._sbColor(DIRT_DARK_KEYS);
+    const d = this.desert || 0;
+    const grass = mix(this._sbColor(GRASS_KEYS), this._sbColor(SAND_KEYS), d), grassDark = mix(this._sbColor(GRASS_DARK_KEYS), this._sbColor(SAND_DARK_KEYS), d);
+    const dirt = mix(this._sbColor(DIRT_KEYS), this._sbColor(DESERT_DIRT_KEYS), d), dirtDark = mix(this._sbColor(DIRT_DARK_KEYS), this._sbColor(DESERT_DIRT_DARK_KEYS), d);
     g.rect(0, this.groundY + 1, lw, 1, grass);
     g.rect(0, this.groundY + 2, lw, 2, grassDark);
     g.rect(0, this.groundY + 4, lw, this.lh - this.groundY - 4, dirt);
@@ -638,6 +645,7 @@ export class PixelScene {
   }
 
   _drawTrees(g, lw) {
+    if ((this.desert || 0) >= 0.5) { this._drawDesertFlora(g, lw); return; }   // Year 5: cacti and boulders
     const k = 1 + (this.groundY / 27.0 - 1) * 0.5;
     const leaf = this._sbNum(LEAF_AMOUNT), accP = this._sbNum(ACCENT_PROB);
     const trunkC = this._shadeColor(this._sbColor(TRUNK_KEYS)), main = this._shadeColor(this._sbColor(CANOPY_KEYS));
@@ -854,7 +862,7 @@ export class PixelScene {
     const area = lw * Math.max(1, this.groundY);
     const fx = this.fxDensity;
     this._drawFalling(g, lw, 11, this.sw[0], Math.trunc(area / 300 * fx), PETAL_COLORS, 5, 4, 0.5, false);
-    this._drawFalling(g, lw, 23, this.sw[2], Math.trunc(area / 240 * fx), LEAF_COLORS, 7, 6, 0.9, true);
+    this._drawFalling(g, lw, 23, this.sw[2], Math.trunc(area / 240 * fx), (this.desert || 0) >= 0.5 ? DUST_COLORS : LEAF_COLORS, 7, 6, 0.9, true);
     this._drawFalling(g, lw, 37, this.sw[3], Math.trunc(area / 110 * fx), SNOW_COLORS, 8, 2.5, 0.3, false);
     this._drawFireflies(g, lw, this.sw[1] * this.starlight());
   }
@@ -1369,3 +1377,4 @@ installItems(PixelScene);
 installTutorial(PixelScene);
 installScroll(PixelScene);
 installStamps(PixelScene);
+installDesert(PixelScene);

@@ -135,12 +135,18 @@ function gooRows(g, col, cx, cy, rx, ry) {
 }
 
 /** A blob of green ooze: a dark rim, a green body, a lighter top and a glint. */
-export function goo(g, cx, cy, rx, ry, a) {
+export const GOO_PALETTES = [
+  [[24, 90, 48], [96, 200, 66], [160, 236, 110], [230, 255, 190], [110, 214, 74]],     // the Druid's toxin: green
+  [[50, 20, 80], [150, 70, 200], [206, 140, 244], [244, 210, 255], [170, 96, 226]],    // the Venom Flayer's venom: purple
+];
+
+export function goo(g, cx, cy, rx, ry, a, pal) {
   a = Math.max(0, Math.min(255, a));
-  gooRows(g, CA(a, 24, 90, 48), cx, cy, rx + 1, ry + 1);
-  gooRows(g, CA(a, 96, 200, 66), cx, cy, rx, ry);
-  gooRows(g, CA(a, 160, 236, 110), cx - rx * 0.25, cy - ry * 0.35, rx * 0.55, ry * 0.45);
-  if (rx >= 2.5) g.rect(Math.round(cx - rx * 0.5), Math.round(cy - ry * 0.6), 1, 1, CA(a, 230, 255, 190));
+  const p = GOO_PALETTES[pal || 0];
+  gooRows(g, CA(a, ...p[0]), cx, cy, rx + 1, ry + 1);
+  gooRows(g, CA(a, ...p[1]), cx, cy, rx, ry);
+  gooRows(g, CA(a, ...p[2]), cx - rx * 0.25, cy - ry * 0.35, rx * 0.55, ry * 0.45);
+  if (rx >= 2.5) g.rect(Math.round(cx - rx * 0.5), Math.round(cy - ry * 0.6), 1, 1, CA(a, ...p[3]));
 }
 
 function plus(g, c, x, y) { g.rect(x - 1, y, 3, 1, c); g.rect(x, y - 1, 1, 3, c); }
@@ -260,6 +266,7 @@ export function installTraits(P) {
   };
 
   m._fireTrait = function (trait, level) {
+    if ((trait === 'Fireball' || trait === 'NaturalToxin' || trait === 'LifeDrain') && this._takeBlind(TRAIT_OWNER[trait])) return;   // a blinded caster's attack spell misses
     switch (trait) {
       case 'Heal': {
         const target = this._weakestMember();
@@ -413,6 +420,7 @@ export function installTraits(P) {
 
   /** The Warrior's basic attack: throws an axe that travels up to axeRangeBlocks blocks of grass. */
   m._throwAxe = function (e, level) {
+    if (this._takeBlind('warrior')) return;   // sand in the eyes: it misses
     const r = this._rectOf('warrior');
     const sx = r.x + r.w - 2, sy = r.y + 4;
     let range = axeRangeBlocks(level) * BLOCK_PIXELS;
@@ -429,6 +437,7 @@ export function installTraits(P) {
 
   /** The Thief's crossbow: looses a bolt at the enemy. */
   m._fireBolt = function (e) {
+    if (this._takeBlind('thief')) return;
     const r = this._rectOf('thief');
     const sx = r.x + r.w - 1, sy = r.y + r.h * 0.45;
     const er = this._enemyRect(e);
@@ -537,7 +546,7 @@ export function installTraits(P) {
 
   m._resetTraits = function () {
     this.traitTimer = {};
-    this.fireballs.length = 0; this.axes.length = 0; this.bolts.length = 0; this.globs.length = 0; this.toxinFlash = 0; this.heals.length = 0; this.wallLeft = 0;
+    this.fireballs.length = 0; this.axes.length = 0; this.bolts.length = 0; this.globs.length = 0; this.toxinFlash = 0; this.heals.length = 0; this.wallLeft = 0; this._resetStatuses();
     this.hp = {}; this.memberClip = {};
     this.inspireLeft = 0; this.hatLeft = 0; this.hatRed = {}; this.hatRegen = {}; this.shoutAge = -1; this.castFlash = 0; this.luckyFlash = 0;
     this._resetEnemies();
@@ -595,6 +604,7 @@ export function installTraits(P) {
     this._drawBolts(g);
     this._drawToxin(g);
     this._drawShieldWall(g);
+    this._drawStatus(g);
     this._drawLuckyFlash(g);
   };
 

@@ -7,6 +7,40 @@
 // This file is plain data (the generator reads it): { date: 'YYYY-MM-DD', title, notes: [...], es: { title, notes }, zh: { title, notes } }.
 export const JOURNAL = [
   {
+    date: '2026-10-21',
+    title: 'Welcome to the desert',
+    notes: [
+      'Fantasy Crystals appear half as often: one every four days.',
+      'Year 5 is spent in a sun-baked desert. The seasons still change.',
+      'Two new desert monsters, tougher than any before: the Sand Crab and the Venom Flayer.',
+      'Sand Crab: pinches the first hero. At half health, its Sand Blast hurts everyone and blinds them: their next attack misses.',
+      'Venom Flayer: its bite poisons. At 30% health it spits venom that poisons the first three heroes.',
+      'Poison drains HP every second. A Rest at the inn cures poison and blindness.'
+    ],
+    es: {
+      title: 'Bienvenidos al desierto',
+      notes: [
+        'Los Cristales de fantasía aparecen la mitad de veces: uno cada cuatro días.',
+        'El Año 5 transcurre en un desierto abrasador. Las estaciones siguen cambiando.',
+        'Dos nuevos monstruos del desierto, más duros que ninguno: el Cangrejo de arena y el Desollador venenoso.',
+        'Cangrejo de arena: pellizca al primer héroe. Con la mitad de la vida, su Explosión de arena daña a todos y los ciega: su próximo ataque falla.',
+        'Desollador venenoso: su mordisco envenena. Con el 30% de la vida escupe veneno que envenena a los tres primeros héroes.',
+        'El veneno quita vida cada segundo. Descansar en la posada cura el veneno y la ceguera.'
+      ]
+    },
+    zh: {
+      title: '欢迎来到沙漠',
+      notes: [
+        '幻想水晶出现得少了一半：每四天一个。',
+        '第 5 年在烈日炙烤的沙漠中度过，四季依然更替。',
+        '两种比以往都更强的沙漠怪物：沙蟹和毒液剥皮蛇。',
+        '沙蟹：夹击排头的英雄。生命降到一半时，沙暴会伤害所有人并使其失明：下一次攻击会落空。',
+        '毒液剥皮蛇：撕咬会中毒。生命降到 30% 时，会喷出毒液，使前三名英雄中毒。',
+        '中毒会每秒损失生命。在旅店休息可以解毒并治愈失明。'
+      ]
+    }
+  },
+  {
     date: '2026-10-18',
     title: 'Rarer scrolls, clearer level-ups, a cuter stamp',
     notes: [
