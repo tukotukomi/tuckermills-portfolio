@@ -106,7 +106,7 @@ export function installHealth(P) {
     this.hp[kind] = Math.max(0, before - amount);
     const lost = before - this.hp[kind];
     const hero = this._h(kind), foe = this._e(this._foe || 'orc');
-    if (pure) this._say('{0} took {1} poison damage.', hero, lost);
+    if (pure) { /* poison is logged once, when it starts: not at every tick */ }
     else if (!via) this._say('The {0} hit {1} for {2} damage.', foe, hero, lost);
     else this._say("The {0}'s {1} hit {2} for {3} damage.", foe, via, hero, lost);
     if (this.hp[kind] === 0 && this._tryRerevive(kind)) return lost;   // Rerevive: they get up again on the spot with half their HP
