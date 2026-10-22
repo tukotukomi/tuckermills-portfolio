@@ -1,6 +1,6 @@
 // The skill trees. A port of src\PixelSkills.cs. A hero reaching a tree's level is offered two paths at the moment they level up and keeps the
 // one they pick for good. A hero who is already past a tree's level (an adventure from before the tree existed, or one saved at the choice) has the
-// choice waiting: the "New skills available" button lets them make it later. So far only the Warrior has a tree (at level 5: Stalwart takes 25%
+// choice waiting: the "New skills available" button lets them make it later. So far the Warrior and the Light Mage have trees (at level 5: Stalwart or Rager, Paralyze or Diminish; Stalwart takes 25%
 // less damage, Rager deals 25% more); the rest will follow in the same shape.
 
 import { C } from './util.js';
@@ -10,8 +10,14 @@ import { enumOf, kindOfEnum } from './health.js';
 const TREES = {
   warrior: {
     5: [
-      { id: 'Stalwart', name: 'Stalwart', description: 'Reduce incoming damage by 25%.' },
+      { id: 'Stalwart', name: 'Stalwart', description: 'Reduce incoming physical damage by 25%.' },
       { id: 'Rager', name: 'Rager', description: 'Increase damage dealt to enemies by 25%.' },
+    ],
+  },
+  lightmage: {
+    5: [
+      { id: 'Paralyze', name: 'Paralyze', description: '20% chance to stop the enemy from attacking for 15 s. Recast 40 s, range 30 blocks.' },
+      { id: 'Diminish', name: 'Diminish', description: 'The enemy takes 10% more damage for 20 s. Recast 40 s, range 30 blocks.' },
     ],
   },
 };

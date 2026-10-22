@@ -9,7 +9,7 @@ import { t } from './i18n.js';
 import { skillSummary } from './skills.js';
 
 export const TRAIT_OF = { paca: 'ItemStorage', lightmage: 'Heal', firemage: 'Fireball', thief: 'LuckyCoins', warrior: 'Huzzah', fae: 'StarHat', druid: 'NaturalToxin', paladin: 'ShieldWall', shadowknight: 'LifeDrain' };
-export const TRAIT_OWNER = { ItemStorage: 'paca', Heal: 'lightmage', Fireball: 'firemage', LuckyCoins: 'thief', Huzzah: 'warrior', StarHat: 'fae', NaturalToxin: 'druid', ShieldWall: 'paladin', LifeDrain: 'shadowknight' };
+export const TRAIT_OWNER = { Paralyze: 'lightmage', Diminish: 'lightmage', ItemStorage: 'paca', Heal: 'lightmage', Fireball: 'firemage', LuckyCoins: 'thief', Huzzah: 'warrior', StarHat: 'fae', NaturalToxin: 'druid', ShieldWall: 'paladin', LifeDrain: 'shadowknight' };
 
 export function storageSlots(level) { return 1; }
 export function healInterval(level) { return 10; }
@@ -57,6 +57,10 @@ export function toxinInterval(level) { return 10; }   // seconds of adventuring 
 export function toxinDamage(level) { return 2; }       // taken off the enemy at every tick
 export function toxinTicks(level) { return 5; }        // one tick a second, so 5 seconds
 
+// The Light Mage's skill-tree spells (learned at level 5, one or the other): cast on the enemy in range, then recast after a wait.
+export const SKILL_RECAST_SECONDS = 40, PARALYZE_CHANCE = 0.20, PARALYZE_SECONDS = 15, DIMINISH_PERCENT = 10, DIMINISH_SECONDS = 20;
+export const SKILL_RANGE_BLOCKS = 30;
+
 export function traitInterval(trait, level) {
   switch (trait) {
     case 'Heal': return healInterval(level);
@@ -66,6 +70,7 @@ export function traitInterval(trait, level) {
     case 'NaturalToxin': return toxinInterval(level);
     case 'LifeDrain': return lifeDrainInterval(level);
     case 'ShieldWall': return shieldWallInterval(level);
+    case 'Paralyze': case 'Diminish': return SKILL_RECAST_SECONDS;
   }
   return 0;
 }
@@ -118,7 +123,7 @@ const AXE_FRAMES = (() => {
   }
   return frames;
 })();
-const TIMED_TRAITS = ['Heal', 'Fireball', 'Huzzah', 'StarHat', 'NaturalToxin', 'LifeDrain', 'ShieldWall'];
+const TIMED_TRAITS = ['Heal', 'Fireball', 'Huzzah', 'StarHat', 'NaturalToxin', 'LifeDrain', 'ShieldWall', 'Paralyze', 'Diminish'];
 const GLOB_SPEED = 100;  // the Druid's toxin glob, scene pixels per second
 const GLOB_ARC = 8;      // how high the lob rises above the straight line
 const SHOUT_SECONDS = 2.2;
@@ -234,12 +239,14 @@ export function installTraits(P) {
     for (const trait of TIMED_TRAITS) {
       const owner = TRAIT_OWNER[trait];
       if (!this._active(owner)) { delete this.traitTimer[trait]; continue; }   // out cold in the cart: no skills
+      const spell = trait === 'Paralyze' || trait === 'Diminish';   // a skill-tree spell: only once the Light Mage has chosen it
+      if (spell && !this.hasSkill(owner, trait)) { delete this.traitTimer[trait]; continue; }
       const level = this.levelOf(owner);
       let left = this.traitTimer[trait];
-      if (left === undefined) left = traitInterval(trait, level);
+      if (left === undefined) left = spell ? 0 : traitInterval(trait, level);   // (a spell is ready the moment it is learned)
       left -= dt;
       if (left <= 0) {
-        if ((trait === 'NaturalToxin' && !this._toxinTargetReady()) || (trait === 'LifeDrain' && !this._drainTargetReady())) left = 0;   // ready, and waiting for something to cast it on
+        if ((trait === 'NaturalToxin' && !this._toxinTargetReady()) || (trait === 'LifeDrain' && !this._drainTargetReady()) || (spell && !this._skillSpellTargetReady())) left = 0;   // ready, and waiting for something to cast it on
         else { this._fireTrait(trait, level); left = traitInterval(trait, level); }
       }
       this.traitTimer[trait] = left;
@@ -303,6 +310,12 @@ export function installTraits(P) {
         break;
       case 'ShieldWall':
         this._castShieldWall(level);
+        break;
+      case 'Paralyze':
+        this._castParalyze();
+        break;
+      case 'Diminish':
+        this._castDiminish();
         break;
     }
   };
@@ -484,6 +497,42 @@ export function installTraits(P) {
   };
 
   m._drainTargetReady = function () { return this.enemy !== null && this.enemy.deathT < 0 && this.enemy.engaged; };
+
+  /** The enemy is alive and within the Light Mage's spell range (30 blocks from him). */
+  m._skillSpellTargetReady = function () {
+    const e = this.enemy;
+    if (e === null || e.deathT >= 0 || e.x >= this.lastLw) return false;
+    const mr = this._rectOf('lightmage');
+    return e.x - (mr.x + mr.w) <= SKILL_RANGE_BLOCKS * BLOCK_PIXELS;
+  };
+
+  /** A beam from the Light Mage to the enemy, in the spell's colour. */
+  m._skillBeam = function (e, tint) {
+    const mr = this._rectOf('lightmage'), er = this._enemyRect(e);
+    this.beams.push({ x1: mr.x + mr.w - 2, y1: mr.y + mr.h * 0.4, x2: er.x + er.w * 0.3, y2: er.y + er.h * 0.45, age: 0, tint: tint });
+  };
+
+  /** Paralyze: for 15 seconds each attack the enemy starts has a 20% chance of never beginning. */
+  m._castParalyze = function () {
+    const e = this.enemy;
+    if (e === null || e.deathT >= 0) return;
+    e.paralyzeLeft = PARALYZE_SECONDS;
+    this._skillBeam(e, [255, 240, 110]);
+    const r = this._rectOf('lightmage');
+    this._addItemText('Paralyze!', r.x + r.w / 2.0, r.y - 10, C(255, 240, 130));
+    Sound.play('StarHat');
+  };
+
+  /** Diminish: for 20 seconds the enemy takes 10% more damage from every source. */
+  m._castDiminish = function () {
+    const e = this.enemy;
+    if (e === null || e.deathT >= 0) return;
+    e.diminishLeft = DIMINISH_SECONDS;
+    this._skillBeam(e, [190, 110, 255]);
+    const r = this._rectOf('lightmage');
+    this._addItemText('Diminish!', r.x + r.w / 2.0, r.y - 10, C(214, 160, 255));
+    Sound.play('ToxinCast');
+  };
 
   /** The Shadow Knight's Life Drain: a little of the enemy's life is torn away and given to the weakest member of the party. */
   m._castLifeDrain = function (level) {

@@ -5,7 +5,7 @@
 import { C, CA, withAlpha, rnd, hash } from './util.js';
 import { Sprites } from './sprites.js';
 import { Sound } from './sfx.js';
-import { peckDamage, peckInterval, axeInterval, axeRangeBlocks, BLOCK_PIXELS, crossbowInterval, toxinDamage, BASIC_ATTACKERS, basicDamage, goo, GOO_PALETTES, basicInterval, paladinLightInterval, paladinLightTicks, paladinLightDamage, scytheDamage, scytheInterval, SPELL_RANGE_BLOCKS } from './traits.js';
+import { peckDamage, peckInterval, axeInterval, axeRangeBlocks, BLOCK_PIXELS, crossbowInterval, toxinDamage, BASIC_ATTACKERS, basicDamage, goo, GOO_PALETTES, basicInterval, paladinLightInterval, paladinLightTicks, paladinLightDamage, scytheDamage, scytheInterval, SPELL_RANGE_BLOCKS, PARALYZE_CHANCE, DIMINISH_PERCENT } from './traits.js';
 
 const BOW_FIRST_DELAY = 1.5;   // seconds from the Thief first being able to shoot to his first bolt
 import { t } from './i18n.js';
@@ -104,6 +104,23 @@ function poisonedFrame(img) {
   }
   return c;
 }
+const WASHES = new Map();   // sprite -> its yellow (Paralyze) and violet (Diminish) versions
+function washedFrame(img, tint) {
+  let m = WASHES.get(img);
+  if (!m) { m = {}; WASHES.set(img, m); }
+  let c = m[tint];
+  if (!c) {
+    c = document.createElement('canvas');
+    c.width = img.width; c.height = img.height;
+    const x = c.getContext('2d');
+    x.drawImage(img, 0, 0);
+    x.globalCompositeOperation = 'source-atop';
+    x.fillStyle = tint === 'para' ? 'rgba(255,240,90,0.75)' : 'rgba(170,90,255,0.6)';
+    x.fillRect(0, 0, c.width, c.height);
+    m[tint] = c;
+  }
+  return c;
+}
 const TAB_SPEED = 140;   // the Toucan's can tab, scene pixels per second
 // Its four spin positions (6x6): a ring seen flat, edge-on, and turning.
 const TAB_SHAPES = [
@@ -167,7 +184,7 @@ export function installEnemies(P) {
 
   m._spawnEnemy = function () {
     const kind = this._pickEnemyKind();
-    this.enemy = { kind: kind, x: this.lastLw + 6, hp: DEFS[kind].hp, maxHp: DEFS[kind].hp, engaged: false, walkT: 0, attackTimer: 0, attackAnim: -1, attackPose: 0, struck: false, peckTimer: 0, axeTimer: 0, axeStarted: false, poisonTicks: 0, poisonTick: 0, lightTicks: 0, lightTick: 0, bloodMoonUsed: false, specialUsed: false, hurtFlash: 0, deathT: -1 };
+    this.enemy = { kind: kind, x: this.lastLw + 6, hp: DEFS[kind].hp, maxHp: DEFS[kind].hp, engaged: false, walkT: 0, attackTimer: 0, attackAnim: -1, attackPose: 0, struck: false, peckTimer: 0, axeTimer: 0, axeStarted: false, poisonTicks: 0, poisonTick: 0, lightTicks: 0, lightTick: 0, bloodMoonUsed: false, specialUsed: false, hurtFlash: 0, deathT: -1, paralyzeLeft: 0, diminishLeft: 0 };
     this.basicTimer = {};
     this.bowTimer = BOW_FIRST_DELAY;
     this._noteSeen(kind);
@@ -186,6 +203,9 @@ export function installEnemies(P) {
     }
     const e = this.enemy;
     if (e.deathT >= 0) return;
+
+    if (e.paralyzeLeft > 0) e.paralyzeLeft = Math.max(0, e.paralyzeLeft - dt);
+    if (e.diminishLeft > 0) e.diminishLeft = Math.max(0, e.diminishLeft - dt);
 
     // The Druid's Natural Toxin: a tick of damage every second until it has run its course.
     if (e.poisonTicks > 0) {
@@ -258,11 +278,19 @@ export function installEnemies(P) {
 
     e.attackTimer -= dt;
     if (e.attackTimer <= 0 && e.attackAnim < 0 && this.bloodMoonT < 0 && this.sandT < 0) {
-      e.attackAnim = 0;
-      e.struck = false;
-      e.attackPose = this.enemyAttacks++ % 2;
       e.attackTimer = DEFS[e.kind].attackInterval;
-      Sound.play(attackFx(e.kind, e.attackPose, false));   // the wind-up
+      if (e.paralyzeLeft > 0 && Math.random() < PARALYZE_CHANCE) {
+        // Paralyzed: the attack never begins, and it waits out a full interval before trying again.
+        const pr = this._enemyRect(e);
+        this._addItemText('Paralyzed!', pr.x + pr.w / 2.0, pr.y - 8, C(255, 240, 130));
+        this.bursts.push({ x: pr.x + pr.w / 2.0, y: pr.y + pr.h * 0.4, kind: 'zap', age: 0 });
+        Sound.play('StarHat');
+      } else {
+        e.attackAnim = 0;
+        e.struck = false;
+        e.attackPose = this.enemyAttacks++ % 2;
+        Sound.play(attackFx(e.kind, e.attackPose, false));   // the wind-up
+      }
     }
 
     if (this._active('paca')) {
@@ -358,9 +386,10 @@ export function installEnemies(P) {
     for (const b of this.beams) {
       const a = Math.trunc(235 * Math.max(0, 1 - b.age));
       const n = Math.max(Math.abs(b.x2 - b.x1), Math.abs(b.y2 - b.y1), 1);
+      const tn = b.tint || [255, 226, 120];
       for (let i = 0; i <= n; i++) {
         const x = Math.round(b.x1 + (b.x2 - b.x1) * i / n), y = Math.round(b.y1 + (b.y2 - b.y1) * i / n);
-        g.rect(x, y - 1, 1, 3, CA(Math.trunc(a / 3), 255, 226, 120));
+        g.rect(x, y - 1, 1, 3, CA(Math.trunc(a / 3), tn[0], tn[1], tn[2]));
         g.rect(x, y, 1, 1, CA(a, 255, 250, 214));
       }
     }
@@ -393,12 +422,13 @@ export function installEnemies(P) {
 
   m._damageEnemy = function (e, amount, fire, fx, fy, toxin, light) {
     if (e.deathT >= 0) return;
-    e.hp = Math.max(0, e.hp - amount);
+    const dealt = e.diminishLeft > 0 ? amount * (1 + DIMINISH_PERCENT / 100) : amount;   // Diminish: 10% more from every source
+    e.hp = Math.max(0, e.hp - dealt);
     if (!toxin && !light) e.hurtFlash = 0.14;   // (a poison tick doesn't blanch it, so the green shows)
     if (fire) Sound.play('FireImpact');
     const r = this._enemyRect(e);
     this.damageTexts.push({
-      x: r.x + r.w / 2.0 + (fire ? 0 : 2), y: r.y + DEFS[e.kind].headOffset - 4, age: 0, text: String(amount),
+      x: r.x + r.w / 2.0 + (fire ? 0 : 2), y: r.y + DEFS[e.kind].headOffset - 4, age: 0, text: String(Math.max(1, Math.round(dealt))),
       color: light ? C(255, 238, 150) : toxin ? C(150, 240, 100) : fire ? C(255, 176, 64) : (this.partyInspired ? C(255, 226, 90) : C(255, 255, 255))
     });
     this.bursts.push({ x: fire ? Math.min(fx, r.x + r.w / 2.0) : r.x + 2, y: fire ? r.y + r.h * 0.4 : r.y + r.h * 0.35, kind: light ? 'light' : toxin ? 'toxin' : fire ? 'fire' : 'peck', age: 0 });
@@ -423,7 +453,7 @@ export function installEnemies(P) {
     for (let i = this.bursts.length - 1; i >= 0; i--) {
       const b = this.bursts[i];
       if (b.stick && this.enemy !== null) b.x = this.enemy.x + b.off;   // the slime goes where the enemy goes
-      b.age += dt / (b.kind === 'death' ? 0.8 : b.kind === 'blood' ? 0.7 : b.kind === 'fire' ? 0.4 : b.kind === 'toxin' ? 0.55 : b.kind === 'shout' ? 0.45 : b.kind === 'ash' ? 0.9 : b.kind === 'flames' ? 0.75 : b.kind === 'drain' ? 0.6 : b.kind === 'light' ? 0.5 : b.kind === 'splat' ? 0.95 : b.kind === 'sand' ? 0.7 : 0.3);
+      b.age += dt / (b.kind === 'death' ? 0.8 : b.kind === 'blood' ? 0.7 : b.kind === 'fire' ? 0.4 : b.kind === 'toxin' ? 0.55 : b.kind === 'shout' ? 0.45 : b.kind === 'ash' ? 0.9 : b.kind === 'flames' ? 0.75 : b.kind === 'drain' ? 0.6 : b.kind === 'light' ? 0.5 : b.kind === 'splat' ? 0.95 : b.kind === 'sand' ? 0.7 : b.kind === 'zap' ? 0.5 : 0.3);
       if (b.age >= 1) this.bursts.splice(i, 1);
     }
     for (let i = this.beams.length - 1; i >= 0; i--) { this.beams[i].age += dt / 0.4; if (this.beams[i].age >= 1) this.beams.splice(i, 1); }
@@ -465,7 +495,7 @@ export function installEnemies(P) {
       for (const k of hit) {
         const hr = this._rectOf(k);
         left = Math.min(left, hr.x); right = Math.max(right, hr.x + hr.w);
-        this.damageMember(k, enemyDamage('magmashellra') * this.monsterDamageMultiplier);
+        this.damageMember(k, enemyDamage('magmashellra') * this.monsterDamageMultiplier, false, true);   // fire
       }
       this.bursts.push({ x: (left + right) / 2, y: this.groundY, w: right - left + 8, kind: 'flames', age: 0 });
       this.bursts.push({ x: sp.endX, y: this.groundY - 3, kind: 'fire', age: 0 });   // and the blast where it landed
@@ -504,7 +534,7 @@ export function installEnemies(P) {
           this.bursts.push({ x: mr.x + mr.w / 2.0, y: mr.y + mr.h * 0.45, kind: 'sand', age: 0 });
         }
         for (const k of this.party.slice()) {
-          this.damageMember(k, SAND_BLAST_DAMAGE * this.monsterDamageMultiplier);
+          this.damageMember(k, SAND_BLAST_DAMAGE * this.monsterDamageMultiplier, false, true);   // wind and sand
           if (this.hpOf(k) > 0) this._applyBlind(k);   // their next attack will miss
         }
         this.flinch = 0.5;
@@ -538,7 +568,7 @@ export function installEnemies(P) {
           const mr = this._rectOf(k);
           this.bursts.push({ x: mr.x + mr.w / 2.0, y: mr.y + mr.h * 0.45, kind: 'blood', age: 0 });
         }
-        for (const k of this.party.slice()) this.damageMember(k, (this.bloodMoonDamage || 5) * this.monsterDamageMultiplier);   // the wave of red light hurts everyone
+        for (const k of this.party.slice()) this.damageMember(k, (this.bloodMoonDamage || 5) * this.monsterDamageMultiplier, false, true);   // the wave of red light hurts everyone
         this.flinch = 0.6;
       }
       if (this.bloodMoonT >= 1) this.bloodMoonT = -1;
@@ -584,7 +614,7 @@ export function installEnemies(P) {
             this.bursts.push({ x: hr.x + hr.w * 0.72, y: hr.y + hr.h * 0.45, kind: effect === 'fangs' ? 'claws' : effect, age: 0 });
           }
           this.flinch = 0.18;
-          for (const k of hit) this.damageMember(k, enemyDamage(e.kind) * this.monsterDamageMultiplier);
+          for (const k of hit) this.damageMember(k, enemyDamage(e.kind) * this.monsterDamageMultiplier, false, effect === 'shout');   // (a shout is not a physical blow)
           if (e.kind === 'venomflayer') for (const k of hit) this._applyPoison(k, 2 * this.monsterDamageMultiplier, 2);   // and the bite poisons: 2 a second for 2 seconds
         }
       }
@@ -728,6 +758,25 @@ export function installEnemies(P) {
           g.rect(bx2, by2, 2, 2, CA(Math.trunc(220 * (1 - ph)), 150, 240, 110));
         }
       } else g.image(frame, x, y);
+      if (e.paralyzeLeft > 0 || e.diminishLeft > 0) {
+        // A wash of the spell's colour laid over it (a flickering yellow for Paralyze, violet for Diminish).
+        if (e.paralyzeLeft > 0) {
+          g.image(washedFrame(frame, 'para'), x, y, false, 0.35 + 0.15 * Math.sin(this.time * 14));
+          for (let i = 0; i < 4; i++) {
+            const hz = hash(i + Math.trunc(this.time * 9), 33);
+            const sx = x + (hz % Math.max(2, set.w)), sy = y + ((hz >> 8) % Math.max(2, set.h));
+            g.rect(sx, sy, 2, 1, CA(230, 255, 240, 120)); g.rect(sx, sy + 1, 1, 2, CA(230, 255, 240, 120));
+          }
+        }
+        if (e.diminishLeft > 0) {
+          g.image(washedFrame(frame, 'dim'), x, y, false, 0.4);
+          for (let i = 0; i < 2; i++) {
+            const ph = (this.time * 1.3 + i * 0.5) % 1.0;
+            const ax = x + Math.trunc(set.w / 2) - 5 + i * 8, ay = y - 8 + Math.trunc(ph * 6);
+            g.rect(ax, ay, 3, 1, CA(Math.trunc(230 * (1 - ph * 0.6)), 190, 110, 255)); g.rect(ax + 1, ay + 1, 1, 1, CA(Math.trunc(230 * (1 - ph * 0.6)), 190, 110, 255));
+          }
+        }
+      }
       const ratio = Math.max(0, Math.min(1, e.hp / e.maxHp));
       const bw = 16, bx = r.x + Math.trunc((set.w - bw) / 2), by = y + DEFS[e.kind].headOffset - 5;
       g.rect(bx - 1, by - 1, bw + 2, 4, CA(220, 30, 22, 40));
@@ -896,6 +945,15 @@ export function installEnemies(P) {
             if (len < 1) continue;
             g.rect(x + SPLAT_DRIP_X[j], y + 5, 1, len, CA(a, ...gp[1]));
             g.rect(x + SPLAT_DRIP_X[j] - 1, y + 5 + len, 2, 2, CA(a, ...gp[4]));
+          }
+          break;
+        }
+        case 'zap': {   // a crackle of yellow sparks where an attack is stopped
+          for (let k = 0; k < 7; k++) {
+            const ang = k * Math.PI * 2 / 7 + u * 3;
+            const zx = x + Math.trunc(Math.cos(ang) * (2 + 10 * u)), zy = y + Math.trunc(Math.sin(ang) * (2 + 8 * u));
+            g.rect(zx, zy, 2, 1, CA(fade, 255, k % 2 === 0 ? 240 : 255, k % 2 === 0 ? 110 : 200));
+            g.rect(zx - 1, zy + 1, 1, 2, CA(fade, 255, 250, 180));
           }
           break;
         }

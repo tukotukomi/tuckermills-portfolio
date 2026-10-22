@@ -95,13 +95,13 @@ export function installHealth(P) {
   m._lineIndexOf = function (kind) { return this._lineOrder().indexOf(kind); };
 
   /** Takes HP off a member. At 0 they faint. */
-  m.damageMember = function (kind, amount, pure) {   // pure: poison, which no Shield Wall or hat softens
+  m.damageMember = function (kind, amount, pure, elemental) {   // pure: poison, which no Shield Wall or hat softens; elemental: not a physical blow (fire, sand, the Blood Moon, a shout)
     if (this.party.indexOf(kind) < 0 || amount <= 0) return;
     if (!pure && this.wallLeft > 0 && this.wallTarget === kind && kind !== 'paladin' && this.shieldWallUp()) kind = 'paladin';   // Shield Wall: the Paladin takes the blow
     const before = this.hpOf(kind);
     if (before <= 0) return;   // already out cold
     if (!pure && kind === 'paladin' && this.wallLeft > 0 && this.wallTarget === 'paladin') amount = Math.ceil(amount / 2);   // the Paladin in front: the wall halves what he takes
-    amount = this._skillIncoming(kind, amount);   // a Stalwart hero takes a quarter less (poison too)
+    if (!pure && !elemental) amount = this._skillIncoming(kind, amount);   // a Stalwart hero takes a quarter less from physical blows (not poison, not anything elemental)
     if (!pure) amount = this._hatDamage(kind, amount);   // a Blue Hat halves what its wearer takes (on top of that)
     this.hp[kind] = Math.max(0, before - amount);
     if (this.hp[kind] === 0 && this._tryRerevive(kind)) return;   // Rerevive: they get up again on the spot with half their HP

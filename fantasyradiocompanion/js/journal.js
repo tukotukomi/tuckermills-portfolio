@@ -10,23 +10,26 @@ export const JOURNAL = [
     date: '2026-10-22',
     title: 'Skill trees begin',
     notes: [
-      'Heroes now grow skill trees as they level up. The Warrior comes first.',
-      'At level 5 the Warrior picks a path: Stalwart takes 25% less damage, Rager deals 25% more.',
+      'Heroes now grow skill trees as they level up. The Warrior and the Light Mage come first.',
+      'At level 5 the Warrior picks a path: Stalwart takes 25% less physical damage, Rager deals 25% more.',
+      'At level 5 the Light Mage picks a spell: Paralyze may stop an enemy from attacking, Diminish makes it take 10% more damage.',
       'Already past level 5? A glowing "New skills available" button on the right lets you choose.'
     ],
     es: {
       title: 'Empiezan los árboles de habilidades',
       notes: [
-        'Los héroes ahora desarrollan árboles de habilidades al subir de nivel. Primero, el guerrero.',
-        'En el nivel 5 el guerrero elige un camino: Recio recibe un 25 % menos de daño, Furioso inflige un 25 % más.',
+        'Los héroes ahora desarrollan árboles de habilidades al subir de nivel. Primero, el guerrero y el mago de luz.',
+        'En el nivel 5 el guerrero elige un camino: Recio recibe un 25 % menos de daño físico, Furioso inflige un 25 % más.',
+        'En el nivel 5 el mago de luz elige un hechizo: Paralizar puede impedir que el enemigo ataque y Debilitar hace que reciba un 10 % más de daño.',
         '¿Ya pasaste el nivel 5? Un botón brillante de «Nuevas habilidades disponibles» a la derecha te deja elegir.'
       ]
     },
     zh: {
       title: '技能树登场',
       notes: [
-        '英雄升级时现在会成长出技能树，战士打头阵。',
-        '战士在 5 级时选择一条道路：坚毅受到的伤害减少 25%，狂战造成的伤害增加 25%。',
+        '英雄升级时现在会成长出技能树，战士和光明法师打头阵。',
+        '战士在 5 级时选择一条道路：坚毅受到的物理伤害减少 25%，狂战造成的伤害增加 25%。',
+        '光明法师在 5 级时选择一个法术：麻痹有几率使敌人无法攻击，削弱会让敌人受到的伤害增加 10%。',
         '已经超过 5 级了？右侧会亮起“有新技能可用”按钮，让你随时选择。'
       ]
     }
