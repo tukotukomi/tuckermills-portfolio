@@ -193,6 +193,7 @@ export function installEnemies(P) {
   /** Paralyze: while it lasts, an attack the enemy is about to start (a plain one or a special) has a 20% chance of never beginning. True if it was stopped. */
   m._paralyzedAttack = function (e) {
     if (e.paralyzeLeft <= 0 || Math.random() >= PARALYZE_CHANCE) return false;
+    this._say("The {0}'s attack was stopped by Paralyze!", this._e(e.kind));
     const pr = this._enemyRect(e);
     this._addItemText('Paralyzed!', pr.x + pr.w / 2.0, pr.y - 8, C(255, 240, 130));
     this.bursts.push({ x: pr.x + pr.w / 2.0, y: pr.y + pr.h * 0.4, kind: 'zap', age: 0 });
@@ -202,6 +203,8 @@ export function installEnemies(P) {
 
   m._spawnEnemy = function () {
     const kind = this._pickEnemyKind();
+    this._foe = kind;
+    this._say('A monster approaches: {0}.', this._e(kind));
     this.enemy = { kind: kind, x: this.lastLw + 6, hp: DEFS[kind].hp, maxHp: DEFS[kind].hp, engaged: false, walkT: 0, attackTimer: 0, attackAnim: -1, attackPose: 0, struck: false, peckTimer: 0, axeTimer: 0, axeStarted: false, poisonTicks: 0, poisonTick: 0, lightTicks: 0, lightTick: 0, bloodMoonUsed: false, specialUsed: false, hurtFlash: 0, deathT: -1, paralyzeLeft: 0, diminishLeft: 0, specialWait: 0 };
     this.basicTimer = {};
     this.bowTimer = BOW_FIRST_DELAY;
@@ -232,7 +235,7 @@ export function installEnemies(P) {
       if (e.poisonTick <= 0) {
         e.poisonTick += 1.0;
         e.poisonTicks--;
-        this._damageEnemy(e, this._withHuzzah(toxinDamage(this.levelOf('druid'))), false, e.x, 0, true);
+        this._damageEnemy(e, this._withHuzzah(toxinDamage(this.levelOf('druid'))), false, e.x, 0, true, false, 'druid', 'Natural Toxin');
         if (e.deathT >= 0) return;
       }
     }
@@ -243,7 +246,7 @@ export function installEnemies(P) {
       if (e.lightTick <= 0) {
         e.lightTick += 1.0;
         e.lightTicks--;
-        this._damageEnemy(e, this._withHuzzah(paladinLightDamage(this.levelOf('paladin'))), false, e.x, 0, false, true);
+        this._damageEnemy(e, this._withHuzzah(paladinLightDamage(this.levelOf('paladin'))), false, e.x, 0, false, true, 'paladin', "Paladin's Light");
         if (e.deathT >= 0) return;
       }
     }
@@ -275,6 +278,7 @@ export function installEnemies(P) {
     if (e.specialWait <= 0 && baseOf(e.kind) === 'gargogryph' && !e.bloodMoonUsed && e.hp <= e.maxHp * BLOOD_MOON_HP_FRACTION && e.attackAnim < 0 && this.bloodMoonT < 0) {
       e.bloodMoonUsed = true;
       this.bloodMoonDamage = bloodMoonDamage(e.kind);
+      this._say('The {0} used {1}!', this._e(e.kind), 'Blood Moon');
       this.bloodMoonT = 0;
       this.bloodMoonStruck = false;
       e.attackTimer = 5.5;   // and a breather afterwards
@@ -286,6 +290,7 @@ export function installEnemies(P) {
       if (e.kind === 'sandcrab' && e.hp <= e.maxHp * SAND_BLAST_HP_FRACTION) {
         e.specialUsed = true;
         this.sandT = 0; this.sandStruck = false;
+        this._say('The {0} used {1}!', this._e(e.kind), 'Sand Blast');
         e.attackAnim = 0; e.struck = true; e.attackPose = 1;   // it rears up, claws high (nothing lands from the animation itself)
         e.attackTimer = DEFS[e.kind].attackInterval + 1.5;
         Sound.play('GargogryphFlap');
@@ -293,6 +298,7 @@ export function installEnemies(P) {
         e.specialUsed = true;
         e.attackAnim = 0; e.struck = true; e.attackPose = 0;
         e.attackTimer = DEFS[e.kind].attackInterval + 1.0;
+        this._say('The {0} used {1}!', this._e(e.kind), 'Venom Spit');
         this._spitVenom(e);
         Sound.play('ToxinCast');
       }
@@ -319,7 +325,7 @@ export function installEnemies(P) {
         this.peckAnim = 0;
         if (!this._takeBlind('paca')) {
           Sound.play('Peck');
-          this._damageEnemy(e, this._withHuzzah(peckDamage(level)), false, e.x, 0);
+          this._damageEnemy(e, this._withHuzzah(peckDamage(level)), false, e.x, 0, false, false, 'paca');
         }
       }
     }
@@ -340,7 +346,7 @@ export function installEnemies(P) {
           this.peckAnim = 0;   // the leader lunges
           if (!this._takeBlind(who)) {
             Sound.play('Peck');
-            this._damageEnemy(e, this._withHuzzah(basicDamage(this.levelOf(who))), false, e.x, 0);
+            this._damageEnemy(e, this._withHuzzah(basicDamage(this.levelOf(who))), false, e.x, 0, false, false, who);
           }
         }
         this.basicTimer[who] = left;
@@ -358,7 +364,7 @@ export function installEnemies(P) {
             if (knight === lead) this.peckAnim = 0;   // (the leader lunges)
             if (!this._takeBlind(knight)) {
               Sound.play('Peck');
-              this._damageEnemy(e, this._withHuzzah(scytheDamage(this.levelOf(knight))), false, e.x, 0);
+              this._damageEnemy(e, this._withHuzzah(scytheDamage(this.levelOf(knight))), false, e.x, 0, false, false, knight);
             }
           }
           this.basicTimer[knight] = left;
@@ -395,6 +401,7 @@ export function installEnemies(P) {
     if (this._takeBlind('paladin')) return;   // sand in the eyes: it misses
     e.lightTicks = paladinLightTicks(level);
     e.lightTick = 1.0;
+    this._say('{0} used {1} on the {2}.', this._h('paladin'), "Paladin's Light", this._e(e.kind));
     const pr = this._rectOf('paladin'), er = this._enemyRect(e);
     this.beams.push({ x1: pr.x + pr.w - 2, y1: pr.y + pr.h * 0.4, x2: er.x + er.w * 0.3, y2: er.y + er.h * 0.45, age: 0 });
     Sound.play('StarHat');
@@ -438,10 +445,15 @@ export function installEnemies(P) {
     }
   };
 
-  m._damageEnemy = function (e, amount, fire, fx, fy, toxin, light) {
+  m._damageEnemy = function (e, amount, fire, fx, fy, toxin, light, by, via) {
     if (e.deathT >= 0) return;
     const dealt = e.diminishLeft > 0 ? amount * (1 + DIMINISH_PERCENT / 100) : amount;   // Diminish: 10% more from every source
     e.hp = Math.max(0, e.hp - dealt);
+    if (by) {
+      const shown = Math.max(1, Math.round(dealt));
+      if (!via) this._say('{0} hit the {1} for {2} damage.', this._h(by), this._e(e.kind), shown);
+      else this._say("{0}'s {1} hit the {2} for {3} damage.", this._h(by), via, this._e(e.kind), shown);
+    }
     if (!toxin && !light) e.hurtFlash = 0.14;   // (a poison tick doesn't blanch it, so the green shows)
     if (fire) Sound.play('FireImpact');
     const r = this._enemyRect(e);
@@ -452,6 +464,7 @@ export function installEnemies(P) {
     this.bursts.push({ x: fire ? Math.min(fx, r.x + r.w / 2.0) : r.x + 2, y: fire ? r.y + r.h * 0.4 : r.y + r.h * 0.35, kind: light ? 'light' : toxin ? 'toxin' : fire ? 'fire' : 'peck', age: 0 });
     if (e.hp <= 0) {
       e.deathT = 0;
+      this._say('The {0} was defeated.', this._e(e.kind));
       Sound.play(DEATH[baseOf(e.kind)]);
       Sound.play('CoinDrop');
       this._noteKill(e.kind);
@@ -491,7 +504,7 @@ export function installEnemies(P) {
         if (s.x <= hitX) {
           this.bursts.push({ x: hitX, y: s.y, kind: 'feather', age: 0 });
           Sound.play('GargogryphShardHit');
-          if (s.damage > 0) this.damageMember(this._frontKind(), s.damage * this.monsterDamageMultiplier);
+          if (s.damage > 0) this.damageMember(this._frontKind(), s.damage * this.monsterDamageMultiplier, false, false, 'Feathers');
           this.flinch = 0.14;
           this.shots.splice(i, 1);
         }
@@ -513,7 +526,7 @@ export function installEnemies(P) {
       for (const k of hit) {
         const hr = this._rectOf(k);
         left = Math.min(left, hr.x); right = Math.max(right, hr.x + hr.w);
-        this.damageMember(k, enemyDamage('magmashellra') * this.monsterDamageMultiplier, false, true);   // fire
+        this.damageMember(k, enemyDamage('magmashellra') * this.monsterDamageMultiplier, false, true, 'Fireball');   // fire
       }
       this.bursts.push({ x: (left + right) / 2, y: this.groundY, w: right - left + 8, kind: 'flames', age: 0 });
       this.bursts.push({ x: sp.endX, y: this.groundY - 3, kind: 'fire', age: 0 });   // and the blast where it landed
@@ -536,7 +549,7 @@ export function installEnemies(P) {
         this.bursts.push({ x: mr.x + mr.w * 0.7, y: mr.y + mr.h * 0.45, kind: 'scythe', age: 0 });
         if (!tb.sounded) { tb.sounded = true; Sound.play('ToucanHit'); }
         this.flinch = 0.14;
-        this.damageMember(k, enemyDamage('toucan') * this.monsterDamageMultiplier);
+        this.damageMember(k, enemyDamage('toucan') * this.monsterDamageMultiplier, false, false, 'Can Tab');
       }
       if (tb.x < -8) this.tabs.splice(i, 1);
     }
@@ -552,7 +565,7 @@ export function installEnemies(P) {
           this.bursts.push({ x: mr.x + mr.w / 2.0, y: mr.y + mr.h * 0.45, kind: 'sand', age: 0 });
         }
         for (const k of this.party.slice()) {
-          this.damageMember(k, SAND_BLAST_DAMAGE * this.monsterDamageMultiplier, false, true);   // wind and sand
+          this.damageMember(k, SAND_BLAST_DAMAGE * this.monsterDamageMultiplier, false, true, 'Sand Blast');   // wind and sand
           if (this.hpOf(k) > 0) this._applyBlind(k);   // their next attack will miss
         }
         this.flinch = 0.5;
@@ -586,7 +599,7 @@ export function installEnemies(P) {
           const mr = this._rectOf(k);
           this.bursts.push({ x: mr.x + mr.w / 2.0, y: mr.y + mr.h * 0.45, kind: 'blood', age: 0 });
         }
-        for (const k of this.party.slice()) this.damageMember(k, (this.bloodMoonDamage || 5) * this.monsterDamageMultiplier, false, true);   // the wave of red light hurts everyone
+        for (const k of this.party.slice()) this.damageMember(k, (this.bloodMoonDamage || 5) * this.monsterDamageMultiplier, false, true, 'Blood Moon');   // the wave of red light hurts everyone
         this.flinch = 0.6;
       }
       if (this.bloodMoonT >= 1) this.bloodMoonT = -1;
@@ -632,7 +645,7 @@ export function installEnemies(P) {
             this.bursts.push({ x: hr.x + hr.w * 0.72, y: hr.y + hr.h * 0.45, kind: effect === 'fangs' ? 'claws' : effect, age: 0 });
           }
           this.flinch = 0.18;
-          for (const k of hit) this.damageMember(k, enemyDamage(e.kind) * this.monsterDamageMultiplier, false, effect === 'shout');   // (a shout is not a physical blow)
+          for (const k of hit) this.damageMember(k, enemyDamage(e.kind) * this.monsterDamageMultiplier, false, effect === 'shout', effect === 'shout' ? 'Shout' : undefined);   // (a shout is not a physical blow)
           if (e.kind === 'venomflayer') for (const k of hit) this._applyPoison(k, 2 * this.monsterDamageMultiplier, 2);   // and the bite poisons: 2 a second for 2 seconds
         }
       }

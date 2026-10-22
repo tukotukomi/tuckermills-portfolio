@@ -87,6 +87,10 @@ html.themed button.primary, html.themed button.on { background: linear-gradient(
 html.themed .icon.big { background: var(--play); }
 html.themed .icon.active { border-color: var(--gold); }
 html.themed .vlist .row .support { text-shadow: none; }
+.logbox { flex: 1 1 auto; min-height: 120px; overflow: auto; background: var(--list); border: 1px solid var(--line); border-radius: 8px; padding: 6px 0; font-size: 13px; line-height: 1.45; -webkit-overflow-scrolling: touch; }
+.logbox .logRow { padding: 1px 12px; overflow-wrap: anywhere; }
+.logbox .logT { color: var(--muted); margin-right: 10px; font-variant-numeric: tabular-nums; }
+.logbox .logDay { padding: 10px 12px 3px; color: var(--gold); font-weight: 600; }
 .empty { color: #ffd6c4; background: rgba(120,40,40,0.35); border: 1px solid #f08266; border-radius: 10px; padding: 12px 14px; margin: 0; }
 
 #transport { flex: 0 0 auto; display: grid; grid-template-columns: 1fr auto 1fr; gap: 8px 14px; align-items: center; padding: 8px 12px calc(8px + env(safe-area-inset-bottom)); background: var(--foot-bg); border-top: 1px solid var(--bar-line); }

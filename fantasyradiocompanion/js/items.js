@@ -171,6 +171,7 @@ export function installItems(P) {
     const amount = Math.min(ITEM_DEFS[id].heal, this.maxHpOf(who) - this.hpOf(who));   // what it actually restores
     this._applyHeal(who, amount);
     this.heals.push({ from: who, to: who, amount: amount, age: 0 });
+    this._say('{0} was used on {1}, restoring {2} HP.', ITEM_DEFS[id].name, this._h(who), amount);
     Sound.play('Heal');
     this.raiseProgress();
     return true;
@@ -183,6 +184,7 @@ export function installItems(P) {
     const hp = Math.max(1, Math.trunc((this.maxHpOf(who) + 1) / 2));
     this.hp[who] = hp;
     this.heals.push({ from: who, to: who, amount: hp, age: 0 });
+    this._say('{0} was revived.', this._h(who));
     Sound.play('Heal');
     const r = this._rectOf(who);
     this._addItemText(t('Revived!'), r.x + r.w / 2.0, r.y - 8, C(160, 255, 190));

@@ -281,23 +281,27 @@ export function installTraits(P) {
         const amount = healAmount(level);
         this._applyHeal(target, amount);
         this.heals.push({ from: 'lightmage', to: target, amount: amount, age: 0 });
+        this._say('{0} used {1} on {2}, restoring {3} HP.', this._h('lightmage'), 'Heal', this._h(target), amount);
         Sound.play('Heal');
         break;
       }
       case 'Fireball': {
         const r = this._rectOf('firemage');
         this.fireballs.push({ x: r.x + r.w - 2, y: r.y + 5, age: 0 });
+        this._say('{0} used {1}.', this._h('firemage'), 'Fireball');
         this.castFlash = 0.35;
         Sound.play('FireCast');
         break;
       }
       case 'Huzzah':
         this.inspireLeft = huzzahDuration(level);
+        this._say('{0} used {1}.', this._h('warrior'), 'Huzzah!');
         this.shoutAge = 0;
         Sound.play('Huzzah');
         break;
       case 'StarHat':
         this.hatLeft = starHatDuration(level);
+        this._say('{0} used {1}.', this._h('fae'), 'Star Hat');
         this.hatRed = {}; this.hatRegen = {};
         for (const k of this.party) this._hatIsRed(k);   // each member's hat: red or blue, 50/50
         Sound.play('StarHat');
@@ -362,7 +366,7 @@ export function installTraits(P) {
       }
       f.y += Math.max(-dt * rate, Math.min(dt * rate, goalY - f.y));
       if (target !== null && f.x >= target.x + 1) {
-        this._damageEnemy(target, this._withHuzzah(fireballDamage(this.levelOf('firemage'))), true, f.x, f.y);
+        this._damageEnemy(target, this._withHuzzah(fireballDamage(this.levelOf('firemage'))), true, f.x, f.y, false, false, 'firemage', 'Fireball');
         this.fireballs.splice(i, 1);
         continue;
       }
@@ -385,7 +389,7 @@ export function installTraits(P) {
       if (a.travel < a.range) continue;
       this.axes.splice(i, 1);
       if (target !== null && this.enemy !== null && this.enemy.deathT < 0 && a.x >= this.enemy.x - 0.5) {
-        this._damageEnemy(this.enemy, this._withHuzzah(this._skillOutgoing('warrior', axeDamage(this.levelOf('warrior')))), false, a.x, a.y);   // (a Rager hits a quarter harder)
+        this._damageEnemy(this.enemy, this._withHuzzah(this._skillOutgoing('warrior', axeDamage(this.levelOf('warrior')))), false, a.x, a.y, false, false, 'warrior');   // (a Rager hits a quarter harder)
       } else {
         this.bursts.push({ x: a.x, y: this.groundY - 1, kind: 'peck', age: 0 });   // it sinks into the grass short of its mark
       }
@@ -401,7 +405,7 @@ export function installTraits(P) {
       if (b.travel < b.range) continue;
       this.bolts.splice(i, 1);
       if (this.enemy !== null && this.enemy.deathT < 0 && b.x >= this.enemy.x - 0.5) {
-        this._damageEnemy(this.enemy, this._withHuzzah(crossbowDamage(this.levelOf('thief'))), false, b.x, b.y);
+        this._damageEnemy(this.enemy, this._withHuzzah(crossbowDamage(this.levelOf('thief'))), false, b.x, b.y, false, false, 'thief');
         Sound.play('Peck');
       }
     }
@@ -471,6 +475,7 @@ export function installTraits(P) {
     this.wallTarget = this._frontKind();
     this.wallLeft = shieldWallDuration(level);
     const r = this._rectOf(this.wallTarget);
+    this._say('{0} used {1} on {2}.', this._h('paladin'), 'Shield Wall', this._h(this.wallTarget));
     this._addItemText(t('Shield Wall!'), r.x + r.w / 2.0, r.y - 10, C(150, 200, 255));
     Sound.play('StarHat');
   };
@@ -519,6 +524,7 @@ export function installTraits(P) {
     e.paralyzeLeft = PARALYZE_SECONDS;
     this._skillBeam(e, [255, 240, 110]);
     const r = this._rectOf('lightmage');
+    this._say('{0} used {1} on the {2}.', this._h('lightmage'), 'Paralyze', this._e(e.kind));
     this._addItemText('Paralyze!', r.x + r.w / 2.0, r.y - 10, C(255, 240, 130));
     Sound.play('StarHat');
   };
@@ -530,6 +536,7 @@ export function installTraits(P) {
     e.diminishLeft = DIMINISH_SECONDS;
     this._skillBeam(e, [190, 110, 255]);
     const r = this._rectOf('lightmage');
+    this._say('{0} used {1} on the {2}.', this._h('lightmage'), 'Diminish', this._e(e.kind));
     this._addItemText('Diminish!', r.x + r.w / 2.0, r.y - 10, C(214, 160, 255));
     Sound.play('ToxinCast');
   };
@@ -538,12 +545,13 @@ export function installTraits(P) {
   m._castLifeDrain = function (level) {
     const e = this.enemy;
     if (e === null || e.deathT >= 0) return;
-    this._damageEnemy(e, this._withHuzzah(lifeDrainDamage(level)), false, e.x, 0);
+    this._damageEnemy(e, this._withHuzzah(lifeDrainDamage(level)), false, e.x, 0, false, false, 'shadowknight', 'Life Drain');
     const er = this._enemyRect(e);
     this.bursts.push({ x: er.x + er.w / 2.0, y: er.y + er.h * 0.45, kind: 'drain', age: 0 });
     const target = this._weakestMember(), amount = lifeDrainHeal(level);
     this._applyHeal(target, amount);
     this.heals.push({ from: 'shadowknight', to: target, amount: amount, age: 0 });
+    this._say('{0} used {1}, restoring {2} HP to {3}.', this._h('shadowknight'), 'Life Drain', amount, this._h(target));
     Sound.play('Heal');
   };
 
@@ -561,6 +569,7 @@ export function installTraits(P) {
     const reaches = toEnemy <= maxRange;
     this.globs.push({ startX: sx, startY: sy, endY: reaches ? er.y + er.h * 0.45 : this.groundY - 2, range: reaches ? toEnemy : maxRange, travel: 0, x: sx, y: sy, age: 0, falls: !reaches });
     this.toxinFlash = 0.35;
+    this._say('{0} used {1} on the {2}.', this._h('druid'), 'Natural Toxin', this._e(e.kind));
     Sound.play('ToxinCast');
   };
 

@@ -4,6 +4,7 @@ import { PixelScene } from './scene.js';
 import { Sprites, PARTY, PARTY_NAMES } from './sprites.js';
 import { Visualizer, IS_MOBILE, BLURB } from './visualizer.js';
 import { t, setLanguage, getLanguage, detectLanguage, applyDom, onLanguageChange } from './i18n.js';
+import { logFormat } from './advlog.js';
 import { Sound } from './sfx.js';
 import { Player, STATIONS, AUDIO_EXTENSIONS, parsePlaylist } from './player.js';
 import { SUPPORT } from './support.js';
@@ -218,6 +219,39 @@ async function main() {
     vis.bufferingName = player.station ? player.station.name : '';
   }, 100);
 
+  // ---- The Adventure Log tab ---------------------------------------------------------------------------------
+  // New lines are added at the end; the box follows them only while the reader is at the bottom. A language change or a clear writes it all again.
+  let logSeq = 0, logDay = '', logRewrite = true;
+  const pad2 = n => String(n).padStart(2, '0');
+  function renderLog(show) {
+    const box = $('logBox');
+    if (logRewrite) { box.textContent = ''; logSeq = 0; logDay = ''; logRewrite = false; }
+    else if (scene.logVersion === logSeq && !show) return;
+    const stick = show || box.scrollHeight - box.scrollTop - box.clientHeight < 24;
+    const entries = scene.logSince(logSeq);
+    if (entries.length === 0) return;
+    const frag = document.createDocumentFragment();
+    for (const e of entries) {
+      const day = e.year + '/' + e.day;
+      if (day !== logDay) {
+        logDay = day;
+        frag.appendChild(el('div', 'logDay', t('\u2014 Year {0}, Day {1} \u2014').replace('{0}', e.year).replace('{1}', e.day)));
+      }
+      const d = new Date(e.time);
+      const row = el('div', 'logRow');
+      row.appendChild(el('span', 'logT', pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds())));
+      row.appendChild(document.createTextNode(logFormat(e)));
+      frag.appendChild(row);
+      logSeq = e.seq;
+    }
+    box.appendChild(frag);
+    while (box.childElementCount > 900) box.removeChild(box.firstChild);
+    if (stick) box.scrollTop = box.scrollHeight;
+  }
+  setInterval(() => { if (tab === 'advlog') renderLog(false); }, 300);
+  $('logClear').addEventListener('click', () => { scene.clearLog(); logRewrite = true; renderLog(true); });
+  onLanguageChange(() => { logRewrite = true; if (tab === 'advlog') renderLog(true); });
+
   // ---- Tabs and layout -------------------------------------------------------------------------------------
   let tab = 'adventure';
   function setTab(name) {
@@ -225,9 +259,11 @@ async function main() {
     for (const b of document.querySelectorAll('#tabs button')) b.classList.toggle('on', b.dataset.tab === name);
     $('musicPane').hidden = name !== 'music';
     $('radioPane').hidden = name !== 'radio';
+    $('logPane').hidden = name !== 'advlog';
     document.body.classList.toggle('view-list', name !== 'adventure');
     vis.zoomed = name === 'adventure' || vis.fullscreen;
     requestAnimationFrame(() => vis.resize());
+    if (name === 'advlog') { renderLog(true); requestAnimationFrame(() => { const box = $('logBox'); box.scrollTop = box.scrollHeight; }); }
   }
   for (const b of document.querySelectorAll('#tabs button')) b.addEventListener('click', () => { Sound.unlock(); player.unlock(); setTab(b.dataset.tab); });
   setTab('adventure');

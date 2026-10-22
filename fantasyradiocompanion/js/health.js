@@ -95,21 +95,28 @@ export function installHealth(P) {
   m._lineIndexOf = function (kind) { return this._lineOrder().indexOf(kind); };
 
   /** Takes HP off a member. At 0 they faint. */
-  m.damageMember = function (kind, amount, pure, elemental) {   // pure: poison, which no Shield Wall or hat softens; elemental: not a physical blow (fire, sand, the Blood Moon, a shout)
-    if (this.party.indexOf(kind) < 0 || amount <= 0) return;
+  m.damageMember = function (kind, amount, pure, elemental, via) {   // pure: poison, which no Shield Wall or hat softens; elemental: not a physical blow (fire, sand, the Blood Moon, a shout)
+    if (this.party.indexOf(kind) < 0 || amount <= 0) return 0;
     if (!pure && this.wallLeft > 0 && this.wallTarget === kind && kind !== 'paladin' && this.shieldWallUp()) kind = 'paladin';   // Shield Wall: the Paladin takes the blow
     const before = this.hpOf(kind);
-    if (before <= 0) return;   // already out cold
+    if (before <= 0) return 0;   // already out cold
     if (!pure && kind === 'paladin' && this.wallLeft > 0 && this.wallTarget === 'paladin') amount = Math.ceil(amount / 2);   // the Paladin in front: the wall halves what he takes
     if (!pure && !elemental) amount = this._skillIncoming(kind, amount);   // a Stalwart hero takes a quarter less from physical blows (not poison, not anything elemental)
     if (!pure) amount = this._hatDamage(kind, amount);   // a Blue Hat halves what its wearer takes (on top of that)
     this.hp[kind] = Math.max(0, before - amount);
-    if (this.hp[kind] === 0 && this._tryRerevive(kind)) return;   // Rerevive: they get up again on the spot with half their HP
+    const lost = before - this.hp[kind];
+    const hero = this._h(kind), foe = this._e(this._foe || 'orc');
+    if (pure) this._say('{0} took {1} poison damage.', hero, lost);
+    else if (!via) this._say('The {0} hit {1} for {2} damage.', foe, hero, lost);
+    else this._say("The {0}'s {1} hit {2} for {3} damage.", foe, via, hero, lost);
+    if (this.hp[kind] === 0 && this._tryRerevive(kind)) return lost;   // Rerevive: they get up again on the spot with half their HP
+    if (this.hp[kind] === 0) this._say('{0} fainted.', hero);
     const r = this._rectOf(kind);
     if (this.hp[kind] === 0) this._addItemText(t('Fainted!'), r.x + r.w / 2.0, r.y - 4, C(255, 170, 160));
     else this._addItemText('-' + (before - this.hp[kind]), r.x + r.w / 2.0, r.y - 4, pure ? C(206, 140, 244) : C(255, 150, 150));
     this._checkHpTip(kind);   // the first time anyone is low, the Old Man steps in
     this.raiseProgress();
+    return lost;
   };
 
   // ---- What the Year 5 desert monsters can do to a hero besides plain damage. Poison: a few HP lost every second for a few seconds, which no
@@ -128,16 +135,19 @@ export function installHealth(P) {
     if (this.party.indexOf(kind) < 0 || this.hpOf(kind) <= 0 || damage <= 0) return;
     const s = this._st(kind, true);
     s.poisonTicks = ticks; s.poisonDamage = damage; s.poisonTimer = 1.0;
+    this._say('{0} was poisoned: {1} damage a second for {2} s.', this._h(kind), damage, ticks);
   };
   m._applyBlind = function (kind) {
     if (this.party.indexOf(kind) < 0 || this.hpOf(kind) <= 0) return;
     this._st(kind, true).blind = true;
+    this._say('{0} was blinded by sand: the next attack will miss.', this._h(kind));
   };
   /** A hero is about to attack: if sand is in their eyes the attack misses (and the blindness is spent). True when it misses. */
   m._takeBlind = function (who) {
     const s = this._st(who);
     if (!s || !s.blind) return false;
     s.blind = false;
+    this._say("{0}'s attack missed: blinded by sand.", this._h(who));
     const r = this._rectOf(who);
     this._addItemText(t('Miss!'), r.x + r.w / 2.0, r.y - 10, C(236, 206, 140));
     return true;

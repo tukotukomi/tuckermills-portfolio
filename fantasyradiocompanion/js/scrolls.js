@@ -154,6 +154,7 @@ export function installScroll(P) {
     this.rerevivePulses.push({ kind: kind, age: 0 });
     this.heals.push({ from: kind, to: kind, amount: hp, age: 0 });
     const r = this._rectOf(kind);
+    this._say('{0} was revived.', this._h(kind));
     this._addItemText(t('Rerevived!'), r.x + r.w / 2.0, r.y - 8, C(150, 236, 255));
     Sound.play('Heal');
     this.raiseProgress();

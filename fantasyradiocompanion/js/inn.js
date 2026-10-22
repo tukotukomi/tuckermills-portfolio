@@ -52,6 +52,7 @@ export function installInn(P) {
       this.heals.push({ from: k, to: k, amount: missing, age: 0 });
     }
     this._resetStatuses();   // a good rest clears the poison and the sand from the eyes
+    this._say('The party rested at the inn.');
     Sound.play('Heal');
     const r = this._rectOf(this._frontKind());
     this._addItemText(t('Rested!'), r.x + r.w / 2.0, r.y - 6, C(160, 255, 190));

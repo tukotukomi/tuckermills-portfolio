@@ -23,6 +23,7 @@
       <button role="tab" data-tab="adventure" class="on">Adventure</button>
       <button role="tab" data-tab="radio">Radio</button>
       <button role="tab" data-tab="music">Local Music</button>
+      <button role="tab" data-tab="advlog">Adventure Log</button>
     </nav>
     <button id="menuBtn" class="plain" aria-label="Menu" title="Menu">&#8943;</button>
   </header>
@@ -42,6 +43,11 @@
       </div>
       <div id="musicList" class="vlist"></div>
       <p id="musicEmpty" class="empty">Select your music folder of choice to play local music.</p>
+    </section>
+
+    <section id="logPane" class="pane" hidden>
+      <div class="paneBar"><button id="logClear">Clear</button></div>
+      <div id="logBox" class="logbox" role="log" aria-live="off" tabindex="0"></div>
     </section>
 
     <section id="radioPane" class="pane" hidden>

@@ -111,6 +111,7 @@ export function installStory(P) {
     const oldMax = this.maxHpOf(kind);
     const hurt = this.hpOf(kind) > 0 && this.hpOf(kind) < oldMax;
     this.levels[kind] = this.fxTo;
+    this._say('{0} reached level {1}!', this._h(kind), this.fxTo);
     const gain = this.maxHpOf(kind) - oldMax;   // the new HP: a full member simply stays full, a hurt one is given what was added
     if (hurt) this._restoreHp(kind, gain);
     if (gain > 0) {

@@ -34,6 +34,7 @@ export function installCoins(P) {
           for (let extra = 1; extra < luckyCoinCount(this.levelOf('thief')); extra++)
             this.coins.push({ worldX: this.scroll + this.lastLw + 8 + extra * 10, phase: phase });
           this.luckyFlash = 1.2;
+          this._say('{0} used {1}.', this._h('thief'), 'Lucky Coins');
           Sound.play('LuckyCoins');
         }
         this.coinTimer = this._nextCoinDelay();

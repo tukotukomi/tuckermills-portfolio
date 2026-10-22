@@ -120,6 +120,7 @@ export function installSkills(P) {
     const option = this.skillOptions[index];
     const d = this._sk()[this.skillWho] || (this._sk()[this.skillWho] = {});
     d[this.skillLevel] = option.id;
+    this._say('{0} chose {1}.', this._h(this.skillWho), option.name);
     const r = this._rectOf(this.skillWho);
     this._addItemText(option.name + '!', r.x + r.w / 2.0, r.y - 12, C(255, 226, 150));
     Sound.play('Huzzah');
