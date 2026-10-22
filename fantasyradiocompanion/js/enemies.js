@@ -34,9 +34,9 @@ DEFS.magmashellra = Object.assign({}, DEFS.sheller, { base: 'sheller', name: 'Ma
 DEFS.percussiveorc = Object.assign({}, DEFS.orc, { base: 'orc', name: 'Percussive Orc', hp: 72, damage: 4, attackInterval: 1.0, habitat: 'Roams day and night, from Year 4', note: 'Hammers a drum slung at its belly and bellows between beats. Hits fast and hard.' });
 DEFS.shadecrow = Object.assign({}, DEFS.nightmare, { base: 'nightmare', name: 'Shadecrow', hp: 48, damage: 6, attackInterval: 4.0, reach: 3, headOffset: 4, habitat: 'Roams after dark, from Year 4', note: 'A cloaked scarecrow that watches from the field. Its long pitchfork spears the first three in line.' });
 
-// The Year 5 desert monsters: the only ones that turn up in Year 5. Their specials are in the attack code below.
-DEFS.sandcrab = { name: 'Sand Crab', hp: 110, damage: 10, attackInterval: 1.5, walkSpeed: 16, nightOnly: false, headOffset: 0, habitat: 'Roams the Year 5 desert, day and night', note: 'A big tan crab with a cactus-ridged shell. Its claw pinches the first in line, and at half health it kicks up a Sand Blast: it hurts the whole party and Blinds every hero, so their next attack misses.' };
-DEFS.venomflayer = { name: 'Venom Flayer', hp: 140, damage: 8, attackInterval: 3.0, walkSpeed: 22, nightOnly: false, headOffset: 0, habitat: 'Roams the Year 5 desert, day and night', note: 'An imposing cobra with glinting fangs. Its bite poisons the first in line, and at 30% health it spits Venom over the first three, poisoning each of them.' };
+// The desert monsters: the only ones that turn up from Year 5 on. Their specials are in the attack code below.
+DEFS.sandcrab = { name: 'Sand Crab', hp: 110, damage: 10, attackInterval: 1.5, walkSpeed: 16, nightOnly: false, headOffset: 0, habitat: 'Roams the desert, day and night, from Year 5', note: 'A big tan crab with a cactus-ridged shell. Its claw pinches the first in line, and at half health it kicks up a Sand Blast: it hurts the whole party and Blinds every hero, so their next attack misses.' };
+DEFS.venomflayer = { name: 'Venom Flayer', hp: 140, damage: 8, attackInterval: 3.0, walkSpeed: 22, nightOnly: false, headOffset: 0, habitat: 'Roams the desert, day and night, from Year 5', note: 'An imposing cobra with glinting fangs. Its bite poisons the first in line, and at 30% health it spits Venom over the first three, poisoning each of them.' };
 
 /** The original a variant is built on (an original is its own): a variant behaves, sounds and moves like it. */
 const baseOf = kind => DEFS[kind].base || kind;
@@ -161,7 +161,7 @@ export function installEnemies(P) {
   };
 
   m._pickEnemyKind = function () {
-    if (this.year === 5) return Math.random() < 0.5 ? 'sandcrab' : 'venomflayer';   // the whole of Year 5 is spent in the desert, with only its own monsters
+    if (this.year >= 5) return Math.random() < 0.5 ? 'sandcrab' : 'venomflayer';   // from Year 5 the party is in the desert, with only its own monsters (kept as tough as they were)
     // Twice the old weights (the Sheller and the Nightmare 4, the Orc and the Gargogryph 2) so that the Toucan, at 1, turns up
     // half as often as the rarest of the others.
     const pool = this.isNight
@@ -182,9 +182,27 @@ export function installEnemies(P) {
     return true;
   };
 
+  /** Whether one of an enemy's specials (the Blood Moon, Sand Blast or Venom Spit) is due to start right now. */
+  m._specialDue = function (e) {
+    if (e.attackAnim >= 0 || this.bloodMoonT >= 0) return false;
+    if (baseOf(e.kind) === 'gargogryph' && !e.bloodMoonUsed && e.hp <= e.maxHp * BLOOD_MOON_HP_FRACTION) return true;
+    if (e.specialUsed || this.sandT >= 0) return false;
+    return (e.kind === 'sandcrab' && e.hp <= e.maxHp * SAND_BLAST_HP_FRACTION) || (e.kind === 'venomflayer' && e.hp <= e.maxHp * VENOM_SPIT_HP_FRACTION);
+  };
+
+  /** Paralyze: while it lasts, an attack the enemy is about to start (a plain one or a special) has a 20% chance of never beginning. True if it was stopped. */
+  m._paralyzedAttack = function (e) {
+    if (e.paralyzeLeft <= 0 || Math.random() >= PARALYZE_CHANCE) return false;
+    const pr = this._enemyRect(e);
+    this._addItemText('Paralyzed!', pr.x + pr.w / 2.0, pr.y - 8, C(255, 240, 130));
+    this.bursts.push({ x: pr.x + pr.w / 2.0, y: pr.y + pr.h * 0.4, kind: 'zap', age: 0 });
+    Sound.play('StarHat');
+    return true;
+  };
+
   m._spawnEnemy = function () {
     const kind = this._pickEnemyKind();
-    this.enemy = { kind: kind, x: this.lastLw + 6, hp: DEFS[kind].hp, maxHp: DEFS[kind].hp, engaged: false, walkT: 0, attackTimer: 0, attackAnim: -1, attackPose: 0, struck: false, peckTimer: 0, axeTimer: 0, axeStarted: false, poisonTicks: 0, poisonTick: 0, lightTicks: 0, lightTick: 0, bloodMoonUsed: false, specialUsed: false, hurtFlash: 0, deathT: -1, paralyzeLeft: 0, diminishLeft: 0 };
+    this.enemy = { kind: kind, x: this.lastLw + 6, hp: DEFS[kind].hp, maxHp: DEFS[kind].hp, engaged: false, walkT: 0, attackTimer: 0, attackAnim: -1, attackPose: 0, struck: false, peckTimer: 0, axeTimer: 0, axeStarted: false, poisonTicks: 0, poisonTick: 0, lightTicks: 0, lightTick: 0, bloodMoonUsed: false, specialUsed: false, hurtFlash: 0, deathT: -1, paralyzeLeft: 0, diminishLeft: 0, specialWait: 0 };
     this.basicTimer = {};
     this.bowTimer = BOW_FIRST_DELAY;
     this._noteSeen(kind);
@@ -206,6 +224,7 @@ export function installEnemies(P) {
 
     if (e.paralyzeLeft > 0) e.paralyzeLeft = Math.max(0, e.paralyzeLeft - dt);
     if (e.diminishLeft > 0) e.diminishLeft = Math.max(0, e.diminishLeft - dt);
+    if (e.specialWait > 0) e.specialWait -= dt;
 
     // The Druid's Natural Toxin: a tick of damage every second until it has run its course.
     if (e.poisonTicks > 0) {
@@ -249,8 +268,11 @@ export function installEnemies(P) {
 
     e.x = stopX;
 
+    // Paralyze reaches the specials too: when one is due it has the same 20% chance of never starting, and is tried again after a full interval.
+    if (e.specialWait <= 0 && e.paralyzeLeft > 0 && this._specialDue(e) && this._paralyzedAttack(e)) e.specialWait = DEFS[e.kind].attackInterval;
+
     // The Gargogryph's special: once, when it is badly hurt, it calls down a Blood Moon in place of an attack.
-    if (baseOf(e.kind) === 'gargogryph' && !e.bloodMoonUsed && e.hp <= e.maxHp * BLOOD_MOON_HP_FRACTION && e.attackAnim < 0 && this.bloodMoonT < 0) {
+    if (e.specialWait <= 0 && baseOf(e.kind) === 'gargogryph' && !e.bloodMoonUsed && e.hp <= e.maxHp * BLOOD_MOON_HP_FRACTION && e.attackAnim < 0 && this.bloodMoonT < 0) {
       e.bloodMoonUsed = true;
       this.bloodMoonDamage = bloodMoonDamage(e.kind);
       this.bloodMoonT = 0;
@@ -260,7 +282,7 @@ export function installEnemies(P) {
     }
 
     // The Year 5 specials, once each, in place of an attack: the Sand Crab's Sand Blast at half health, the Venom Flayer's Venom Spit at 30%.
-    if (!e.specialUsed && e.attackAnim < 0 && this.bloodMoonT < 0 && this.sandT < 0) {
+    if (e.specialWait <= 0 && !e.specialUsed && e.attackAnim < 0 && this.bloodMoonT < 0 && this.sandT < 0) {
       if (e.kind === 'sandcrab' && e.hp <= e.maxHp * SAND_BLAST_HP_FRACTION) {
         e.specialUsed = true;
         this.sandT = 0; this.sandStruck = false;
@@ -279,12 +301,8 @@ export function installEnemies(P) {
     e.attackTimer -= dt;
     if (e.attackTimer <= 0 && e.attackAnim < 0 && this.bloodMoonT < 0 && this.sandT < 0) {
       e.attackTimer = DEFS[e.kind].attackInterval;
-      if (e.paralyzeLeft > 0 && Math.random() < PARALYZE_CHANCE) {
+      if (this._paralyzedAttack(e)) {
         // Paralyzed: the attack never begins, and it waits out a full interval before trying again.
-        const pr = this._enemyRect(e);
-        this._addItemText('Paralyzed!', pr.x + pr.w / 2.0, pr.y - 8, C(255, 240, 130));
-        this.bursts.push({ x: pr.x + pr.w / 2.0, y: pr.y + pr.h * 0.4, kind: 'zap', age: 0 });
-        Sound.play('StarHat');
       } else {
         e.attackAnim = 0;
         e.struck = false;

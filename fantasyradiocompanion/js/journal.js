@@ -12,7 +12,8 @@ export const JOURNAL = [
     notes: [
       'Heroes now grow skill trees as they level up. The Warrior and the Light Mage come first.',
       'At level 5 the Warrior picks a path: Stalwart takes 25% less physical damage, Rager deals 25% more.',
-      'At level 5 the Light Mage picks a spell: Paralyze may stop an enemy from attacking, Diminish makes it take 10% more damage.',
+      'At level 5 the Light Mage picks a spell: Paralyze may stop an enemy from attacking (even its special attacks), Diminish makes it take 10% more damage.',
+      'The desert goes on: from Year 5 the party stays in it, and the Sand Crabs and Venom Flayers keep coming.',
       'Already past level 5? A glowing "New skills available" button on the right lets you choose.'
     ],
     es: {
@@ -20,7 +21,8 @@ export const JOURNAL = [
       notes: [
         'Los héroes ahora desarrollan árboles de habilidades al subir de nivel. Primero, el guerrero y el mago de luz.',
         'En el nivel 5 el guerrero elige un camino: Recio recibe un 25 % menos de daño físico, Furioso inflige un 25 % más.',
-        'En el nivel 5 el mago de luz elige un hechizo: Paralizar puede impedir que el enemigo ataque y Debilitar hace que reciba un 10 % más de daño.',
+        'En el nivel 5 el mago de luz elige un hechizo: Paralizar puede impedir que el enemigo ataque (incluso con sus ataques especiales) y Debilitar hace que reciba un 10 % más de daño.',
+        'El desierto continúa: desde el Año 5 el grupo se queda en él, y los cangrejos de arena y los desolladores venenosos siguen apareciendo.',
         '¿Ya pasaste el nivel 5? Un botón brillante de «Nuevas habilidades disponibles» a la derecha te deja elegir.'
       ]
     },
@@ -29,7 +31,8 @@ export const JOURNAL = [
       notes: [
         '英雄升级时现在会成长出技能树，战士和光明法师打头阵。',
         '战士在 5 级时选择一条道路：坚毅受到的物理伤害减少 25%，狂战造成的伤害增加 25%。',
-        '光明法师在 5 级时选择一个法术：麻痹有几率使敌人无法攻击，削弱会让敌人受到的伤害增加 10%。',
+        '光明法师在 5 级时选择一个法术：麻痹有几率使敌人无法攻击（连特殊攻击也不例外），削弱会让敌人受到的伤害增加 10%。',
+        '沙漠还在继续：从第 5 年起队伍会一直留在沙漠里，沙蟹和毒液剥皮者不断出现。',
         '已经超过 5 级了？右侧会亮起“有新技能可用”按钮，让你随时选择。'
       ]
     }

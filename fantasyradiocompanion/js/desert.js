@@ -1,5 +1,5 @@
-// The Year 5 desert. A port of src\PixelDesert.cs. The party walks into it over the last day of Year 4 and out of it over the first day of
-// Year 6: the sky warms, the hills become flat-topped sandstone mesas, the grass turns to sand, and the trees give way to cacti and boulders.
+// The desert, from Year 5 on. A port of src\PixelDesert.cs. The party walks into it over the last day of Year 4 and never leaves it (for now):
+// the sky warms, the hills become flat-topped sandstone mesas, the grass turns to sand, and the trees give way to cacti and boulders.
 // It still has all four seasons (the usual season tables keep tinting everything; spring brings cactus flowers, winter a dusting of white, fall
 // blowing dust).
 
@@ -9,10 +9,9 @@ const YEAR_DAYS = 20;   // a year: four seasons of five days (SEASON_DAYS * 4 in
 
 const smooth01 = x => { x = Math.max(0, Math.min(1, x)); return x * x * (3 - 2 * x); };
 
-/** How deep into the desert a point in the play clock is: in over the last day of Year 4, out over the first of Year 6. */
+/** How deep into the desert a point in the play clock is: in over the last day of Year 4, and there for good after that. */
 export function desertAt(playDays) {
-  const into = smooth01((playDays - (YEAR_DAYS * 4 - 1)) / 2), outOf = smooth01((playDays - (YEAR_DAYS * 5 - 1)) / 2);
-  return Math.max(0, into - outOf);
+  return smooth01((playDays - (YEAR_DAYS * 4 - 1)) / 2);
 }
 
 export const SAND_KEYS = [C(222, 190, 122), C(236, 200, 120), C(212, 166, 100), C(232, 224, 204)];
