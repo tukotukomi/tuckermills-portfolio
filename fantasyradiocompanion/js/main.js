@@ -347,7 +347,7 @@ async function main() {
     const pl = currentPlaylist();
     $('plRename').disabled = $('plDelete').disabled = !pl;
     $('tunerPlBar').hidden = playlists.length === 0;
-    $('plNote').textContent = plNoteText || (pl ? (library.folderName ? t('{n} tracks, {m} not in this folder', { n: library.view.length.toLocaleString(), m: plView.missing.toLocaleString() }) : t('Choose the music folder to play this playlist.')) : '');
+    $('plNote').textContent = (plNoteText ? plNoteText + '  ' : '') + (pl ? (library.folderName ? t('{n} tracks, {m} not in this folder', { n: library.view.length.toLocaleString(), m: plView.missing.toLocaleString() }) : t('Choose the music folder to play this playlist.')) : '');
   }
   function setPlaylistView(id) {
     library.playlistId = id; store.set('playlistId', id);
@@ -401,9 +401,7 @@ async function main() {
     if (chosen.length === 0) return;
     let tracks = 0, last = null;
     for (const p of chosen) { last = makePlaylist(p.name, p.items.map(trimItem)); tracks += p.items.length; }
-    const r = resolvePlaylist(last, resolver);
-    plNoteText = t('Imported {n} playlist(s), {tracks} tracks ({found} found in this folder).', {
-      n: chosen.length, tracks: tracks.toLocaleString(), found: chosen.reduce((s, p) => s + resolvePlaylist(p, resolver).found.length, 0).toLocaleString() });
+    plNoteText = t('Imported {n} playlist(s), {tracks} tracks.', { n: chosen.length, tracks: tracks.toLocaleString() });
     library.playlistId = last.id; store.set('playlistId', last.id);
     changedPlaylists();
   }
