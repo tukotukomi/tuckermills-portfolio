@@ -35,6 +35,18 @@ export function installLog(P) {
   };
 }
 
+// What each line is, for the filter: everything not listed is an event.
+export const LOG_CATEGORIES = ['attacks', 'monsters', 'skills', 'status', 'events'];
+const CATEGORY_OF = {
+  '{0} hit the {1} for {2} damage.': 'attacks', "{0}'s {1} hit the {2} for {3} damage.": 'attacks',
+  'The {0} hit {1} for {2} damage.': 'monsters', "The {0}'s {1} hit {2} for {3} damage.": 'monsters', 'The {0} used {1}!': 'monsters',
+  '{0} used {1}.': 'skills', '{0} used {1} on {2}.': 'skills', '{0} used {1} on the {2}.': 'skills',
+  '{0} used {1} on {2}, restoring {3} HP.': 'skills', '{0} used {1}, restoring {2} HP to {3}.': 'skills',
+  '{0} was poisoned: {1} damage a second for {2} s.': 'status', '{0} was blinded by sand: the next attack will miss.': 'status',
+  "{0}'s attack missed: blinded by sand.": 'status', "The {0}'s attack was stopped by Paralyze!": 'status', '{0} fainted.': 'status',
+};
+export function logCategory(entry) { return CATEGORY_OF[entry.template] || 'events'; }
+
 /** A line in the current language. */
 export function logFormat(entry) {
   const s = t(entry.template).replace(/\{(\d+)\}/g, (_, i) => t(entry.args[+i] === undefined ? '' : entry.args[+i]));

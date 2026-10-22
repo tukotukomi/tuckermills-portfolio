@@ -46,7 +46,18 @@
     </section>
 
     <section id="logPane" class="pane" hidden>
-      <div class="paneBar"><button id="logClear">Clear</button></div>
+      <div class="paneBar">
+        <label id="logFilterLabel" for="logFilter" class="muted">Show:</label>
+        <select id="logFilter">
+          <option value="all">All</option>
+          <option value="attacks">Party attacks</option>
+          <option value="monsters">Monster attacks</option>
+          <option value="skills">Skills</option>
+          <option value="status">Status effects</option>
+          <option value="events">Events</option>
+        </select>
+        <button id="logClear">Clear</button>
+      </div>
       <div id="logBox" class="logbox" role="log" aria-live="off" tabindex="0"></div>
     </section>
 
