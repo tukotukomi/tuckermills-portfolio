@@ -6,6 +6,7 @@ import { Sprites, PARTY } from './sprites.js';
 import { maxHp, hpGain } from './health.js';
 import { Sound } from './sfx.js';
 import { t } from './i18n.js';
+import { skillSummary } from './skills.js';
 
 export const TRAIT_OF = { paca: 'ItemStorage', lightmage: 'Heal', firemage: 'Fireball', thief: 'LuckyCoins', warrior: 'Huzzah', fae: 'StarHat', druid: 'NaturalToxin', paladin: 'ShieldWall', shadowknight: 'LifeDrain' };
 export const TRAIT_OWNER = { ItemStorage: 'paca', Heal: 'lightmage', Fireball: 'firemage', LuckyCoins: 'thief', Huzzah: 'warrior', StarHat: 'fae', NaturalToxin: 'druid', ShieldWall: 'paladin', LifeDrain: 'shadowknight' };
@@ -208,7 +209,7 @@ export function installTraits(P) {
     return PARTY.map(k => ({
       kind: k, seen: this.heroesUsed.has(k), maxHp: maxHp(k, 1),
       hpGrowth: '+' + hpGain(k, 1) + ' / +' + hpGain(k, 5) + ' / +' + hpGain(k, 10) + ' per level at Lv. 1 / 5 / 10',
-      attack: attack(k), skill: traitSummary(k, 1) + (k === 'firemage' ? ' (' + fireballDamage(1) + ' dmg)' : '')
+      attack: attack(k), skill: traitSummary(k, 1) + (k === 'firemage' ? ' (' + fireballDamage(1) + ' dmg)' : '') + (skillSummary(k) ? ' ' + skillSummary(k) + '.' : '')
     }));
   };
 
@@ -371,7 +372,7 @@ export function installTraits(P) {
       if (a.travel < a.range) continue;
       this.axes.splice(i, 1);
       if (target !== null && this.enemy !== null && this.enemy.deathT < 0 && a.x >= this.enemy.x - 0.5) {
-        this._damageEnemy(this.enemy, this._withHuzzah(axeDamage(this.levelOf('warrior'))), false, a.x, a.y);
+        this._damageEnemy(this.enemy, this._withHuzzah(this._skillOutgoing('warrior', axeDamage(this.levelOf('warrior')))), false, a.x, a.y);   // (a Rager hits a quarter harder)
       } else {
         this.bursts.push({ x: a.x, y: this.groundY - 1, kind: 'peck', age: 0 });   // it sinks into the grass short of its mark
       }

@@ -101,6 +101,7 @@ export function installHealth(P) {
     const before = this.hpOf(kind);
     if (before <= 0) return;   // already out cold
     if (!pure && kind === 'paladin' && this.wallLeft > 0 && this.wallTarget === 'paladin') amount = Math.ceil(amount / 2);   // the Paladin in front: the wall halves what he takes
+    amount = this._skillIncoming(kind, amount);   // a Stalwart hero takes a quarter less (poison too)
     if (!pure) amount = this._hatDamage(kind, amount);   // a Blue Hat halves what its wearer takes (on top of that)
     this.hp[kind] = Math.max(0, before - amount);
     if (this.hp[kind] === 0 && this._tryRerevive(kind)) return;   // Rerevive: they get up again on the spot with half their HP

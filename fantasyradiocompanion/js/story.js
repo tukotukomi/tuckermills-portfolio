@@ -215,6 +215,12 @@ export function installStory(P) {
   };
 
   m._finishLevelFx = function () {
+    if (this.fxMember >= 0 && this.fxMember < this.party.length && this._beginSkillChoiceAfterLevelUp(this.party[this.fxMember], this.fxTo)) return;   // a skill-tree level: the hero chooses a path first
+    this._afterLevelFx();
+  };
+
+  /** The level-up screens are done (and any path chosen): the Old Man heads back inside, or the adventure goes on. */
+  m._afterLevelFx = function () {
     if (this.storyFromOldMan && this.oldManVisible) {
       this.oldManMet = true;
       this.story = 'OldManLeave';
@@ -253,6 +259,7 @@ export function installStory(P) {
     this.oldManMet = false;
     this.oldManVisible = false;
     this.levels = {};
+    this.skills = {}; this.skillOptions = null;
     this.selected = -1;
     this.fxMember = -1;
     this.crystalActive = false;

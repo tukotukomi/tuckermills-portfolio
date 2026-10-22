@@ -1218,7 +1218,7 @@ export class PixelScene {
   saveState() {
     const f5 = this.dayPhase.toFixed(5);
     return ['3', this.party.map(k => PARTY_ENUM[k]).join(','), f5, String(this.daysCompleted), this.offer ? this.offer.map(k => PARTY_ENUM[k]).join(',') : '',
-      this._saveStoryFields(), String(this.gold), this._saveTraitFields(), this._saveBestiaryFields()].concat(this._saveItemFields(), [this._saveHpFields(), this._saveBerserkFields(), this.starting ? '1' : '', this.newRecord ? '1' : '', this._saveScrollFields(), this._saveStampFields()]).join('|');
+      this._saveStoryFields(), String(this.gold), this._saveTraitFields(), this._saveBestiaryFields()].concat(this._saveItemFields(), [this._saveHpFields(), this._saveBerserkFields(), this.starting ? '1' : '', this.newRecord ? '1' : '', this._saveScrollFields(), this._saveStampFields(), this._saveSkillFields()]).join('|');
   }
 
   loadState(state) {
@@ -1267,6 +1267,7 @@ export class PixelScene {
       this._loadBerserkFields(p.length > 16 ? p[16] : null);   // the Monster Berserker's multiplier and time left (absent in older saves)
       this._loadHpFields(p.length > 15 ? p[15] : null);
       this._loadScrollFields(p.length > 19 ? p[19] : null);
+      this._loadSkillFields(p.length > 21 ? p[21] : null);   // the skill-tree paths taken (absent in older saves)
       this._loadStampFields(p.length > 20 ? p[20] : null);   // the latest year a stamp was paid out for (absent in older saves)   // the scrolls carried and who has Rerevive (absent in older saves)
       this.newRecord = p.length > 18 && p[18] === '1';   // a reload on the defeat screen keeps its verdict
       this.deathCounted = this.isGameOver;   // members below full health (absent in older saves: everyone is at full)
@@ -1366,6 +1367,7 @@ import { installInn } from './inn.js';
 import { installTutorial } from './tutorial.js';
 import { installScroll } from './scrolls.js';
 import { installStamps } from './stamps.js';
+import { installSkills } from './skills.js';
 setKindNames(k => PARTY_ENUM[k], n => KIND_FROM_ENUM[n]);
 installHealth(PixelScene);
 installInn(PixelScene);
@@ -1378,3 +1380,4 @@ installTutorial(PixelScene);
 installScroll(PixelScene);
 installStamps(PixelScene);
 installDesert(PixelScene);
+installSkills(PixelScene);

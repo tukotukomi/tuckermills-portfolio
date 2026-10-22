@@ -76,6 +76,7 @@ export class Visualizer {
     this._scrollDown = false; this._scrollOpen = false; this._scrollByPress = false; this._overScroll = false; this._scrollDownAt = 0;   // the scroll button and its row of slots
     this._scrollHover = -1; this._scrollXHover = -1; this._promptHover = -1;
     this._tshopOpen = false; this._tshopHover = -1; this._overTShop = false;   // the Tavern Shop (before the first hero is picked)
+    this._skillHover = -1; this._overSkills = false;   // the skill-tree screens: the card under the pointer, and the button's hover
     this._devOpen = false; this._devScroll = 0; this._devHover = -1; this._devDrag = null; this._devCache = null;   // the Developer Updates journal (Settings)
     this._auto = new AutoQuality(guessLevel(IS_MOBILE), () => { this._applyQuality(); this._saveQuality(); });
     this._applyQuality();
@@ -228,6 +229,7 @@ export class Visualizer {
     this._drawTunerButton(ctx);
     this._drawCompendiumButton(ctx);
     this._drawHotButton(ctx);
+    this._drawSkillsButton(ctx);
     this._drawScrollButton(ctx);
     this._drawTShopButton(ctx);
     this._drawMultiplierPicker(ctx);
@@ -757,6 +759,7 @@ export class Visualizer {
     if (this.scene.isWaiting) { this.scene.cancelTargeting(); return true; }
     if (this.scene.isSwapping) { this.scene.innCancel(); return true; }
     if (this._devOpen) { this._closeDev(); return true; }
+    if (this.scene.canCancelSkill) { this.scene.cancelSkill(); return true; }
     if (this._settingsOpen) { this._settingsOpen = false; return true; }
     if (this._tshopOpen) { this._closeTShop(); return true; }
     if (this._scrollOpen) { this._scrollOpen = false; this._scrollDown = false; return true; }
@@ -1836,11 +1839,142 @@ export class Visualizer {
     return { x: Math.trunc((this.width - w) / 2), y: Math.trunc((this.height - h) / 2), w: w, h: h };
   }
 
+  // ---- The skill-tree screens. The "New skills available" button (on the right edge, level with the item buttons) glows while any hero has a path
+  // waiting; it opens a list of the heroes when more than one is waiting, and then the choice itself: the hero, "Choose a path", and a card for each
+  // path. Nothing has a fixed width: the cards are as wide as their words need, side by side when they fit and stacked when they do not. -----------
+
+  /** The round button on the right edge, at the height of the item button (its edge keeps the same 8 px margin). */
+  get _skillsRect() { const h = this._hotRect; return { x: this.vw - 8 - h.w, y: h.y, w: h.w, h: h.h }; }
+  get _skillsVisible() { const s = this.scene; return this._hotVisible && !s.isTipActive && !s.isWaiting && !s.isSwapping && !s.isScrollPrompt && s.skillsAvailable; }
+  _inSkills(h) {
+    if (!this._skillsVisible) return false;
+    const r = this._skillsRect, dx = h.x - (r.x + r.w / 2), dy = h.y - (r.y + r.h / 2);
+    return dx * dx + dy * dy <= (r.w / 2) * (r.w / 2);
+  }
+
+  _drawSkillsButton(ctx) {
+    if (!this._skillsVisible) return;
+    const r = this._skillsRect, cx = r.x + r.w / 2, cy = r.y + r.h / 2, pulse = 0.5 + 0.5 * Math.sin(performance.now() / 1000 * 4), hot = this._overSkills;
+    for (let i = 4; i >= 1; i--) {   // a golden glow breathing out from the button
+      const gr = r.w / 2 + i * 3.5 + pulse * 4;
+      ctx.beginPath(); ctx.arc(cx, cy, gr, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255,214,90,' + (0.31 * (1.15 - i * 0.2) * (0.55 + 0.45 * pulse)).toFixed(3) + ')'; ctx.fill();
+    }
+    ctx.beginPath(); ctx.arc(cx, cy, (r.w - 1) / 2, 0, Math.PI * 2);
+    ctx.fillStyle = hot ? 'rgba(36,24,8,0.84)' : 'rgba(36,24,8,0.63)'; ctx.fill();
+    ctx.strokeStyle = hot ? 'rgb(255,236,150)' : 'rgb(255,206,80)'; ctx.lineWidth = 2; ctx.stroke();
+    // the icon: a little skill tree, a trunk that forks in two with a bright star over each branch
+    const s = r.w / 44;
+    ctx.strokeStyle = 'rgb(255,226,130)'; ctx.lineWidth = 2.4; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.beginPath(); ctx.moveTo(cx, cy + 13 * s); ctx.lineTo(cx, cy + 1 * s); ctx.moveTo(cx, cy + 1 * s); ctx.lineTo(cx - 9 * s, cy - 8 * s); ctx.moveTo(cx, cy + 1 * s); ctx.lineTo(cx + 9 * s, cy - 8 * s); ctx.stroke();
+    ctx.fillStyle = 'rgb(255,250,214)';
+    for (const sx of [-9, 9]) {
+      const x = cx + sx * s, y = cy - 10 * s, a = 3.4 * s + pulse * 1.2;
+      ctx.beginPath();
+      ctx.moveTo(x, y - a * 1.5); ctx.lineTo(x + a * 0.45, y - a * 0.45); ctx.lineTo(x + a * 1.5, y); ctx.lineTo(x + a * 0.45, y + a * 0.45);
+      ctx.lineTo(x, y + a * 1.5); ctx.lineTo(x - a * 0.45, y + a * 0.45); ctx.lineTo(x - a * 1.5, y); ctx.lineTo(x - a * 0.45, y - a * 0.45); ctx.closePath(); ctx.fill();
+    }
+    ctx.lineCap = 'butt'; ctx.lineJoin = 'miter';
+    const n = this.scene.skillsWaiting.length;
+    if (n > 1) this._drawTextBadge(ctx, String(n), r.x + r.w + 2, r.y + r.h + 2, true);
+    if (hot) {
+      const label = t('New skills available'), px = 8.5 * PT, w = Math.round(this._measure(ctx, label, px) + 20), lx = Math.max(4, r.x - 10 - w), ly = r.y + (r.h - 24) / 2;
+      this._pill(ctx, lx, ly, w, 24, 6, 'rgba(22,18,52,0.88)', 'rgba(255,214,120,0.9)', 1.2);
+      this._text(ctx, label, lx + w / 2, ly + 12.5, { px: px, color: 'white', align: 'center' });
+    }
+  }
+
+  _skillLayout(ctx) {
+    const s = this.scene, k = this._uiScale(640), pad = Math.trunc(16 * k), gap = Math.trunc(12 * k), inner = Math.trunc(12 * k);
+    const tpx = 12 * PT * k, spx = 9.5 * PT * k, npx = 11 * PT * k, dpx = 9 * PT * k, maxW = this.width - 16, pick = s.isSkillPick;
+    let title, sub, cards, rowW, rowH, portrait = null;
+    const titleH = Math.round(tpx * 1.3), subH = Math.round(spx * 1.3);
+    if (pick) {
+      title = t('New skills available'); sub = t('Choose a hero');
+      const heroes = s.skillPickHeroes, nameH = Math.round(npx * 1.3), lvH = Math.round(dpx * 1.3);
+      let cw = 0, spriteW = 0, spriteH = 0;
+      for (const kind of heroes) {
+        const sp = Sprites.party[kind];
+        spriteW = Math.max(spriteW, sp.w * 2); spriteH = Math.max(spriteH, sp.h * 2);
+        cw = Math.max(cw, this._measure(ctx, t(PARTY_NAMES[kind]), npx, 700), this._measure(ctx, t('Lv. {n}', { n: s.levelOf(kind) }), dpx, 400));
+      }
+      const cardW = Math.max(cw, spriteW) + inner * 2, cardH = spriteH + Math.trunc(4 * k) + nameH + lvH + inner * 2;
+      const cols = Math.max(1, Math.min(heroes.length, Math.trunc((maxW - pad * 2 + gap) / (cardW + gap)))), rows = Math.ceil(heroes.length / cols);
+      rowW = cols * cardW + (cols - 1) * gap; rowH = rows * cardH + (rows - 1) * gap;
+      cards = heroes.map((kind, i) => ({ kind: kind, hero: true, spriteW: Sprites.party[kind].w * 2, spriteH: Sprites.party[kind].h * 2, nameH: nameH, w: cardW, h: cardH, col: i % cols, row: Math.trunc(i / cols) }));
+    } else {
+      const options = s.skillOptions || [], kind = s.skillWho;
+      title = t('{name} reached Lv. {n}!', { name: t(PARTY_NAMES[kind]), n: s.skillLevel }); sub = t('Choose a path');
+      let cardW = Math.min(Math.trunc(200 * k), Math.trunc((maxW - pad * 2 - gap) / 2));
+      const stacked = cardW < Math.trunc(130 * k);
+      if (stacked) cardW = Math.min(Math.trunc(260 * k), maxW - pad * 2);
+      const items = options.map(o => {
+        const nl = this._wrapLines(ctx, t(o.name), cardW - inner * 2, npx, 700), dl = this._wrapLines(ctx, t(o.description), cardW - inner * 2, dpx, 400);
+        return { nl: nl, dl: dl, w: cardW, h: Math.round(nl.length * npx * 1.3) + Math.trunc(6 * k) + Math.round(dl.length * dpx * 1.3) + inner * 2 };
+      });
+      const cardH = Math.max(0, ...items.map(i => i.h));
+      items.forEach((it, i) => { it.h = cardH; it.col = stacked ? 0 : i; it.row = stacked ? i : 0; });
+      cards = items;
+      rowW = stacked ? cardW : options.length * cardW + (options.length - 1) * gap; rowH = stacked ? options.length * cardH + (options.length - 1) * gap : cardH;
+      const sp = Sprites.party[kind], factor = Math.max(1, Math.trunc(3 * k));
+      portrait = { sp: sp, w: sp.w * factor, h: sp.h * factor };
+    }
+    const titleW = this._measure(ctx, title, tpx), subW = this._measure(ctx, sub, spx, 400);
+    const panelW = Math.min(maxW, Math.max(titleW, subW, rowW) + pad * 2), panelH = pad + (portrait ? portrait.h + gap : 0) + titleH + Math.trunc(2 * k) + subH + gap + rowH + pad;
+    const panel = { x: Math.trunc((this.width - panelW) / 2), y: Math.max(4, Math.trunc((this.height - panelH) / 2)), w: panelW, h: panelH };
+    let y = panel.y + pad;
+    if (portrait) { portrait.x = panel.x + Math.trunc((panelW - portrait.w) / 2); portrait.y = y; y += portrait.h + gap; }
+    const titleY = y + titleH / 2; y += titleH + Math.trunc(2 * k);
+    const subY = y + subH / 2; y += subH + gap;
+    const x0 = panel.x + Math.trunc((panelW - rowW) / 2);
+    for (const c of cards) { c.x = x0 + c.col * (c.w + gap); c.y = y + c.row * (c.h + gap); }
+    return { k, panel, portrait, title, sub, titleY, subY, tpx, spx, npx, dpx, inner, cards, pick };
+  }
+
+  /** The card under a point (-1 for none); `inside` says whether the point is in the panel at all. */
+  _skillHit(p) {
+    const L = this._skillLayout(this.ctx);
+    for (let i = 0; i < L.cards.length; i++) if (this._inRect(p, L.cards[i])) return { hit: i, inside: true };
+    return { hit: -1, inside: this._inRect(p, L.panel) };
+  }
+
+  _drawSkillChoice(ctx) {
+    const L = this._skillLayout(ctx), P = L.panel, k = L.k;
+    ctx.fillStyle = 'rgba(0,0,0,0.745)'; ctx.fillRect(0, 0, this.width, this.height);
+    roundRect(ctx, P.x + 0.5, P.y + 0.5, P.w - 1, P.h - 1, 10 * k);
+    ctx.fillStyle = 'rgba(18,22,56,0.94)'; ctx.fill();
+    ctx.strokeStyle = 'rgba(255,214,120,0.92)'; ctx.lineWidth = 1.8; ctx.stroke();
+    if (L.portrait) { const po = L.portrait; ctx.save(); ctx.imageSmoothingEnabled = false; ctx.drawImage(po.sp.a, po.x, po.y, po.w, po.h); ctx.restore(); }
+    this._text(ctx, L.title, P.x + P.w / 2, L.titleY, { px: L.tpx, color: 'rgb(255,226,150)', align: 'center' });
+    this._text(ctx, L.sub, P.x + P.w / 2, L.subY, { px: L.spx, color: 'rgb(190,226,255)', align: 'center', weight: 400 });
+    L.cards.forEach((c, i) => {
+      const hot = i === this._skillHover;
+      roundRect(ctx, c.x + 0.5, c.y + 0.5, c.w - 1, c.h - 1, 8 * k);
+      ctx.fillStyle = hot ? 'rgba(60,52,120,0.96)' : 'rgba(36,32,84,0.92)'; ctx.fill();
+      ctx.strokeStyle = hot ? 'rgb(255,214,120)' : 'rgba(170,150,240,0.8)'; ctx.lineWidth = hot ? 2.2 : 1.4; ctx.stroke();
+      if (c.hero) {
+        const sp = Sprites.party[c.kind];
+        ctx.save(); ctx.imageSmoothingEnabled = false; ctx.drawImage(sp.a, c.x + Math.trunc((c.w - c.spriteW) / 2), c.y + L.inner, c.spriteW, c.spriteH); ctx.restore();
+        const ty = c.y + L.inner + c.spriteH + Math.trunc(4 * k);
+        this._text(ctx, t(PARTY_NAMES[c.kind]), c.x + c.w / 2, ty + c.nameH / 2, { px: L.npx, color: 'white', align: 'center', weight: 700 });
+        this._text(ctx, t('Lv. {n}', { n: this.scene.levelOf(c.kind) }), c.x + c.w / 2, ty + c.nameH + L.dpx * 0.65, { px: L.dpx, color: 'rgb(214,222,250)', align: 'center', weight: 400 });
+        return;
+      }
+      ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+      ctx.font = '700 ' + L.npx + 'px ' + FONT; ctx.fillStyle = 'white';
+      c.nl.forEach((ln, j) => ctx.fillText(ln, c.x + L.inner, c.y + L.inner + j * L.npx * 1.3));
+      const dy = c.y + L.inner + Math.round(c.nl.length * L.npx * 1.3) + Math.trunc(6 * k);
+      ctx.font = '400 ' + L.dpx + 'px ' + FONT; ctx.fillStyle = 'rgb(214,222,250)';
+      c.dl.forEach((ln, j) => ctx.fillText(ln, c.x + L.inner, dy + j * L.dpx * 1.3));
+    });
+  }
+
   _drawStoryUi(ctx) {
     const s = this.scene;
     if (s.isDialogue) this._drawDialogue(ctx);
     else if (s.isLevelSelect) this._drawLevelSelect(ctx);
     else if (s.isLevelFx) this._banner(ctx, this._uiScale(640), s.levelFxText, true);
+    else if (s.isSkillChoice) this._drawSkillChoice(ctx);
   }
 
   _drawDialogue(ctx) {
@@ -2037,6 +2171,11 @@ export class Visualizer {
     const s = this.scene;
     if (this._sliderDrag) { this._dragSlider(h); this.canvas.style.cursor = 'pointer'; return; }
     if (this._devOpen) { this._devMove(p); return; }   // the journal is up: only it answers the pointer
+    if (s.isSkillChoice) {   // a hero is choosing a path: only the two cards answer the pointer
+      this._skillHover = this._skillHit(p).hit;
+      this.canvas.style.cursor = this._skillHover >= 0 ? 'pointer' : 'default';
+      return;
+    }
     if (this._tshopOpen) {   // the Tavern Shop is up: only it answers the pointer
       const hit = this._tshopHit(p);
       this._tshopHover = hit.hit;
@@ -2121,8 +2260,9 @@ export class Visualizer {
       if (member) hover.tile = 0;
     }
     this.hover = hover;
+    this._overSkills = this._inSkills(h);
     const overCoin = !s.isLevelSelect && !s.isDialogue && !s.isChoosing && s.isCoinAt(p.x, p.y);
-    this.canvas.style.cursor = hover.button || hover.settings || hover.restart || hover.dev || hover.qslider || hover.qauto || hover.tuner || hover.comp || this._overHot || this._overScroll || this._overTShop || this._scrollHover >= 0 || this._discHover >= 0 || hover.card >= 0 || hover.tile >= 0 || hover.levelUp || overCoin ? 'pointer' : 'default';
+    this.canvas.style.cursor = hover.button || hover.settings || hover.restart || hover.dev || this._overSkills || hover.qslider || hover.qauto || hover.tuner || hover.comp || this._overHot || this._overScroll || this._overTShop || this._scrollHover >= 0 || this._discHover >= 0 || hover.card >= 0 || hover.tile >= 0 || hover.levelUp || overCoin ? 'pointer' : 'default';
   }
 
   _onDown(e) {
@@ -2133,6 +2273,14 @@ export class Visualizer {
     const h = { x: p.x / this.hud, y: p.y / this.hud };
     const s = this.scene;
     if (this._devOpen) { this._devDown(p, e); return; }
+    if (s.isSkillChoice) {
+      const r = this._skillHit(p);
+      if (r.hit >= 0) {
+        if (s.isSkillPick) s.pickSkillHero(r.hit); else if (s.chooseSkill(r.hit)) this.canvas.style.cursor = 'default';
+        this._skillHover = -1;
+      } else if (!r.inside && s.canCancelSkill) { Sound.play('DiscClick'); s.cancelSkill(); this._skillHover = -1; this.canvas.style.cursor = 'default'; }   // a click outside closes it (when it came from the button)
+      return;
+    }
     if (this._tshopOpen) {
       const hit = this._tshopHit(p);
       if (hit.hit >= 0 && hit.hit < 100) s.buyHero(UNLOCKABLE_HEROES[hit.hit]);
@@ -2213,6 +2361,7 @@ export class Visualizer {
     }
     const cards = this._cardRects();
     for (let i = 0; i < cards.length; i++) if (this._inRect(p, cards[i])) { s.choose(i); this.hover.card = -1; return; }
+    if (this._inSkills(h)) { this._overSkills = false; Sound.play('DiscClick'); s.openSkills(); this.canvas.style.cursor = 'default'; return; }
     if (this._inTuner(h)) { this.host.openTuner && this.host.openTuner(); return; }
     if (this.zoomed && this._inRect(h, this._compRect)) { this.host.openCompendium && this.host.openCompendium(); return; }
     if (this._inRect(h, this._buttonRect)) { this.host.toggleFullscreen && this.host.toggleFullscreen(); return; }
