@@ -14,7 +14,7 @@ export const JOURNAL = [
       'At level 5 the Warrior picks a path: Stalwart takes 25% less physical damage, Rager deals 25% more.',
       'At level 5 the Light Mage picks a spell: Paralyze may stop an enemy from attacking (even its special attacks), Diminish makes it take 10% more damage.',
       'The desert goes on: from Year 5 the party stays in it, and the Sand Crabs and Venom Flayers keep coming.',
-      'New Adventure Log: a timeline of every hit, skill and status effect. Find it beside the Log in the app, or as its own tab on the web. A filter shows only attacks, skills, status effects and more.',
+      'New Adventure Log: a timeline of every hit, skill and status effect. Find it beside the Log in the app, or under the playback controls on the web. A filter shows only attacks, skills, status effects and more.',
       'Already past level 5? A glowing "New skills available" button on the right lets you choose.'
     ],
     es: {
@@ -24,7 +24,7 @@ export const JOURNAL = [
         'En el nivel 5 el guerrero elige un camino: Recio recibe un 25 % menos de daño físico, Furioso inflige un 25 % más.',
         'En el nivel 5 el mago de luz elige un hechizo: Paralizar puede impedir que el enemigo ataque (incluso con sus ataques especiales) y Debilitar hace que reciba un 10 % más de daño.',
         'El desierto continúa: desde el Año 5 el grupo se queda en él, y los cangrejos de arena y los desolladores venenosos siguen apareciendo.',
-        'Nuevo Diario de aventura: una cronología de cada golpe, habilidad y efecto de estado. Está junto al Log en la aplicación, o en su propia pestaña en la web. Un filtro muestra solo ataques, habilidades, estados y más.',
+        'Nuevo Diario de aventura: una cronología de cada golpe, habilidad y efecto de estado. Está junto al Log en la aplicación, o bajo los controles de reproducción en la web. Un filtro muestra solo ataques, habilidades, estados y más.',
         '¿Ya pasaste el nivel 5? Un botón brillante de «Nuevas habilidades disponibles» a la derecha te deja elegir.'
       ]
     },
@@ -35,7 +35,7 @@ export const JOURNAL = [
         '战士在 5 级时选择一条道路：坚毅受到的物理伤害减少 25%，狂战造成的伤害增加 25%。',
         '光明法师在 5 级时选择一个法术：麻痹有几率使敌人无法攻击（连特殊攻击也不例外），削弱会让敌人受到的伤害增加 10%。',
         '沙漠还在继续：从第 5 年起队伍会一直留在沙漠里，沙蟹和毒液剥皮者不断出现。',
-        '全新的冒险日志：按时间记录每一次攻击、技能和状态效果。在应用里就在日志旁边，网页版则是独立的标签页。还有筛选器，可只看攻击、技能、状态效果等。',
+        '全新的冒险日志：按时间记录每一次攻击、技能和状态效果。在应用里就在日志旁边，网页版则在播放控制按钮下方。还有筛选器，可只看攻击、技能、状态效果等。',
         '已经超过 5 级了？右侧会亮起“有新技能可用”按钮，让你随时选择。'
       ]
     }

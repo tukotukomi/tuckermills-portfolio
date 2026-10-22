@@ -5,6 +5,7 @@ import { Sprites, PARTY, PARTY_NAMES } from './sprites.js';
 import { Visualizer, IS_MOBILE, BLURB } from './visualizer.js';
 import { t, setLanguage, getLanguage, detectLanguage, applyDom, onLanguageChange } from './i18n.js';
 import { logFormat, logCategory } from './advlog.js';
+import { readPlaylistFile, makeResolver, resolvePlaylist, uniqueName, trimItem } from './playlists.js';
 import { Sound } from './sfx.js';
 import { Player, STATIONS, AUDIO_EXTENSIONS, parsePlaylist } from './player.js';
 import { SUPPORT } from './support.js';
@@ -42,7 +43,7 @@ async function main() {
   const canvas = $('scene');
 
   // ---- Library (local folder) ---------------------------------------------------------------------------
-  const library = { entries: [], filtered: [], folderName: '', search: '', current: -1, shuffle: store.get('shuffle', '0') === '1', repeat: parseInt(store.get('repeat', '0'), 10) || 0, cycle: new Set() };
+  const library = { entries: [], view: [], viewDirty: true, playlistId: store.get('playlistId', ''), filtered: [], filteredFrom: [], folderName: '', search: '', current: -1, shuffle: store.get('shuffle', '0') === '1', repeat: parseInt(store.get('repeat', '0'), 10) || 0, cycle: new Set() };
 
   const isAudio = name => AUDIO_EXTENSIONS.some(x => name.toLowerCase().endsWith(x)) && !name.startsWith('._');
 
@@ -59,6 +60,8 @@ async function main() {
     library.folderName = folderName;
     library.current = -1;
     library.cycle.clear();
+    resolver = makeResolver(entries);
+    library.viewDirty = true;
     applyFilter();
     $('folderName').textContent = folderName ? t('{folder} ({n} tracks)', { folder: folderName, n: entries.length.toLocaleString() }) : '';
     $('musicEmpty').hidden = !!folderName;
@@ -69,17 +72,22 @@ async function main() {
   function applyFilter() {
     const words = library.search.toLowerCase().split(/\s+/).filter(Boolean);
     const playingPath = library.current >= 0 && library.filtered[library.current] ? library.filtered[library.current].path : null;
-    library.filtered = words.length === 0 ? library.entries : library.entries.filter(e => {
-      const hay = e.path.toLowerCase();
-      return words.every(w => hay.indexOf(w) >= 0);
+    if (library.viewDirty) buildView();
+    library.filteredFrom = [];
+    library.filtered = [];
+    library.view.forEach((e, vi) => {
+      if (words.length) { const hay = e.path.toLowerCase(); if (!words.every(w => hay.indexOf(w) >= 0)) return; }
+      library.filtered.push(e); library.filteredFrom.push(vi);
     });
     library.current = playingPath ? library.filtered.findIndex(e => e.path === playingPath) : -1;
     musicList.setItems(library.filtered);
     tunerList.setItems(library.filtered);
     musicList.setPlaying(library.current);
     tunerList.setPlaying(library.current);
-    $('musicCount').textContent = words.length ? t('{a} of {b} match', { a: library.filtered.length.toLocaleString(), b: library.entries.length.toLocaleString() }) : '';
-    $('tunerFoot').textContent = library.folderName ? (words.length ? t('{folder} - {n} matching', { folder: library.folderName, n: library.filtered.length }) : library.folderName) : '';
+    $('musicCount').textContent = words.length ? t('{a} of {b} match', { a: library.filtered.length.toLocaleString(), b: library.view.length.toLocaleString() }) : '';
+    const plName = currentPlaylist() ? currentPlaylist().name + ' - ' : '';
+    $('tunerFoot').textContent = library.folderName ? plName + (words.length ? t('{folder} - {n} matching', { folder: library.folderName, n: library.filtered.length }) : library.folderName) : '';
+    renderPlaylistBar();
   }
 
   async function chooseFolder() {
@@ -252,10 +260,21 @@ async function main() {
     while (box.childElementCount > 900) box.removeChild(box.firstChild);
     if (stick) box.scrollTop = box.scrollHeight;
   }
-  setInterval(() => { if (tab === 'advlog') renderLog(false); }, 300);
+  // The log sits in a dock under the playback controls: the button opens it from the bottom (and the scene above it makes way).
+  let logOpen = store.get('logOpen', '0') === '1';
+  function applyLogOpen() {
+    $('logBox').hidden = !logOpen; $('logTools').hidden = !logOpen;
+    $('logArrow').textContent = logOpen ? '\u25BE' : '\u25B8';
+    $('logToggle').setAttribute('aria-expanded', String(logOpen));
+    if (logOpen) { renderLog(true); requestAnimationFrame(() => { const box = $('logBox'); box.scrollTop = box.scrollHeight; }); }
+    requestAnimationFrame(() => { if (typeof vis !== 'undefined') vis.resize(); });
+  }
+  $('logToggle').addEventListener('click', () => { logOpen = !logOpen; store.set('logOpen', logOpen ? '1' : '0'); applyLogOpen(); });
+  setInterval(() => { if (logOpen) renderLog(false); }, 300);
   $('logFilter').addEventListener('change', () => { logFilter = $('logFilter').value; store.set('logFilter', logFilter); logRewrite = true; renderLog(true); });
   $('logClear').addEventListener('click', () => { scene.clearLog(); logRewrite = true; renderLog(true); });
-  onLanguageChange(() => { logRewrite = true; if (tab === 'advlog') renderLog(true); });
+  onLanguageChange(() => { logRewrite = true; if (logOpen) renderLog(true); });
+  applyLogOpen();
 
   // ---- Tabs and layout -------------------------------------------------------------------------------------
   let tab = 'adventure';
@@ -264,11 +283,9 @@ async function main() {
     for (const b of document.querySelectorAll('#tabs button')) b.classList.toggle('on', b.dataset.tab === name);
     $('musicPane').hidden = name !== 'music';
     $('radioPane').hidden = name !== 'radio';
-    $('logPane').hidden = name !== 'advlog';
     document.body.classList.toggle('view-list', name !== 'adventure');
     vis.zoomed = name === 'adventure' || vis.fullscreen;
     requestAnimationFrame(() => vis.resize());
-    if (name === 'advlog') { renderLog(true); requestAnimationFrame(() => { const box = $('logBox'); box.scrollTop = box.scrollHeight; }); }
   }
   for (const b of document.querySelectorAll('#tabs button')) b.addEventListener('click', () => { Sound.unlock(); player.unlock(); setTab(b.dataset.tab); });
   setTab('adventure');
@@ -302,8 +319,172 @@ async function main() {
     else if (e.key === ' ' && !typing && vis.fullscreen) { e.preventDefault(); player.togglePause(); updateTransport(); }
   });
 
+  // ---- Playlists (local music) ---------------------------------------------------------------------------------
+  // A playlist is what some playlist file (or the player) listed; which local file each item means is worked out against the picked folder
+  // whenever the view is built (see playlists.js), so a playlist survives the folder moving and items not in the folder just wait.
+  let playlists = [];
+  try { playlists = JSON.parse(store.get('playlists', '[]')); if (!Array.isArray(playlists)) playlists = []; } catch (e) { playlists = []; }
+  let resolver = makeResolver([]);
+  let plView = { at: [], missing: 0 };
+  const savePlaylists = () => store.set('playlists', JSON.stringify(playlists));
+  const currentPlaylist = () => playlists.find(p => p.id === library.playlistId) || null;
+  let plNoteText = '';
+  function buildView() {
+    library.viewDirty = false;
+    const pl = currentPlaylist();
+    if (!pl) { library.view = library.entries; plView = { at: [], missing: 0 }; return; }
+    const r = resolvePlaylist(pl, resolver);
+    library.view = r.found; plView = { at: r.at, missing: r.missing };
+  }
+  function renderPlaylistBar() {
+    for (const id of ['plSel', 'tunerPlSel']) {
+      const sel = $(id);
+      sel.textContent = '';
+      sel.appendChild(Object.assign(el('option', null, t('All music')), { value: '' }));
+      for (const p of playlists) sel.appendChild(Object.assign(el('option', null, p.name), { value: p.id }));
+      sel.value = library.playlistId;
+    }
+    const pl = currentPlaylist();
+    $('plRename').disabled = $('plDelete').disabled = !pl;
+    $('tunerPlBar').hidden = playlists.length === 0;
+    $('plNote').textContent = plNoteText || (pl ? (library.folderName ? t('{n} tracks, {m} not in this folder', { n: library.view.length.toLocaleString(), m: plView.missing.toLocaleString() }) : t('Choose the music folder to play this playlist.')) : '');
+  }
+  function setPlaylistView(id) {
+    library.playlistId = id; store.set('playlistId', id);
+    plNoteText = '';
+    library.viewDirty = true; library.current = -1;
+    applyFilter();
+  }
+  function changedPlaylists() { savePlaylists(); library.viewDirty = true; applyFilter(); }
+  function newId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+  function makePlaylist(name, items) {
+    const p = { id: newId(), name: uniqueName(playlists.map(x => x.name), name), items: items || [] };
+    playlists.push(p);
+    return p;
+  }
+
+  /** Reads a playlist file's bytes as text (iTunes writes its text exports as UTF-16). */
+  function decodeText(buf) {
+    const b = new Uint8Array(buf);
+    if (b[0] === 0xFF && b[1] === 0xFE) return new TextDecoder('utf-16le').decode(buf);
+    if (b[0] === 0xFE && b[1] === 0xFF) return new TextDecoder('utf-16be').decode(buf);
+    return new TextDecoder('utf-8').decode(buf);
+  }
+
+  /** Asks which of the playlists in a file to bring in (the library itself and iTunes' built-in lists start unticked). Resolves to the chosen ones. */
+  function pickPlaylists(found) {
+    return new Promise(resolve => {
+      const dlg = $('plPick'), list = $('plPickList');
+      list.textContent = '';
+      const boxes = found.map(p => {
+        const label = el('label'), box = el('input');
+        box.type = 'checkbox'; box.checked = p.kind === 'user' && p.items.length > 0;
+        label.append(box, el('span', null, p.name), el('span', 'muted', t('{n} tracks', { n: p.items.length.toLocaleString() })));
+        list.appendChild(label);
+        return box;
+      });
+      $('plPickAll').onclick = () => boxes.forEach(b => { b.checked = true; });
+      $('plPickNone').onclick = () => boxes.forEach(b => { b.checked = false; });
+      dlg.onclose = () => resolve(dlg.returnValue === 'ok' ? found.filter((p, i) => boxes[i].checked) : []);
+      dlg.returnValue = '';
+      dlg.showModal();
+    });
+  }
+
+  async function importPlaylistFiles(files) {
+    const found = [];
+    for (const f of files) {
+      try { for (const p of readPlaylistFile(decodeText(await f.arrayBuffer()), f.name)) found.push(p); } catch (e) { console.warn(e); }
+    }
+    if (found.length === 0) { plNoteText = t('No playlists found in that file.'); renderPlaylistBar(); return; }
+    const chosen = found.length === 1 ? found : await pickPlaylists(found);
+    if (chosen.length === 0) return;
+    let tracks = 0, last = null;
+    for (const p of chosen) { last = makePlaylist(p.name, p.items.map(trimItem)); tracks += p.items.length; }
+    const r = resolvePlaylist(last, resolver);
+    plNoteText = t('Imported {n} playlist(s), {tracks} tracks ({found} found in this folder).', {
+      n: chosen.length, tracks: tracks.toLocaleString(), found: chosen.reduce((s, p) => s + resolvePlaylist(p, resolver).found.length, 0).toLocaleString() });
+    library.playlistId = last.id; store.set('playlistId', last.id);
+    changedPlaylists();
+  }
+
+  // The "..." menu on a track: add it to a playlist, or (inside a playlist) take it out or move it.
+  function openPlMenu(anchor, entry, viewIndex) {
+    const menu = $('plMenu');
+    menu.textContent = '';
+    const add = (label, fn, disabled) => { const b = el('button', null, label); b.disabled = !!disabled; b.addEventListener('click', () => { closePlMenu(); fn(); }); menu.appendChild(b); };
+    menu.appendChild(el('div', 'hdr', t('Add to playlist')));
+    for (const p of playlists) add(p.name, () => addToPlaylist(p, entry));
+    add(t('New playlist...'), () => { const name = (prompt(t('Name for the new playlist:'), '') || '').trim(); if (name) addToPlaylist(makePlaylist(name), entry); });
+    const pl = currentPlaylist();
+    if (pl) {
+      const at = plView.at[viewIndex];
+      const searching = library.search.trim().length > 0;
+      menu.appendChild(el('div', 'sep'));
+      add(t('Remove from this playlist'), () => { pl.items.splice(at, 1); changedPlaylists(); });
+      add(t('Move up'), () => movePlaylistItem(pl, viewIndex, -1), searching || viewIndex <= 0);
+      add(t('Move down'), () => movePlaylistItem(pl, viewIndex, 1), searching || viewIndex >= library.view.length - 1);
+    }
+    menu.hidden = false;
+    const r = anchor.getBoundingClientRect();
+    menu.style.left = Math.max(8, Math.min(window.innerWidth - menu.offsetWidth - 8, r.right - menu.offsetWidth)) + 'px';
+    menu.style.top = Math.max(8, Math.min(window.innerHeight - menu.offsetHeight - 8, r.bottom + 4)) + 'px';
+  }
+  function closePlMenu() { $('plMenu').hidden = true; }
+  document.addEventListener('click', e => { if (!$('plMenu').hidden && !e.target.closest('#plMenu')) closePlMenu(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('plMenu').hidden) closePlMenu(); });
+  window.addEventListener('resize', closePlMenu);
+  $('musicList').addEventListener('scroll', closePlMenu);
+  $('tunerList').addEventListener('scroll', closePlMenu);
+
+  function addToPlaylist(pl, entry) {
+    const item = trimItem({ path: entry.path });
+    if (pl.items.some(i => resolver.resolve(i) === entry)) plNoteText = t('"{name}" is already in {pl}.', { name: entry.name.replace(/\.[^.]+$/, ''), pl: pl.name });
+    else { pl.items.push(item); plNoteText = t('Added to {pl}.', { pl: pl.name }); }
+    changedPlaylists();
+  }
+  function movePlaylistItem(pl, viewIndex, step) {
+    const a = plView.at[viewIndex], b = plView.at[viewIndex + step];
+    if (a === undefined || b === undefined) return;
+    const x = pl.items[a]; pl.items[a] = pl.items[b]; pl.items[b] = x;
+    changedPlaylists();
+  }
+
+  for (const id of ['plSel', 'tunerPlSel']) $(id).addEventListener('change', e => setPlaylistView(e.target.value));
+  $('plImport').addEventListener('click', () => $('plFile').click());
+  $('plFile').addEventListener('change', () => { const files = Array.from($('plFile').files); $('plFile').value = ''; if (files.length) importPlaylistFiles(files); });
+  $('plNew').addEventListener('click', () => {
+    const name = (prompt(t('Name for the new playlist:'), '') || '').trim();
+    if (!name) return;
+    const p = makePlaylist(name);
+    plNoteText = ''; library.playlistId = p.id; store.set('playlistId', p.id);
+    changedPlaylists();
+  });
+  $('plRename').addEventListener('click', () => {
+    const pl = currentPlaylist(); if (!pl) return;
+    const name = (prompt(t('New name for the playlist:'), pl.name) || '').trim();
+    if (!name || name === pl.name) return;
+    pl.name = uniqueName(playlists.filter(p => p !== pl).map(p => p.name), name);
+    plNoteText = '';
+    changedPlaylists();
+  });
+  $('plDelete').addEventListener('click', () => {
+    const pl = currentPlaylist(); if (!pl) return;
+    if (!confirm(t('Delete the playlist "{name}"?', { name: pl.name }))) return;
+    playlists = playlists.filter(p => p !== pl);
+    plNoteText = ''; library.playlistId = ''; store.set('playlistId', '');
+    changedPlaylists();
+  });
+
   // ---- Lists -----------------------------------------------------------------------------------------------
-  const renderTrack = (row, e) => { row.append(el('div', 't', e.name.replace(/\.[^.]+$/, '')), el('div', 's', e.path)); };
+  const renderTrack = (row, e, i) => {
+    row.classList.add('hasMore');
+    row.append(el('div', 't', e.name.replace(/\.[^.]+$/, '')), el('div', 's', e.path));
+    const more = el('button', 'more', '\u22EF');
+    more.title = t('Playlists'); more.setAttribute('aria-label', t('Playlists'));
+    more.addEventListener('click', ev => { ev.stopPropagation(); openPlMenu(more, e, library.filteredFrom[i]); });
+    row.append(more);
+  };
   const renderStation = (row, s) => {
     row.append(el('div', 't', s.name), el('div', 's', s.cors === 'blocked' ? t(s.note) : s.source ? t('From playlist: {s}', { s: s.source }) : s.cors === true ? t('Plays and drives the scene') : s.cors === false ? t('Plays (no audio reactions)') : t('Plays; reactions if the station allows')));
     if (s.cors === 'blocked') row.classList.add('disabled');
@@ -752,7 +933,7 @@ async function main() {
   });
 
   // For the automated checks.
-  window.fmc = { scene, player, vis, library, Sound, setTab, openTuner, openCompendium, closePopups };
+  window.fmc = { scene, player, vis, library, setEntries, Sound, setTab, openTuner, openCompendium, closePopups };
 }
 
 main().catch(e => { console.error(e); document.body.insertAdjacentHTML('afterbegin', '<pre style="color:#f88;padding:12px">' + String(e && e.stack || e) + '</pre>'); });

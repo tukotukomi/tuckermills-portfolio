@@ -87,7 +87,31 @@ html.themed button.primary, html.themed button.on { background: linear-gradient(
 html.themed .icon.big { background: var(--play); }
 html.themed .icon.active { border-color: var(--gold); }
 html.themed .vlist .row .support { text-shadow: none; }
-.logbox { flex: 1 1 auto; min-height: 120px; overflow: auto; background: var(--list); border: 1px solid var(--line); border-radius: 8px; padding: 6px 0; font-size: 13px; line-height: 1.45; -webkit-overflow-scrolling: touch; }
+#plBar select, #tunerPlBar select { max-width: 100%; min-width: 0; background: var(--list); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; font: inherit; }
+#plNote:empty { display: none; }
+.vlist .row.hasMore { padding-right: 46px; }
+.vlist .row .more { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); width: 34px; height: 30px; padding: 0; line-height: 1; font-size: 18px; }
+#plPick h3 { margin: 0 0 10px; }
+#plPickList { max-height: 50vh; overflow: auto; display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+#plPickList label { display: flex; gap: 8px; align-items: baseline; }
+#plPickList .muted { font-size: 12px; }
+.plPickBtns { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+.plmenu { position: fixed; z-index: 100; min-width: 190px; max-width: min(320px, 92vw); max-height: 60vh; overflow: auto; background: var(--panel); border: 1px solid var(--gold); border-radius: 10px; padding: 6px; display: flex; flex-direction: column; gap: 2px; box-shadow: 0 8px 24px rgba(0,0,0,0.5); }
+.plmenu[hidden] { display: none; }
+.plmenu button { text-align: left; border: 0; background: transparent; padding: 7px 10px; border-radius: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.plmenu button:hover:not(:disabled) { background: rgba(108,124,255,0.25); }
+.plmenu button:disabled { opacity: 0.45; cursor: default; }
+.plmenu .hdr { padding: 4px 10px; color: var(--muted); font-size: 12px; }
+.plmenu .sep { height: 1px; background: var(--line); margin: 4px 0; }
+#logDock { flex: 0 0 auto; padding: 4px 12px calc(6px + env(safe-area-inset-bottom)); background: var(--foot-bg); border-top: 1px solid var(--bar-line); }
+#logDock .logHead { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+#logToggle { padding: 4px 10px; font-weight: 600; }
+#logTools { display: flex; align-items: center; gap: 8px; }
+#logTools[hidden] { display: none; }
+#logTools select { background: var(--list); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px; font: inherit; max-width: 100%; }
+#logTools button { padding: 4px 10px; }
+.logbox { height: min(30vh, 220px); overflow: auto; background: var(--list); border: 1px solid var(--line); border-radius: 8px; padding: 6px 0; margin-top: 6px; font-size: 13px; line-height: 1.45; -webkit-overflow-scrolling: touch; }
+.logbox[hidden] { display: none; }
 .logbox .logRow { padding: 1px 12px; overflow-wrap: anywhere; }
 .logbox .logT { color: var(--muted); margin-right: 10px; font-variant-numeric: tabular-nums; }
 .logbox .logDay { padding: 10px 12px 3px; color: var(--gold); font-weight: 600; }
@@ -104,7 +128,7 @@ html.themed .vlist .row .support { text-shadow: none; }
 .icon .mi { width: 32px; height: 32px; fill: currentColor; display: block; }
 .icon.big .mi { width: 42px; height: 42px; }
 .icon.active { color: var(--gold); border-color: var(--gold); }
-.seek { grid-column: 1 / 3; display: flex; align-items: center; gap: 8px; }
+.seek { grid-column: 1 / -1; justify-self: center; width: min(640px, 100%); display: flex; align-items: center; gap: 8px; }
 .seek input { flex: 1; }
 .rightcol { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; min-width: 0; }
 /* The theme picker: a dropdown above the volume sliders. */
@@ -172,7 +196,7 @@ dialog { background: var(--panel); color: var(--text); border: 2px solid var(--g
 dialog::backdrop { background: rgba(0,0,0,0.65); }
 
 /* Full screen (or the iPhone's stand-in for it): the scene alone. */
-body.immersive #topbar, body.immersive #transport, body.immersive .pane { display: none; }
+body.immersive #topbar, body.immersive #transport, body.immersive #logDock, body.immersive .pane { display: none; }
 /* The scene fills the screen but stays clear of the status bar / Dynamic Island, the home indicator and any landscape notch. */
 body.immersive #app { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
 body.immersive #stage { flex: 1 1 auto; }

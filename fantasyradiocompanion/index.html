@@ -23,7 +23,6 @@
       <button role="tab" data-tab="adventure" class="on">Adventure</button>
       <button role="tab" data-tab="radio">Radio</button>
       <button role="tab" data-tab="music">Local Music</button>
-      <button role="tab" data-tab="advlog">Adventure Log</button>
     </nav>
     <button id="menuBtn" class="plain" aria-label="Menu" title="Menu">&#8943;</button>
   </header>
@@ -41,24 +40,18 @@
         <input id="musicSearch" type="search" placeholder="Search songs&hellip;" autocomplete="off">
         <span id="musicCount" class="muted"></span>
       </div>
+      <div class="paneBar" id="plBar">
+        <label id="plLabel" for="plSel" class="muted">Playlist:</label>
+        <select id="plSel"></select>
+        <button id="plImport">Import&hellip;</button>
+        <button id="plNew">New</button>
+        <button id="plRename">Rename</button>
+        <button id="plDelete">Delete</button>
+        <input id="plFile" type="file" accept=".m3u,.m3u8,.pls,.xml,.nml,.txt,.tsv" multiple hidden>
+        <span id="plNote" class="muted" role="status"></span>
+      </div>
       <div id="musicList" class="vlist"></div>
       <p id="musicEmpty" class="empty">Select your music folder of choice to play local music.</p>
-    </section>
-
-    <section id="logPane" class="pane" hidden>
-      <div class="paneBar">
-        <label id="logFilterLabel" for="logFilter" class="muted">Show:</label>
-        <select id="logFilter">
-          <option value="all">All</option>
-          <option value="attacks">Party attacks</option>
-          <option value="monsters">Monster attacks</option>
-          <option value="skills">Skills</option>
-          <option value="status">Status effects</option>
-          <option value="events">Events</option>
-        </select>
-        <button id="logClear">Clear</button>
-      </div>
-      <div id="logBox" class="logbox" role="log" aria-live="off" tabindex="0"></div>
     </section>
 
     <section id="radioPane" class="pane" hidden>
@@ -78,6 +71,7 @@
   </main>
 
   <footer id="transport">
+    <div class="seek"><span id="timeNow" class="muted">0:00</span><input id="seek" type="range" min="0" max="1000" value="0"><span id="timeLen" class="muted">0:00</span></div>
     <div id="nowPlaying"><span id="nowTitle">Nothing playing</span><span id="nowSub" class="muted"></span></div>
     <div class="controls">
       <button id="btnShuffle" class="icon" aria-label="Shuffle" title="Shuffle"></button>
@@ -86,7 +80,6 @@
       <button id="btnNext" class="icon" aria-label="Next"></button>
       <button id="btnRepeat" class="icon" aria-label="Repeat" title="Repeat"></button>
     </div>
-    <div class="seek"><span id="timeNow" class="muted">0:00</span><input id="seek" type="range" min="0" max="1000" value="0"><span id="timeLen" class="muted">0:00</span></div>
     <div class="rightcol">
       <label class="themePick"><span id="themeText">Theme</span> <select id="themeSel" aria-label="Theme"></select></label>
       <div class="vols">
@@ -95,6 +88,25 @@
       </div>
     </div>
   </footer>
+
+  <section id="logDock">
+    <div class="logHead">
+      <button id="logToggle" aria-expanded="false"><span id="logArrow">▸</span> <span id="logToggleText">Adventure Log</span></button>
+      <span id="logTools" hidden>
+        <label id="logFilterLabel" for="logFilter" class="muted">Show:</label>
+        <select id="logFilter">
+          <option value="all">All</option>
+          <option value="attacks">Party attacks</option>
+          <option value="monsters">Monster attacks</option>
+          <option value="skills">Skills</option>
+          <option value="status">Status effects</option>
+          <option value="events">Events</option>
+        </select>
+        <button id="logClear">Clear</button>
+      </span>
+    </div>
+    <div id="logBox" class="logbox" role="log" aria-live="off" tabindex="0" hidden></div>
+  </section>
 </div>
 
 <!-- Popups: the tuner and the monster compendium, over the scene -->
@@ -107,6 +119,7 @@
     <button id="tunerClose" class="plain close" aria-label="Close">&times;</button>
   </div>
   <div id="tunerLocal" class="popBody" hidden>
+    <div class="paneBar" id="tunerPlBar"><label for="tunerPlSel" class="muted" id="tunerPlLabel">Playlist:</label><select id="tunerPlSel"></select></div>
     <div class="paneBar"><input id="tunerSearch" type="search" placeholder="Search songs&hellip;" autocomplete="off"><button id="tunerFolder">Choose folder&hellip;</button></div>
     <p id="tunerNoFolder" class="notice" hidden>Select your music folder of choice to play local music.</p>
     <div id="tunerList" class="vlist"></div>
@@ -126,6 +139,14 @@
   <div id="compCards"></div>
   <footer id="compFoot"></footer>
 </section>
+
+<dialog id="plPick">
+  <h3 id="plPickTitle">Import which playlists?</h3>
+  <div id="plPickList"></div>
+  <form method="dialog" class="plPickBtns"><button id="plPickAll" type="button">All</button><button id="plPickNone" type="button">None</button><button id="plPickOk" class="primary" value="ok">Import</button><button value="cancel">Cancel</button></form>
+</dialog>
+
+<div id="plMenu" class="plmenu" hidden></div>
 
 <div id="menu" class="menu" hidden>
   <button data-act="export">Export progress</button>
