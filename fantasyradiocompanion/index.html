@@ -39,6 +39,15 @@
       <div class="paneBar">
         <input id="musicSearch" type="search" placeholder="Search songs&hellip;" autocomplete="off">
         <span id="musicCount" class="muted"></span>
+        <label id="sortLabel" for="sortSel" class="muted">Sort:</label>
+        <select id="sortSel">
+          <option value="">Default order</option>
+          <option value="name">Name</option>
+          <option value="artist">Artist</option>
+          <option value="format">Format</option>
+          <option value="path">Path</option>
+        </select>
+        <button id="sortDir" class="icon-ish" aria-label="Sort direction">▲</button>
       </div>
       <div class="paneBar" id="plBar">
         <label id="plLabel" for="plSel" class="muted">Playlist:</label>

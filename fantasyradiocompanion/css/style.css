@@ -87,6 +87,8 @@ html.themed button.primary, html.themed button.on { background: linear-gradient(
 html.themed .icon.big { background: var(--play); }
 html.themed .icon.active { border-color: var(--gold); }
 html.themed .vlist .row .support { text-shadow: none; }
+#sortSel { background: var(--list); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; font: inherit; max-width: 100%; }
+#sortDir { padding: 6px 10px; min-width: 38px; }
 #plBar select, #tunerPlBar select { max-width: 100%; min-width: 0; background: var(--list); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; font: inherit; }
 #plNote:empty { display: none; }
 .vlist .row.hasMore { padding-right: 46px; }

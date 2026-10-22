@@ -5,6 +5,7 @@ import { Sprites, PARTY, PARTY_NAMES } from './sprites.js';
 import { Visualizer, IS_MOBILE, BLURB } from './visualizer.js';
 import { t, setLanguage, getLanguage, detectLanguage, applyDom, onLanguageChange } from './i18n.js';
 import { logFormat, logCategory } from './advlog.js';
+import { readArtist, artistFromFileName } from './tags.js';
 import { readPlaylistFile, makeResolver, resolvePlaylist, missingIndexes, uniqueName, trimItem } from './playlists.js';
 import { Sound } from './sfx.js';
 import { Player, STATIONS, AUDIO_EXTENSIONS, parsePlaylist } from './player.js';
@@ -19,6 +20,8 @@ const store = {
   get(k, d) { try { const v = localStorage.getItem('fmc.' + k); return v === null ? d : v; } catch (e) { return d; } },
   set(k, v) { try { localStorage.setItem('fmc.' + k, v); } catch (e) { /* private mode */ } },
 };
+
+const COLLATOR = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });   // (numbers in order: Track 2 before Track 10; case ignored)
 
 async function main() {
   await Sprites.load('assets/sprites/');
@@ -43,7 +46,7 @@ async function main() {
   const canvas = $('scene');
 
   // ---- Library (local folder) ---------------------------------------------------------------------------
-  const library = { entries: [], view: [], viewDirty: true, playlistId: store.get('playlistId', ''), filtered: [], filteredFrom: [], folderName: '', search: '', current: -1, shuffle: store.get('shuffle', '0') === '1', repeat: parseInt(store.get('repeat', '0'), 10) || 0, cycle: new Set() };
+  const library = { entries: [], sort: store.get('musicSort', ''), sortDesc: store.get('musicSortDesc', '0') === '1', view: [], viewDirty: true, playlistId: store.get('playlistId', ''), filtered: [], filteredFrom: [], folderName: '', search: '', current: -1, shuffle: store.get('shuffle', '0') === '1', repeat: parseInt(store.get('repeat', '0'), 10) || 0, cycle: new Set() };
 
   const isAudio = name => AUDIO_EXTENSIONS.some(x => name.toLowerCase().endsWith(x)) && !name.startsWith('._');
 
@@ -60,9 +63,11 @@ async function main() {
     library.folderName = folderName;
     library.current = -1;
     library.cycle.clear();
+    for (const e of entries) e.artist = artistFromFileName(e.name.replace(/\.[^.]+$/, ''));
     resolver = makeResolver(entries);
     library.viewDirty = true;
     applyFilter();
+    startArtistScan();
     $('folderName').textContent = folderName ? t('{folder} ({n} tracks)', { folder: folderName, n: entries.length.toLocaleString() }) : '';
     $('musicEmpty').hidden = !!folderName;
     $('musicList').hidden = !folderName;
@@ -76,9 +81,23 @@ async function main() {
     library.filteredFrom = [];
     library.filtered = [];
     library.view.forEach((e, vi) => {
-      if (words.length) { const hay = e.path.toLowerCase(); if (!words.every(w => hay.indexOf(w) >= 0)) return; }
+      if (words.length) { const hay = (e.path + ' ' + (e.artist || '')).toLowerCase(); if (!words.every(w => hay.indexOf(w) >= 0)) return; }
       library.filtered.push(e); library.filteredFrom.push(vi);
     });
+    if (library.sort && library.filtered.length > 1) {
+      // Sorted by a column: natural order of its text; empty cells always come last; ties keep their place.
+      const f = library.filtered, from = library.filteredFrom, keys = f.map(e => sortKey(e, library.sort));
+      const order = f.map((e, i) => i);
+      order.sort((a, b) => {
+        const ea = keys[a] === '', eb = keys[b] === '';
+        if (ea !== eb) return ea ? 1 : -1;
+        let c = COLLATOR.compare(keys[a], keys[b]);
+        if (library.sortDesc) c = -c;
+        return c || a - b;
+      });
+      library.filtered = order.map(i => f[i]);
+      library.filteredFrom = order.map(i => from[i]);
+    }
     library.current = playingPath ? library.filtered.findIndex(e => e.path === playingPath) : -1;
     musicList.setItems(library.filtered);
     tunerList.setItems(library.filtered);
@@ -418,7 +437,7 @@ async function main() {
     const pl = currentPlaylist();
     if (pl) {
       const at = plView.at[viewIndex];
-      const searching = library.search.trim().length > 0;
+      const searching = library.search.trim().length > 0 || !!library.sort;   // (moving a track in a search, or in a sorted list, would not move it where it looks)
       menu.appendChild(el('div', 'sep'));
       add(t('Remove from this playlist'), () => { pl.items.splice(at, 1); changedPlaylists(); });
       add(t('Move up'), () => movePlaylistItem(pl, viewIndex, -1), searching || viewIndex <= 0);
@@ -506,11 +525,47 @@ async function main() {
     changedPlaylists();
   });
 
+  // ---- Sorting the music list, and the artists read from the files' tags ----------------------------------------------
+  function sortKey(e, by) {
+    return by === 'name' ? e.name.replace(/\.[^.]+$/, '') : by === 'artist' ? (e.artist || '') : by === 'format' ? ((/\.([^.]+)$/.exec(e.name) || [])[1] || '').toLowerCase() : e.path;
+  }
+  function renderSortControls() {
+    $('sortSel').value = library.sort;
+    $('sortDir').textContent = library.sortDesc ? '\u25BC' : '\u25B2';
+    $('sortDir').title = t(library.sortDesc ? 'Descending' : 'Ascending');
+    $('sortDir').disabled = !library.sort;
+  }
+  $('sortSel').addEventListener('change', () => { library.sort = $('sortSel').value; store.set('musicSort', library.sort); renderSortControls(); applyFilter(); });
+  $('sortDir').addEventListener('click', () => { library.sortDesc = !library.sortDesc; store.set('musicSortDesc', library.sortDesc ? '1' : '0'); renderSortControls(); applyFilter(); });
+  renderSortControls();
+
+  let artistSerial = 0;
+  /** Reads the artist tag of every .mp3 / .aac / .m4a in the folder, in the background, and fills the artists in as they arrive; a sort by artist is redone at the end. */
+  async function startArtistScan() {
+    const serial = ++artistSerial;
+    const todo = library.entries.filter(e => /\.(mp3|m4a|aac)$/i.test(e.name));
+    if (todo.length === 0) return;
+    let next = 0, sinceRefresh = 0;
+    const refresh = final => {
+      if (serial !== artistSerial) return;
+      if (final && library.sort === 'artist') applyFilter(); else { musicList.refresh(); tunerList.refresh(); }
+    };
+    const worker = async () => {
+      while (next < todo.length && serial === artistSerial) {
+        const e = todo[next++];
+        try { const a = await readArtist(await fileOf(e), e.name); if (a) e.artist = a; } catch (err) { /* skip it */ }
+        if (++sinceRefresh >= 200) { sinceRefresh = 0; refresh(false); }
+      }
+    };
+    await Promise.all([worker(), worker(), worker(), worker()]);
+    refresh(true);
+  }
+
   // ---- Lists -----------------------------------------------------------------------------------------------
   const renderTrack = (row, e, i) => {
     row.classList.add('hasMore');
     const ext = (/\.([^.]+)$/.exec(e.name) || [])[1] || '';
-    row.append(el('div', 't', e.name.replace(/\.[^.]+$/, '')), el('div', 's', (ext ? ext.toUpperCase() + '  \u00B7  ' : '') + e.path));
+    row.append(el('div', 't', e.name.replace(/\.[^.]+$/, '')), el('div', 's', [e.artist, ext.toUpperCase(), e.path].filter(Boolean).join('  \u00B7  ')));
     const more = el('button', 'more', '\u22EF');
     more.title = t('Playlists'); more.setAttribute('aria-label', t('Playlists'));
     more.addEventListener('click', ev => { ev.stopPropagation(); openPlMenu(more, e, library.filteredFrom[i]); });
@@ -946,7 +1001,7 @@ async function main() {
     $('folderName').textContent = library.folderName ? t('{folder} ({n} tracks)', { folder: library.folderName, n: library.entries.length.toLocaleString() }) : '';
     const rb = $('reopenFolder'); if (!rb.hidden && rb.dataset.name) rb.textContent = t('Reopen "{name}"', { name: rb.dataset.name });
     showNowPlaying();
-    musicList.refresh(); tunerList.refresh(); tunerStations.refresh(); radioList.refresh();
+    musicList.refresh(); tunerList.refresh(); tunerStations.refresh(); radioList.refresh(); renderSortControls();
     updateSoundState();
     if (!$('compendium').hidden) openCompendium();
   }
