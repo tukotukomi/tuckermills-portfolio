@@ -272,6 +272,13 @@ export function resolvePlaylist(playlist, resolver) {
   return { found: found, at: at, missing: missing };
 }
 
+/** The places in a playlist of the items that have no local file. */
+export function missingIndexes(playlist, resolver) {
+  const out = [];
+  playlist.items.forEach((it, i) => { if (!resolver.resolve(it)) out.push(i); });
+  return out;
+}
+
 /** `name`, or `name (2)`, `name (3)`... so that it is not one of `taken`. */
 export function uniqueName(taken, name) {
   const lower = new Set(taken.map(n => n.toLowerCase()));

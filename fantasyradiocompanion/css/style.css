@@ -91,7 +91,11 @@ html.themed .vlist .row .support { text-shadow: none; }
 #plNote:empty { display: none; }
 .vlist .row.hasMore { padding-right: 46px; }
 .vlist .row .more { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); width: 34px; height: 30px; padding: 0; line-height: 1; font-size: 18px; }
-#plPick h3 { margin: 0 0 10px; }
+#plPick h3, #plMissing h3 { margin: 0 0 10px; }
+#plMissingNote { margin: 0 0 8px; }
+#plMissingList { max-height: 50vh; overflow: auto; display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; min-width: min(480px, 80vw); }
+#plMissingList .mt { font-weight: 600; overflow-wrap: anywhere; }
+#plMissingList .mp { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
 #plPickList { max-height: 50vh; overflow: auto; display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
 #plPickList label { display: flex; gap: 8px; align-items: baseline; }
 #plPickList .muted { font-size: 12px; }

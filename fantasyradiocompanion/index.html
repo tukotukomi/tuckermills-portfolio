@@ -47,6 +47,7 @@
         <button id="plNew">New</button>
         <button id="plRename">Rename</button>
         <button id="plDelete">Delete</button>
+        <button id="plMissingBtn">Show missing</button>
         <input id="plFile" type="file" accept=".m3u,.m3u8,.pls,.xml,.nml,.txt,.tsv" multiple hidden>
         <span id="plNote" class="muted" role="status"></span>
       </div>
@@ -144,6 +145,13 @@
   <h3 id="plPickTitle">Import which playlists?</h3>
   <div id="plPickList"></div>
   <form method="dialog" class="plPickBtns"><button id="plPickAll" type="button">All</button><button id="plPickNone" type="button">None</button><button id="plPickOk" class="primary" value="ok">Import</button><button value="cancel">Cancel</button></form>
+</dialog>
+
+<dialog id="plMissing">
+  <h3 id="plMissingTitle">Missing tracks</h3>
+  <p id="plMissingNote" class="muted"></p>
+  <div id="plMissingList"></div>
+  <form method="dialog" class="plPickBtns"><button id="plMissingCopy" type="button">Copy list</button><button id="plMissingRemove" type="button">Remove missing tracks</button><button id="plMissingClose" class="primary" value="close">Close</button></form>
 </dialog>
 
 <div id="plMenu" class="plmenu" hidden></div>

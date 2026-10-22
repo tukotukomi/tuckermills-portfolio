@@ -5,7 +5,7 @@ import { Sprites, PARTY, PARTY_NAMES } from './sprites.js';
 import { Visualizer, IS_MOBILE, BLURB } from './visualizer.js';
 import { t, setLanguage, getLanguage, detectLanguage, applyDom, onLanguageChange } from './i18n.js';
 import { logFormat, logCategory } from './advlog.js';
-import { readPlaylistFile, makeResolver, resolvePlaylist, uniqueName, trimItem } from './playlists.js';
+import { readPlaylistFile, makeResolver, resolvePlaylist, missingIndexes, uniqueName, trimItem } from './playlists.js';
 import { Sound } from './sfx.js';
 import { Player, STATIONS, AUDIO_EXTENSIONS, parsePlaylist } from './player.js';
 import { SUPPORT } from './support.js';
@@ -346,6 +346,7 @@ async function main() {
     }
     const pl = currentPlaylist();
     $('plRename').disabled = $('plDelete').disabled = !pl;
+    $('plMissingBtn').disabled = !pl || plView.missing === 0;   // (something to show only when part of the playlist is not in the folder)
     $('tunerPlBar').hidden = playlists.length === 0;
     $('plNote').textContent = (plNoteText ? plNoteText + '  ' : '') + (pl ? (library.folderName ? t('{n} tracks, {m} not in this folder', { n: library.view.length.toLocaleString(), m: plView.missing.toLocaleString() }) : t('Choose the music folder to play this playlist.')) : '');
   }
@@ -448,6 +449,37 @@ async function main() {
     changedPlaylists();
   }
 
+  /** The tracks of the playlist showing that are not in the music folder: what the playlist says about them, so they can be looked for. */
+  function showMissing() {
+    const pl = currentPlaylist(); if (!pl) return;
+    const idx = missingIndexes(pl, resolver);
+    if (idx.length === 0) return;
+    const list = $('plMissingList');
+    list.textContent = '';
+    const lines = [];
+    for (const i of idx) {
+      const it = pl.items[i];
+      const title = it.title || it.path.split('/').pop().replace(/\.[^.]+$/, '');
+      const name = (it.artist ? it.artist + ' - ' : '') + title;
+      const row = el('div');
+      row.append(el('div', 'mt', name), el('div', 'mp', it.path));
+      list.appendChild(row);
+      lines.push(name + '\t' + it.path);
+    }
+    $('plMissingNote').textContent = t('{n} track(s) in "{name}" were not found in the music folder.', { n: idx.length.toLocaleString(), name: pl.name });
+    $('plMissingCopy').onclick = async () => { try { await navigator.clipboard.writeText(lines.join('\n')); $('plMissingNote').textContent = t('Copied.'); } catch (e) { console.warn(e); } };
+    $('plMissingRemove').onclick = () => {
+      if (!confirm(t('Remove the {n} missing track(s) from "{name}"?', { n: idx.length.toLocaleString(), name: pl.name }))) return;
+      const drop = new Set(idx);
+      pl.items = pl.items.filter((x, i) => !drop.has(i));
+      plNoteText = '';
+      $('plMissing').close();
+      changedPlaylists();
+    };
+    $('plMissing').showModal();
+  }
+  $('plMissingBtn').addEventListener('click', showMissing);
+
   for (const id of ['plSel', 'tunerPlSel']) $(id).addEventListener('change', e => setPlaylistView(e.target.value));
   $('plImport').addEventListener('click', () => $('plFile').click());
   $('plFile').addEventListener('change', () => { const files = Array.from($('plFile').files); $('plFile').value = ''; if (files.length) importPlaylistFiles(files); });
@@ -477,7 +509,8 @@ async function main() {
   // ---- Lists -----------------------------------------------------------------------------------------------
   const renderTrack = (row, e, i) => {
     row.classList.add('hasMore');
-    row.append(el('div', 't', e.name.replace(/\.[^.]+$/, '')), el('div', 's', e.path));
+    const ext = (/\.([^.]+)$/.exec(e.name) || [])[1] || '';
+    row.append(el('div', 't', e.name.replace(/\.[^.]+$/, '')), el('div', 's', (ext ? ext.toUpperCase() + '  \u00B7  ' : '') + e.path));
     const more = el('button', 'more', '\u22EF');
     more.title = t('Playlists'); more.setAttribute('aria-label', t('Playlists'));
     more.addEventListener('click', ev => { ev.stopPropagation(); openPlMenu(more, e, library.filteredFrom[i]); });
