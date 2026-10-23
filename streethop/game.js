@@ -24,12 +24,16 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const lerp = (a, b, t) => a + (b - a) * t;
 // Difficulty. The opening is calm: OPEN rows of plain grass, the centre column
 // kept clear on grass until STRAIGHT, one hazard lane at a time, slow traffic
-// with wide gaps. warm() fades that easing out by row 60; diff() then keeps
-// ramping speed and density out to row 230. Tougher hazards unlock by row.
-const OPEN = 8, STRAIGHT = 25;
-const UNLOCK = { pasture: 8, water: 10, pads: 15, wagon: 18, multiRoad: 20, wheat: 25, geese: 25, kayak: 30, bull: 40, crops: 60, pastureBull: 80 };
-const diff = r => clamp((r - 10) / 220, 0, 1);
-const warm = r => clamp(r / 60, 0, 1);
+// with wide gaps. warm() fades that easing out; diff() keeps ramping speed and
+// density after that. Tougher hazards unlock by row.
+// PACE stretches every one of those distances: at PACE 2 the curve climbs half
+// as fast as at PACE 1 (row 100 plays like row 50 did), and full difficulty
+// arrives at row 460 instead of 230. Row numbers below are in PACE-1 terms.
+const PACE = 2;
+const OPEN = 8 * PACE, STRAIGHT = 25 * PACE;
+const UNLOCK = Object.fromEntries(Object.entries({ pasture: 8, water: 10, pads: 15, wagon: 18, multiRoad: 20, wheat: 25, geese: 25, kayak: 30, bull: 40, crops: 60, pastureBull: 80 }).map(([k, v]) => [k, v * PACE]));
+const diff = r => clamp((r - 10 * PACE) / (220 * PACE), 0, 1);
+const warm = r => clamp(r / (60 * PACE), 0, 1);
 const speedK = r => 0.6 + 0.4 * warm(r);
 const gapK = r => 1.7 - 0.7 * warm(r);
 
@@ -1018,7 +1022,7 @@ function nextType(r, prev) {
     const d = diff(r), last = prev.type, early = r < STRAIGHT, on = k => r >= UNLOCK[k];
     let t;
     // a grass break after every hazard until STRAIGHT, tapering to 45% of the time by row 60
-    if (last !== 'grass' && Math.random() < lerp(1, 0.45, clamp((r - STRAIGHT) / 35, 0, 1))) t = 'grass';
+    if (last !== 'grass' && Math.random() < lerp(1, 0.45, clamp((r - STRAIGHT) / (35 * PACE), 0, 1))) t = 'grass';
     else {
       const w = [['grass', 0.2], ['road', 0.24 + 0.05 * d], ['pasture', on('pasture') ? 0.16 : 0], ['water', on('water') ? 0.2 : 0],
         ['bull', on('bull') ? 0.08 + 0.05 * d : 0], ['wheat', on('wheat') ? 0.1 : 0], ['crops', on('crops') ? 0.07 + 0.05 * d : 0]];
@@ -1030,10 +1034,10 @@ function nextType(r, prev) {
     else if (t === 'road') queue = Array(on('multiRoad') ? ri(1, 2 + Math.round(2 * d)) : 1).fill('road');
     else if (t === 'pasture') queue = Array(early ? 1 : ri(1, 2)).fill('pasture');
     else if (t === 'bull') queue = Array(ri(1, d > 0.4 ? 2 : 1)).fill('bull');
-    else if (t === 'wheat') queue = Array(r < 40 ? 1 : ri(1, 2)).fill('wheat');
+    else if (t === 'wheat') queue = Array(r < 40 * PACE ? 1 : ri(1, 2)).fill('wheat');
     else if (t === 'crops') queue = ['crops'];
     else if (on('pads') && last === 'grass' && Math.random() < 0.3) queue = ['pads', 'grass'];
-    else queue = Array(r < 30 ? 1 : ri(1, 2 + Math.round(d))).fill('water');
+    else queue = Array(r < 30 * PACE ? 1 : ri(1, 2 + Math.round(d))).fill('water');
   }
   return queue.shift();
 }
@@ -1171,7 +1175,7 @@ function addLane(r) {
         addMovers(lane, () => 'kayak' + (Math.random() < 0.6 ? 2 : 3) + '_' + (Math.random() < 0.5 ? col : ri(0, KAYAKS.length - 1)), 1.3, 2.4 + d, -0.1);
       } else {
         lane.speed = rand(0.9, 1.9) * (1 + 0.45 * d);
-        const lens = r < 30 ? ['log3', 'log4', 'log4'] : d > 0.5 ? ['log2', 'log2', 'log3'] : ['log2', 'log3', 'log3', 'log4'];
+        const lens = r < 30 * PACE ? ['log3', 'log4', 'log4'] : d > 0.5 ? ['log2', 'log2', 'log3'] : ['log2', 'log3', 'log3', 'log4'];
         addMovers(lane, () => pick(lens), 1.2, 2.4 + d, -0.1);
       }
     } else {
