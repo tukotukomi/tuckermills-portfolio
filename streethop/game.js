@@ -207,7 +207,9 @@ const leafGeo = () => prim('leaf', () => {
 const VMAT = toon({ vertexColors: true });
 
 class VB {
-  constructor() { this.p = []; this.n = []; this.c = []; this.i = []; }
+  // d = detail: 1 for the hoppers, lower for traffic and scenery (fewer facets per curve)
+  constructor(d = 1) { this.p = []; this.n = []; this.c = []; this.i = []; this.d = d; }
+  seg(n, min = 5) { return Math.max(min, Math.round(n * this.d)); }
   box(w, h, d, x, y, z, color, rx = 0, ry = 0, rz = 0) {
     _c.set(color);
     const rot = rx || ry || rz;
@@ -263,12 +265,13 @@ class VB {
     return this;
   }
   // Rounded primitives. Shared geometry is cached by size, so repeated parts are cheap to build.
-  ball(rx, ry, rz, x, y, z, color, ax = 0, ay = 0, az = 0) { return this.add(prim('ball', () => new THREE.SphereGeometry(1, 20, 14)), color, x, y, z, ax, ay, az, rx, ry, rz); }
+  ball(rx, ry, rz, x, y, z, color, ax = 0, ay = 0, az = 0) { const a = this.seg(20, 8), b = this.seg(14, 5); return this.add(prim(`ball${a}`, () => new THREE.SphereGeometry(1, a, b)), color, x, y, z, ax, ay, az, rx, ry, rz); }
   hiBall(rx, ry, rz, x, y, z, color, ax = 0, ay = 0, az = 0) { return this.add(prim('hiBall', () => new THREE.SphereGeometry(1, 40, 28)), color, x, y, z, ax, ay, az, rx, ry, rz); }
-  cap(r, len, x, y, z, color, ax = 0, ay = 0, az = 0) { return this.add(prim(`cap${r}/${len}`, () => new THREE.CapsuleGeometry(r, len, 6, 14)), color, x, y, z, ax, ay, az); }
-  rbox(w, h, d, x, y, z, color, rad, ax = 0, ay = 0, az = 0) { return this.add(prim(`rbox${w}/${h}/${d}/${rad}`, () => new RoundedBoxGeometry(w, h, d, 4, rad)), color, x, y, z, ax, ay, az); }
-  cone(r, h, x, y, z, color, ax = 0, ay = 0, az = 0) { return this.add(prim(`cone${r}/${h}`, () => new THREE.ConeGeometry(r, h, 18)), color, x, y, z, ax, ay, az); }
-  torus(R, tube, arc, x, y, z, color, ax = 0, ay = 0, az = 0) { return this.add(prim(`torus${R}/${tube}/${arc}`, () => new THREE.TorusGeometry(R, tube, 10, 28, arc)), color, x, y, z, ax, ay, az); }
+  cap(r, len, x, y, z, color, ax = 0, ay = 0, az = 0) { const a = this.seg(6, 2), b = this.seg(14, 6); return this.add(prim(`cap${r}/${len}/${b}`, () => new THREE.CapsuleGeometry(r, len, a, b)), color, x, y, z, ax, ay, az); }
+  rbox(w, h, d, x, y, z, color, rad, ax = 0, ay = 0, az = 0) { const a = this.seg(4, 2); return this.add(prim(`rbox${w}/${h}/${d}/${rad}/${a}`, () => new RoundedBoxGeometry(w, h, d, a, rad)), color, x, y, z, ax, ay, az); }
+  cone(r, h, x, y, z, color, ax = 0, ay = 0, az = 0) { const a = this.seg(18, 6); return this.add(prim(`cone${r}/${h}/${a}`, () => new THREE.ConeGeometry(r, h, a)), color, x, y, z, ax, ay, az); }
+  cyl(rt, rb, h, x, y, z, color, ax = 0, ay = 0, az = 0) { const a = this.seg(20, 7); return this.add(prim(`cyl${rt}/${rb}/${h}/${a}`, () => new THREE.CylinderGeometry(rt, rb, h, a)), color, x, y, z, ax, ay, az); }
+  torus(R, tube, arc, x, y, z, color, ax = 0, ay = 0, az = 0) { const a = this.seg(10, 4), b = this.seg(28, 8); return this.add(prim(`torus${R}/${tube}/${arc}/${b}`, () => new THREE.TorusGeometry(R, tube, a, b, arc)), color, x, y, z, ax, ay, az); }
 }
 const shade = (hex, f) => new THREE.Color(hex).multiplyScalar(f).getHex();
 
@@ -496,245 +499,247 @@ const HEROES = [
 let heroId = store.get('bl-hero', 'betty');
 const hero = () => HEROES.find(h => h.id === heroId) || HEROES[0];
 
+// ---------- traffic & animals: rounded, with moving parts ----------
+// Each kind builds a body plus parts that move: legs swing from the hip,
+// wheels roll, the combine's reel and the plane's propeller spin.
+// Everything faces +x; spawnMover turns it round for lanes heading the other way.
+const TRAFFIC_D = 0.6;   // detail level for traffic (the hoppers use 1, scenery less)
+const part = (geo, x, y, z, role, extra = {}) => ({ geo, x, y, z, role, ...extra });
+function centred(m, minX, maxX) {   // shift body and parts so the model is centred on x = 0
+  const dx = -(minX + maxX) / 2;
+  m.geo.translate(dx, 0, 0);
+  for (const p of m.parts) p.x += dx;
+  return m;
+}
+function wheelGeo(r, w, tire, hub) {
+  const v = new VB(TRAFFIC_D);
+  v.cyl(r, r, w, 0, 0, 0, tire, Math.PI / 2, 0, 0);
+  v.cyl(r * 0.5, r * 0.5, w + 0.02, 0, 0, 0, hub, Math.PI / 2, 0, 0);
+  v.rbox(r * 1.3, r * 0.22, w + 0.04, 0, 0, 0, hub, r * 0.1);       // a spoke, so you can see it turn
+  return v.geometry();
+}
+// A leg hanging from a hip at height `hip`, reaching the ground.
+function legGeo(hip, r, col, hoof) {
+  const v = new VB(TRAFFIC_D), len = hip - 1.7 * r;
+  v.cap(r, len, 0, -len / 2 - r * 0.5, 0, col);
+  v.ball(r * 1.15, r * 0.7, r * 1.15, 0, -len - r, 0, hoof);
+  return v.geometry();
+}
+
 function buildTractor(col, hub, wagon) {
-  const b = new VB();
-  const dark = 0x2a2a2a;
-  b.box(1.5, 0.14, 0.42, 0.15, 0.32, 0, 0x3a3a3a);
-  b.box(0.85, 0.38, 0.5, 0.45, 0.56, 0, col);
-  b.box(0.86, 0.025, 0.12, 0.45, 0.76, 0, hub);
-  b.box(0.62, 0.42, 0.66, -0.35, 0.6, 0, col);
-  b.box(0.52, 0.36, 0.6, -0.35, 0.99, 0, 0xbfe9ff);
-  for (const sx of [-1, 1]) for (const sz of [-1, 1]) b.box(0.06, 0.42, 0.06, -0.35 + sx * 0.28, 1.0, sz * 0.31, col);
-  b.box(0.76, 0.07, 0.76, -0.35, 1.24, 0, 0xffffff);
+  const b = new VB(TRAFFIC_D), dark = 0x2a2a2a, glass = 0xbfe9ff;
+  b.rbox(1.5, 0.14, 0.42, 0.15, 0.32, 0, 0x3a3a3a, 0.05);              // chassis
+  b.rbox(0.85, 0.38, 0.5, 0.45, 0.56, 0, col, 0.12);                    // rounded hood
+  b.rbox(0.86, 0.03, 0.12, 0.45, 0.755, 0, hub, 0.012);
+  b.rbox(0.62, 0.42, 0.66, -0.35, 0.6, 0, col, 0.1);                    // cab
+  b.rbox(0.54, 0.36, 0.6, -0.35, 0.99, 0, glass, 0.08);
+  b.rbox(0.8, 0.08, 0.8, -0.35, 1.24, 0, 0xffffff, 0.035);              // roof
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) b.cyl(0.03, 0.03, 0.42, -0.35 + sx * 0.29, 1.0, sz * 0.32, col);
+  b.rbox(0.06, 0.26, 0.38, 0.88, 0.55, 0, 0x444444, 0.02);             // grille
+  for (const s of [-1, 1]) b.cyl(0.05, 0.05, 0.03, 0.9, 0.63, s * 0.17, 0xfff3a0, 0, 0, Math.PI / 2);
+  b.cyl(0.035, 0.035, 0.38, 0.55, 0.92, 0.12, 0x555555);                // exhaust
+  b.ball(0.05, 0.03, 0.05, 0.55, 1.12, 0.12, 0x333333);
+  const big = wheelGeo(0.31, 0.2, dark, hub), small = wheelGeo(0.17, 0.14, dark, hub), parts = [];
   for (const s of [-1, 1]) {
-    b.box(0.62, 0.62, 0.2, -0.4, 0.31, s * 0.38, dark);
-    b.box(0.26, 0.26, 0.04, -0.4, 0.31, s * 0.49, hub);
-    b.box(0.34, 0.34, 0.14, 0.68, 0.17, s * 0.3, dark);
-    b.box(0.14, 0.14, 0.03, 0.68, 0.17, s * 0.38, hub);
-    b.box(0.03, 0.08, 0.08, 0.885, 0.63, s * 0.17, 0xfff3a0);
+    parts.push(part(big, -0.4, 0.31, s * 0.38, 'wheel', { r: 0.31 }));
+    parts.push(part(small, 0.68, 0.17, s * 0.3, 'wheel', { r: 0.17 }));
   }
-  b.box(0.03, 0.26, 0.36, 0.88, 0.55, 0, 0x444444);
-  b.box(0.07, 0.38, 0.07, 0.55, 0.92, 0.12, 0x555555);
-  b.box(0.1, 0.04, 0.1, 0.55, 1.12, 0.12, 0x333333);
   let minX = -0.75;
   if (wagon) {
     const hay = 0xe8c45c, band = 0xc9a23e;
-    b.box(0.3, 0.05, 0.06, -0.85, 0.3, 0, 0x555555);
-    b.box(1.25, 0.12, 0.74, -1.6, 0.42, 0, 0x9c6b3c);
-    for (const s of [-1, 1]) {
-      b.box(0.32, 0.32, 0.12, -1.6, 0.16, s * 0.36, dark);
-      b.box(1.25, 0.14, 0.04, -1.6, 0.54, s * 0.36, 0x8a5a33);
+    b.cap(0.03, 0.28, -0.85, 0.3, 0, 0x555555, 0, 0, Math.PI / 2);      // hitch
+    b.rbox(1.25, 0.12, 0.74, -1.6, 0.42, 0, 0x9c6b3c, 0.04);
+    for (const s of [-1, 1]) b.rbox(1.25, 0.14, 0.05, -1.6, 0.54, s * 0.36, 0x8a5a33, 0.02);
+    for (const [x, y] of [[-1.3, 0.7], [-1.9, 0.7], [-1.6, 1.08]]) {     // round bales
+      b.cyl(0.22, 0.22, 0.6, x, y, 0, hay, Math.PI / 2, 0, 0);
+      for (const s of [-1, 1]) b.torus(0.12, 0.018, Math.PI * 2, x, y, s * 0.3, band);
     }
-    for (const x of [-1.3, -1.9]) {
-      b.box(0.55, 0.4, 0.6, x, 0.68, 0, hay);
-      b.box(0.04, 0.42, 0.62, x, 0.68, 0, band);
-    }
-    b.box(0.55, 0.36, 0.6, -1.6, 1.06, 0, hay);
-    b.box(0.04, 0.38, 0.62, -1.6, 1.06, 0, band);
+    const wg = wheelGeo(0.16, 0.12, dark, hub);
+    for (const s of [-1, 1]) parts.push(part(wg, -1.6, 0.16, s * 0.36, 'wheel', { r: 0.16 }));
     minX = -2.22;
   }
-  const g = b.geometry();
-  g.translate(-(minX + 0.95) / 2, 0, 0);
-  return g;
+  return centred({ geo: b.geometry(), parts }, minX, 0.95);
 }
 
+const COW_SPOTS = [[-0.2, 0.75, 0.27, 0.15], [0.2, 0.62, -0.27, 0.13], [-0.25, 0.6, -0.26, 0.12], [0.05, 0.9, 0.05, 0.14], [0.32, 0.78, 0.22, 0.1], [-0.42, 0.7, 0.05, 0.12]];
+const cowSpots = (x, y, z) => COW_SPOTS.some(([sx, sy, sz, r]) => (x - sx) ** 2 + (y - sy) ** 2 + (z - sz) ** 2 < r * r) ? 0x222222 : 0xfafafa;
 function buildCow() {
-  const b = new VB();
-  const W = 0xfafafa, K = 0x222222, PINK = 0xffb3c6;
-  b.box(0.95, 0.5, 0.56, 0, 0.62, 0, W);
-  b.box(0.3, 0.24, 0.02, -0.15, 0.66, 0.285, K);
-  b.box(0.2, 0.18, 0.02, 0.25, 0.56, 0.285, K);
-  b.box(0.24, 0.2, 0.02, 0.2, 0.6, -0.285, K);
-  b.box(0.26, 0.18, 0.02, -0.22, 0.62, -0.285, K);
-  b.box(0.3, 0.02, 0.25, 0.05, 0.875, 0.05, K);
-  for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
-    b.box(0.13, 0.38, 0.13, sx * 0.33, 0.19, sz * 0.19, W);
-    b.box(0.14, 0.06, 0.14, sx * 0.33, 0.03, sz * 0.19, 0x444444);
-  }
-  b.box(0.18, 0.08, 0.18, -0.2, 0.34, 0, PINK);
-  b.box(0.36, 0.36, 0.36, 0.6, 0.86, 0, W);
-  b.box(0.1, 0.18, 0.3, 0.82, 0.78, 0, PINK);
-  b.box(0.12, 0.12, 0.12, 0.54, 0.6, 0, 0xffcf3a); // bell
+  const b = new VB(TRAFFIC_D), W = 0xfafafa, PINK = 0xffb3c6;
+  b.ball(0.48, 0.28, 0.29, 0, 0.64, 0, cowSpots);
+  b.ball(0.1, 0.06, 0.1, -0.15, 0.37, 0, PINK);                         // udder
+  b.ball(0.19, 0.18, 0.17, 0.56, 0.84, 0, (x, y, z) => z > 0.06 && y > 0.82 ? 0x222222 : W);  // head, one eye patch
+  b.ball(0.1, 0.09, 0.14, 0.72, 0.77, 0, PINK);                         // snout
+  b.ball(0.06, 0.06, 0.06, 0.5, 0.63, 0, 0xffcf3a);                     // bell
+  b.cap(0.02, 0.3, -0.5, 0.6, 0, W, 0, 0, 0.25);                        // tail
+  b.ball(0.045, 0.07, 0.045, -0.54, 0.42, 0, 0x222222);
   for (const s of [-1, 1]) {
-    b.box(0.02, 0.04, 0.04, 0.875, 0.8, s * 0.07, 0x9b4a5e);
-    b.box(0.04, 0.06, 0.06, 0.785, 0.95, s * 0.12, K);
-    b.box(0.06, 0.12, 0.06, 0.58, 1.08, s * 0.13, 0xfff1cc);
-    b.box(0.06, 0.08, 0.16, 0.56, 0.97, s * 0.25, W);
+    b.ball(0.02, 0.025, 0.02, 0.815, 0.79, s * 0.05, 0x9b4a5e);         // nostrils
+    b.ball(0.026, 0.032, 0.02, 0.67, 0.88, s * 0.135, 0x222222);        // eyes
+    b.cone(0.026, 0.1, 0.52, 1.0, s * 0.1, 0xfff1cc, -s * 0.4, 0, 0);   // horns
+    b.ball(0.09, 0.03, 0.05, 0.5, 0.92, s * 0.2, W, -s * 0.4, 0, 0);    // ears
   }
-  b.box(0.04, 0.3, 0.04, -0.49, 0.62, 0, W);
-  b.box(0.07, 0.08, 0.07, -0.49, 0.45, 0, K);
-  const g = b.geometry();
-  g.translate(-0.12, 0, 0);
-  return g;
+  const lg = legGeo(0.5, 0.055, W, 0x444444), parts = [];
+  for (const [x, z, ph] of [[0.28, 0.16, 0], [0.28, -0.16, Math.PI], [-0.28, 0.16, Math.PI], [-0.28, -0.16, 0]]) parts.push(part(lg, x, 0.5, z, 'leg', { ph }));
+  return centred({ geo: b.geometry(), parts }, -0.56, 0.84);
 }
 
 function buildBull() {
-  const b = new VB();
-  const B = 0x4a2a1c, HORN = 0xfff1d6;
-  b.box(1.0, 0.56, 0.6, 0, 0.64, 0, B);
-  b.box(0.5, 0.14, 0.5, 0.15, 0.97, 0, shade(B, 1.15));
-  for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
-    b.box(0.15, 0.38, 0.15, sx * 0.34, 0.19, sz * 0.2, B);
-    b.box(0.16, 0.06, 0.16, sx * 0.34, 0.03, sz * 0.2, 0x111111);
-  }
-  b.box(0.4, 0.38, 0.4, 0.64, 0.78, 0, B);
-  b.box(0.1, 0.2, 0.32, 0.87, 0.72, 0, 0xc9a07a);
-  b.box(0.03, 0.1, 0.14, 0.925, 0.6, 0, 0xffd23f);
+  const b = new VB(TRAFFIC_D), B = 0x4a2a1c, HORN = 0xfff1d6;
+  b.ball(0.52, 0.3, 0.31, 0, 0.68, 0, B);
+  b.ball(0.26, 0.16, 0.26, 0.2, 0.92, 0, shade(B, 1.15));               // hump
+  b.ball(0.2, 0.19, 0.19, 0.62, 0.74, 0, B);                            // lowered head
+  b.ball(0.1, 0.11, 0.15, 0.8, 0.68, 0, 0xc9a07a);                      // snout
+  b.torus(0.045, 0.012, Math.PI * 2, 0.89, 0.6, 0, 0xffd23f, 0, Math.PI / 2, 0); // nose ring
+  b.cap(0.02, 0.32, -0.55, 0.64, 0, B, 0, 0, 0.3);                      // tail
+  b.ball(0.045, 0.07, 0.045, -0.6, 0.45, 0, 0x111111);
   for (const s of [-1, 1]) {
-    b.box(0.08, 0.08, 0.22, 0.62, 0.98, s * 0.27, HORN);
-    b.box(0.07, 0.18, 0.07, 0.62, 1.08, s * 0.38, HORN);
-    b.box(0.04, 0.06, 0.07, 0.83, 0.88, s * 0.13, 0xff2020);
+    b.cap(0.035, 0.16, 0.6, 0.92, s * 0.22, HORN, s * 1.1, 0, 0);       // horns sweep out...
+    b.cone(0.035, 0.12, 0.62, 1.03, s * 0.34, HORN, -s * 0.35, 0, 0);   // ...then up
+    b.ball(0.03, 0.026, 0.02, 0.77, 0.81, s * 0.11, 0xff2020);          // angry red eyes
   }
-  b.box(0.04, 0.3, 0.04, -0.52, 0.66, 0, B);
-  const g = b.geometry();
-  g.translate(-0.1, 0, 0);
-  return g;
-}
-
-function buildLog(len) {
-  const b = new VB();
-  b.box(len, 0.3, 0.66, 0, 0, 0, 0x8a5a33);
-  b.box(len - 0.1, 0.02, 0.36, 0, 0.155, 0.02, 0x9c6a3e);
-  for (const s of [-1, 1]) {
-    b.box(0.04, 0.26, 0.6, s * len / 2, 0, 0, 0xd9b27c);
-    b.box(0.045, 0.1, 0.22, s * len / 2, 0, 0, 0xb88a52);
-  }
-  b.box(0.12, 0.12, 0.12, len * 0.2, 0.08, 0.36, 0x7a4c2a);
-  return b.geometry();
+  const lg = legGeo(0.52, 0.065, B, 0x111111), parts = [];
+  // galloping: front legs together, back legs together, slightly offset
+  for (const [x, z, ph] of [[0.3, 0.18, 0], [0.3, -0.18, 0.5], [-0.3, 0.18, Math.PI], [-0.3, -0.18, Math.PI + 0.5]]) parts.push(part(lg, x, 0.52, z, 'leg', { ph }));
+  return centred({ geo: b.geometry(), parts }, -0.65, 0.92);
 }
 
 // A mother goose leading three goslings, all one mover.
 function buildGeese() {
-  const b = new VB();
-  const goose = (x, s, body, bill) => {
-    b.box(0.42 * s, 0.3 * s, 0.3 * s, x, 0.26 * s, 0, body);
-    b.box(0.14 * s, 0.1 * s, 0.26 * s, x - 0.22 * s, 0.33 * s, 0, body);   // tail
-    b.box(0.1 * s, 0.34 * s, 0.1 * s, x + 0.17 * s, 0.52 * s, 0, body);    // neck
-    b.box(0.18 * s, 0.14 * s, 0.13 * s, x + 0.2 * s, 0.7 * s, 0, body);    // head
-    b.box(0.12 * s, 0.05 * s, 0.07 * s, x + 0.33 * s, 0.68 * s, 0, bill);
-    for (const z of [-1, 1]) {
-      b.box(0.03 * s, 0.03 * s, 0.02 * s, x + 0.25 * s, 0.73 * s, z * 0.066 * s, 0x111111);
-      b.box(0.05 * s, 0.12 * s, 0.05 * s, x, 0.06 * s, z * 0.08 * s, 0xff9a2e);
-      b.box(0.3 * s, 0.14 * s, 0.03 * s, x - 0.02 * s, 0.3 * s, z * 0.16 * s, shade(body, 0.85)); // wings
+  const b = new VB(TRAFFIC_D), parts = [], ORANGE = 0xff9a2e;
+  const goose = (x, s, body, baby) => {
+    if (baby) {                                                         // fluffy round gosling
+      b.ball(0.2 * s, 0.17 * s, 0.16 * s, x, 0.32 * s, 0, body);
+      b.ball(0.12 * s, 0.11 * s, 0.11 * s, x + 0.16 * s, 0.52 * s, 0, body);
+      b.cone(0.03 * s, 0.08 * s, x + 0.29 * s, 0.5 * s, 0, ORANGE, 0, 0, -Math.PI / 2);
+      for (const z of [-1, 1]) b.ball(0.018 * s, 0.022 * s, 0.015 * s, x + 0.22 * s, 0.54 * s, z * 0.075 * s, 0x111111);
+    } else {
+      b.ball(0.22 * s, 0.15 * s, 0.14 * s, x, 0.3 * s, 0, body);
+      b.cone(0.07 * s, 0.15 * s, x - 0.24 * s, 0.34 * s, 0, body, 0, 0, Math.PI / 2);   // tail
+      b.cap(0.045 * s, 0.2 * s, x + 0.16 * s, 0.52 * s, 0, body, 0, 0, -0.25);         // neck
+      b.ball(0.085 * s, 0.075 * s, 0.075 * s, x + 0.22 * s, 0.7 * s, 0, body);
+      b.cone(0.035 * s, 0.11 * s, x + 0.33 * s, 0.68 * s, 0, ORANGE, 0, 0, -Math.PI / 2);
+      for (const z of [-1, 1]) b.ball(0.016 * s, 0.02 * s, 0.014 * s, x + 0.26 * s, 0.72 * s, z * 0.055 * s, 0x111111);
     }
+    for (const z of [-1, 1]) b.ball(0.15 * s, 0.07 * s, 0.03 * s, x - 0.02 * s, 0.33 * s, z * 0.13 * s, shade(body, 0.9)); // wings
+    const v = new VB(TRAFFIC_D);
+    v.cap(0.016 * s, 0.1 * s, 0, -0.07 * s, 0, ORANGE);
+    v.ball(0.05 * s, 0.015 * s, 0.04 * s, 0.03 * s, -0.145 * s, 0, ORANGE);       // webbed foot
+    const lg = v.geometry();
+    for (const z of [-1, 1]) parts.push(part(lg, x, 0.16 * s, z * 0.06 * s, 'leg', { ph: z > 0 ? 0 : Math.PI }));
   };
-  goose(0.75, 1.15, 0xffffff, 0xff9a2e);
-  goose(0.05, 0.62, 0xffe46b, 0xff9a2e);
-  goose(-0.4, 0.62, 0xffe46b, 0xff9a2e);
-  goose(-0.85, 0.62, 0xffe46b, 0xff9a2e);
-  return b.geometry();
+  goose(0.75, 1.15, 0xffffff);
+  for (const x of [0.05, -0.4, -0.85]) goose(x, 0.62, 0xffe46b, true);
+  return { geo: b.geometry(), parts };
 }
 
 function buildCombine() {
-  const b = new VB();
-  const R = 0x2f9a3a, Y = 0xffd23f, dark = 0x2a2a2a;
-  b.box(1.5, 0.75, 0.82, -0.25, 0.7, 0, R);               // body
-  b.box(0.6, 0.12, 0.84, -0.25, 1.1, 0, Y);               // stripe
-  b.box(0.52, 0.5, 0.6, 0.25, 1.32, 0, 0xbfe9ff);         // cab glass
-  b.box(0.6, 0.07, 0.68, 0.25, 1.6, 0, 0xffffff);
-  b.box(0.42, 0.42, 0.42, -0.65, 1.28, 0, R);             // grain tank
-  b.box(0.9, 0.12, 0.12, -0.75, 1.55, 0.3, Y, 0, 0, 0.35); // unloading auger
+  const b = new VB(TRAFFIC_D), G = 0x2f9a3a, Y = 0xffd23f, dark = 0x2a2a2a;
+  b.rbox(1.5, 0.75, 0.82, -0.25, 0.7, 0, G, 0.16);                      // body
+  b.rbox(0.62, 0.12, 0.84, -0.25, 1.1, 0, Y, 0.05);                     // stripe
+  b.rbox(0.54, 0.5, 0.62, 0.25, 1.32, 0, 0xbfe9ff, 0.1);                // cab glass
+  b.rbox(0.64, 0.07, 0.7, 0.25, 1.6, 0, 0xffffff, 0.03);
+  b.rbox(0.45, 0.42, 0.45, -0.65, 1.28, 0, G, 0.12);                    // grain tank
+  b.cyl(0.05, 0.05, 0.9, -0.75, 1.55, 0.3, Y, 0, 0, 1.2);               // unloading auger
+  b.rbox(0.14, 0.3, 1.9, 0.75, 0.32, 0, Y, 0.05);                       // header, wider than the lane
+  b.rbox(0.34, 0.06, 1.9, 0.86, 0.12, 0, Y, 0.025);
+  for (let z = -0.85; z <= 0.86; z += 0.17) b.cone(0.03, 0.14, 1.06, 0.12, z, 0xb0b0b0, 0, 0, -Math.PI / 2); // teeth
+  b.cyl(0.035, 0.035, 0.4, -0.2, 1.35, -0.25, 0x555555);                // exhaust
+  const parts = [];
+  const big = wheelGeo(0.33, 0.2, dark, Y), small = wheelGeo(0.2, 0.16, dark, Y);
   for (const s of [-1, 1]) {
-    b.box(0.66, 0.66, 0.2, 0.15, 0.33, s * 0.44, dark);
-    b.box(0.28, 0.28, 0.04, 0.15, 0.33, s * 0.55, Y);
-    b.box(0.4, 0.4, 0.16, -0.75, 0.2, s * 0.4, dark);
+    parts.push(part(big, 0.15, 0.33, s * 0.44, 'wheel', { r: 0.33 }));
+    parts.push(part(small, -0.75, 0.2, s * 0.4, 'wheel', { r: 0.2 }));
   }
-  b.box(0.12, 0.3, 1.9, 0.75, 0.32, 0, Y);                // header bar, wider than the lane
-  b.box(0.32, 0.06, 1.9, 0.86, 0.12, 0, Y);
-  for (let z = -0.85; z <= 0.86; z += 0.17) b.box(0.18, 0.04, 0.05, 1.06, 0.12, z, 0xb0b0b0); // teeth
-  b.box(0.06, 0.4, 0.06, -0.2, 1.35, -0.25, 0x555555);    // exhaust
-  const g = b.geometry();
-  g.translate(-0.05, 0, 0);
-  return g;
-}
-function buildReel() {
-  const b = new VB();
-  b.box(0.06, 0.06, 1.8, 0, 0, 0, 0xd63a2f);
-  for (let i = 0; i < 4; i++) b.box(0.05, 0.42, 0.05, 0, 0, 0, 0xd63a2f, i * Math.PI / 4, 0, 0);
+  const reel = new VB(TRAFFIC_D);                                       // spinning reel
+  reel.cyl(0.035, 0.035, 1.8, 0, 0, 0, 0xd63a2f, Math.PI / 2, 0, 0);
   for (let i = 0; i < 4; i++) {
     const a = i * Math.PI / 2;
-    b.box(0.05, 0.05, 1.8, 0, Math.sin(a) * 0.2, 0, 0xffd23f);
-    b.box(0.05, 0.05, 1.8, Math.cos(a) * 0.2, 0, 0, 0xffd23f);
+    reel.cyl(0.025, 0.025, 1.8, Math.cos(a) * 0.2, Math.sin(a) * 0.2, 0, Y, Math.PI / 2, 0, 0);
+    for (const z of [-0.85, 0, 0.85]) reel.rbox(0.42, 0.035, 0.035, 0, 0, z, 0xd63a2f, 0.012, 0, 0, a);
   }
-  return b.geometry();
+  parts.push(part(reel.geometry(), 0.95, 0.5, 0, 'spin', { axis: 'z', rate: -5 }));
+  return centred({ geo: b.geometry(), parts }, -1.05, 1.15);
 }
 
 // Crop duster biplane: flies low along its lane, wings overhang the lanes either side.
 function buildPlane() {
-  const b = new VB();
-  const Y = 0xffcf2a, R = 0xe2412f;
-  b.box(1.3, 0.3, 0.32, 0, 0.75, 0, Y);                   // fuselage
-  b.box(0.3, 0.26, 0.3, 0.6, 0.75, 0, R);                 // cowling
-  b.box(0.42, 0.06, 2.1, 0.2, 0.62, 0, Y);                // lower wing
-  b.box(0.42, 0.06, 2.1, 0.25, 1.08, 0, R);               // upper wing
+  const b = new VB(TRAFFIC_D), Y = 0xffcf2a, R = 0xe2412f;
+  b.cap(0.15, 1.0, -0.05, 0.75, 0, Y, 0, 0, Math.PI / 2);              // fuselage
+  b.cyl(0.17, 0.15, 0.16, 0.6, 0.75, 0, R, 0, 0, Math.PI / 2);          // cowling
+  b.rbox(0.42, 0.05, 2.1, 0.2, 0.6, 0, Y, 0.024);                       // lower wing
+  b.rbox(0.42, 0.05, 2.1, 0.25, 1.08, 0, R, 0.024);                     // upper wing
+  b.rbox(0.3, 0.05, 0.7, -0.6, 0.82, 0, R, 0.024);                      // tail plane
+  b.rbox(0.28, 0.3, 0.05, -0.62, 0.98, 0, R, 0.024);                    // fin
+  b.ball(0.11, 0.11, 0.11, 0.05, 0.96, 0, 0x6b4a8a);                    // pilot
+  b.cyl(0.02, 0.02, 0.5, -0.1, 0.56, 0, 0xbfbfbf, Math.PI / 2, 0, 0);   // spray boom
   for (const s of [-1, 1]) {
-    b.box(0.04, 0.42, 0.04, 0.25, 0.85, s * 0.85, 0x8a5a33);
-    b.box(0.12, 0.12, 0.08, 0.3, 0.28, s * 0.22, 0x2a2a2a); // wheels
-    b.box(0.04, 0.3, 0.04, 0.3, 0.45, s * 0.18, 0x555555);
+    b.cyl(0.02, 0.02, 0.44, 0.25, 0.84, s * 0.85, 0x8a5a33);            // wing struts
+    b.cyl(0.015, 0.015, 0.3, 0.3, 0.43, s * 0.17, 0x555555);
+    b.ball(0.07, 0.07, 0.04, 0.3, 0.26, s * 0.22, 0x2a2a2a);            // wheels
+    b.torus(0.03, 0.01, Math.PI * 2, 0.15, 0.99, s * 0.045, 0x111111, 0, Math.PI / 2, 0); // goggles
   }
-  b.box(0.32, 0.08, 0.7, -0.55, 0.82, 0, R);              // tail plane
-  b.box(0.3, 0.32, 0.06, -0.58, 0.98, 0, R);              // fin
-  b.box(0.22, 0.16, 0.24, 0.05, 0.96, 0, 0x6b4a8a);       // pilot (goggles)
-  b.box(0.06, 0.06, 0.26, 0.15, 0.99, 0, 0x111111);
-  b.box(0.5, 0.06, 0.2, -0.1, 0.56, 0, 0xbfbfbf);         // spray boom
-  return b.geometry();
-}
-function buildProp() {
-  const b = new VB();
-  b.box(0.04, 0.6, 0.08, 0, 0, 0, 0x333333);
-  b.box(0.05, 0.1, 0.1, 0, 0, 0, 0xcccccc);
-  return b.geometry();
+  const prop = new VB(TRAFFIC_D);
+  prop.cone(0.06, 0.12, 0.03, 0, 0, 0xcccccc, 0, 0, -Math.PI / 2);
+  prop.rbox(0.03, 0.6, 0.09, 0, 0, 0, 0x333333, 0.014);
+  return { geo: b.geometry(), parts: [part(prop.geometry(), 0.7, 0.75, 0, 'spin', { axis: 'x', rate: 40 })] };
 }
 
 const KAYAKS = [0xff4b4b, 0xffcf2a, 0x46a6ff, 0xff8fc8];
 function buildKayak(len, col) {
-  const b = new VB();
-  b.box(len, 0.22, 0.5, 0, 0, 0, col);
-  for (const s of [-1, 1]) b.box(0.3, 0.16, 0.3, s * (len / 2 + 0.12), -0.02, 0, col); // pointed ends
-  b.box(len - 0.3, 0.03, 0.34, 0, 0.115, 0, shade(col, 1.15));
-  for (let i = 0; i < len - 1; i++) {                     // cockpits
-    const x = -(len - 2) / 2 + i;
-    b.box(0.5, 0.04, 0.32, x, 0.125, 0, 0x4a3a66);
-  }
-  b.box(0.06, 0.04, 0.9, 0.15, 0.16, 0, 0x8a5a33, 0, 0.5, 0); // paddle across the deck
-  for (const s of [-1, 1]) b.box(0.14, 0.03, 0.2, 0.15 + s * 0.22, 0.16, s * 0.4, 0xffffff, 0, 0.5, 0);
-  return b.geometry();
+  const b = new VB(TRAFFIC_D);
+  b.ball(len / 2 + 0.12, 0.12, 0.26, 0, 0, 0, col);                     // hull, pointed at both ends
+  b.ball(len / 2 - 0.05, 0.035, 0.2, 0, 0.085, 0, shade(col, 1.15));   // deck
+  for (let i = 0; i < len - 1; i++) b.ball(0.24, 0.035, 0.15, -(len - 2) / 2 + i, 0.105, 0, 0x4a3a66);   // cockpits
+  b.cap(0.015, 0.8, 0.15, 0.15, 0, 0x8a5a33, Math.PI / 2, 0, 0);       // paddle across the deck
+  for (const s of [-1, 1]) b.ball(0.06, 0.015, 0.11, 0.15, 0.15, s * 0.47, 0xffffff);
+  return { geo: b.geometry(), parts: [] };
 }
 
-const GEO = {};
+function buildLog(len) {
+  const b = new VB(TRAFFIC_D), BARKC = 0x8a5a33;
+  b.cyl(0.17, 0.17, len, 0, 0, 0, BARKC, 0, 0, Math.PI / 2);
+  for (const s of [-1, 1]) {                                            // cut ends with rings
+    b.cyl(0.15, 0.15, 0.02, s * len / 2, 0, 0, 0xd9b27c, 0, 0, Math.PI / 2);
+    b.cyl(0.07, 0.07, 0.025, s * len / 2, 0, 0, 0xb88a52, 0, 0, Math.PI / 2);
+  }
+  b.ball(0.06, 0.06, 0.06, len * 0.2, 0.08, 0.15, 0x7a4c2a);            // knot
+  b.cyl(0.04, 0.06, 0.18, -len * 0.25, 0.17, 0.05, BARKC, 0, 0, 0.6);   // stubby branch
+  return { geo: b.geometry(), parts: [] };
+}
+
 const LEN = { cow: 1.35, bull: 1.45, log2: 2, log3: 3, log4: 4, geese: 2.2, combine: 2.6, plane: 1.6 };
 const TRACTORS = [[0xd63a2f, 0xffd23f], [0x3aa340, 0xffd23f], [0x3b7be0, 0xffffff], [0xff8a2a, 0x333333]];
 TRACTORS.forEach((_, i) => { LEN['tractor' + i] = 1.7; LEN['wagon' + i] = 3.15; });
 KAYAKS.forEach((_, i) => { LEN['kayak2_' + i] = 2.2; LEN['kayak3_' + i] = 3.2; });
-function geo(kind) {
-  if (GEO[kind]) return GEO[kind];
-  let g;
-  if (kind.startsWith('tractor')) { const [c, h] = TRACTORS[+kind.slice(7)]; g = buildTractor(c, h, false); }
-  else if (kind.startsWith('wagon')) { const [c, h] = TRACTORS[+kind.slice(5)]; g = buildTractor(c, h, true); }
-  else if (kind.startsWith('kayak')) g = buildKayak(+kind[5], KAYAKS[+kind.slice(7)]);
-  else if (kind === 'cow') g = buildCow();
-  else if (kind === 'bull') g = buildBull();
-  else if (kind === 'geese') g = buildGeese();
-  else if (kind === 'combine') g = buildCombine();
-  else if (kind === 'plane') g = buildPlane();
-  else if (kind === 'reel') g = buildReel();
-  else if (kind === 'prop') g = buildProp();
-  else g = buildLog(LEN[kind]);
-  return (GEO[kind] = g);
+const MODELS = {};
+function model(kind) {
+  if (MODELS[kind]) return MODELS[kind];
+  let m;
+  if (kind.startsWith('tractor')) { const [c, h] = TRACTORS[+kind.slice(7)]; m = buildTractor(c, h, false); }
+  else if (kind.startsWith('wagon')) { const [c, h] = TRACTORS[+kind.slice(5)]; m = buildTractor(c, h, true); }
+  else if (kind.startsWith('kayak')) m = buildKayak(+kind[5], KAYAKS[+kind.slice(7)]);
+  else if (kind === 'cow') m = buildCow();
+  else if (kind === 'bull') m = buildBull();
+  else if (kind === 'geese') m = buildGeese();
+  else if (kind === 'combine') m = buildCombine();
+  else if (kind === 'plane') m = buildPlane();
+  else m = buildLog(LEN[kind]);
+  return (MODELS[kind] = m);
 }
-// Spinning parts attached to some movers: [geometry kind, x, y, axis]
-const SPINNERS = { combine: ['reel', 0.9, 0.5, 'z'], plane: ['prop', 0.77, 0.75, 'x'] };
+// How fast legs cycle per unit of ground covered, and how far they swing.
+const GAIT = { cow: [7, 0.4], bull: [3.2, 0.75], geese: [11, 0.6] };
 
 // Sunflowers are the collectible. Built standing on the ground at the origin.
 const FLOWER_GEO = (() => {
-  const b = new VB();
-  b.box(0.06, 0.5, 0.06, 0, 0.25, 0, 0x3f8f2f);
-  b.box(0.18, 0.04, 0.1, 0.1, 0.22, 0, 0x4faa38, 0, 0, 0.4);
-  b.box(0.18, 0.04, 0.1, -0.1, 0.32, 0, 0x4faa38, 0, 0, -0.4);
-  b.box(0.42, 0.42, 0.06, 0, 0.66, 0.02, 0xffcc1a);
-  b.box(0.42, 0.42, 0.06, 0, 0.66, 0.02, 0xffb000, 0, 0, Math.PI / 4);
-  b.box(0.2, 0.2, 0.1, 0, 0.66, 0.04, 0x7a4a1c);
-  b.box(0.08, 0.08, 0.02, -0.03, 0.69, 0.095, 0x5a3412);
+  const b = new VB(0.6);
+  b.cap(0.025, 0.42, 0, 0.25, 0, 0x3f8f2f);
+  b.ball(0.1, 0.025, 0.05, 0.09, 0.24, 0, 0x4faa38, 0, 0, 0.4);
+  b.ball(0.1, 0.025, 0.05, -0.09, 0.33, 0, 0x4faa38, 0, 0, -0.4);
+  for (let i = 0; i < 12; i++) {                                        // petals, pointing out from the middle
+    const a = i * Math.PI / 6;
+    b.ball(0.035, 0.085, 0.022, Math.cos(a) * 0.13, 0.66 + Math.sin(a) * 0.13, 0.02, i % 2 ? 0xffcc1a : 0xffb000, 0, 0, a - Math.PI / 2);
+  }
+  b.cyl(0.1, 0.1, 0.07, 0, 0.66, 0.04, 0x7a4a1c, Math.PI / 2, 0, 0);
   return b.geometry();
 })();
 const FLOWER_MAT = toon({ vertexColors: true, emissive: 0x3a2400 });
@@ -839,7 +844,7 @@ const sfx = (() => {
 })();
 
 // ---------- particles ----------
-const PGEO = new THREE.BoxGeometry(1, 1, 1);
+const PGEO = new THREE.SphereGeometry(0.6, 8, 6);   // round puffs for dust, splashes and petals
 const pmats = {};
 const pmat = c => (pmats[c] ||= toon({ color: c }));
 const parts = [];
@@ -879,63 +884,60 @@ const LANE_Y = { grass: 0, forest: 0, road: -0.02, pasture: 0, bull: 0, wheat: 0
 
 // ---------- trees: a mix of species, each nudged and turned a little ----------
 const BARK = 0x7a4f2c;
-// Tiered conifer: layers shrink upward, every other layer turned 45° so the
-// silhouette is a star, not a block.
+// Tiered conifer: overlapping cones that shrink upward.
 function conifer(vb, x, z, tiers, base, top, h, green, trunkH = 0.22) {
-  vb.box(0.14, trunkH, 0.14, x, trunkH / 2, z, BARK);
+  vb.cyl(0.06, 0.08, trunkH, x, trunkH / 2, z, BARK);
   const step = h / tiers;
   for (let i = 0; i < tiers; i++) {
     const w = lerp(base, top, i / (tiers - 1));
-    vb.box(w, step * 1.15, w, x, trunkH + step * (i + 0.5), z, i % 2 ? shade(green, 1.1) : green, 0, i % 2 ? Math.PI / 4 : 0.2, 0);
+    vb.cone(w / 2, step * 1.7, x, trunkH + step * (i + 0.75), z, i % 2 ? shade(green, 1.1) : green, 0, i * 0.7, 0);
   }
-  vb.box(0.08, 0.14, 0.08, x, trunkH + h + 0.05, z, shade(green, 1.15));
 }
-const pine = (vb, x, z) => conifer(vb, x, z, 4, 0.8, 0.28, rand(1.3, 1.7), 0x2f7a3a);
-const fir = (vb, x, z) => conifer(vb, x, z, 6, 0.58, 0.14, rand(1.7, 2.2), 0x2f7f66, 0.16);
+const pine = (vb, x, z) => conifer(vb, x, z, 4, 0.85, 0.35, rand(1.3, 1.7), 0x2f7a3a);
+const fir = (vb, x, z) => conifer(vb, x, z, 6, 0.6, 0.2, rand(1.7, 2.2), 0x2f7f66, 0.16);
 function poplar(vb, x, z) {          // tall, skinny column (Italian cypress / Lombardy poplar)
-  vb.box(0.1, 0.18, 0.1, x, 0.09, z, BARK);
-  const g = pick([0x3c8f3a, 0x4a9a3c]);
-  const ws = [0.26, 0.34, 0.37, 0.35, 0.3, 0.22, 0.12], h = rand(1.6, 2.1), step = h / ws.length;
-  ws.forEach((w, i) => vb.box(w, step * 1.1, w, x, 0.18 + step * (i + 0.5), z, i % 2 ? g : shade(g, 1.1), 0, i * 0.35, 0));
+  vb.cyl(0.05, 0.06, 0.2, x, 0.1, z, BARK);
+  const g = pick([0x3c8f3a, 0x4a9a3c]), h = rand(1.6, 2.1);
+  vb.ball(0.2, h / 2, 0.2, x, 0.16 + h / 2, z, g);
+  vb.ball(0.15, h * 0.3, 0.15, x + 0.05, 0.16 + h * 0.62, z - 0.04, shade(g, 1.12));
 }
 function dogwood(vb, x, z) {         // low spreading tiers dotted with white blossoms
-  vb.box(0.1, 0.42, 0.1, x, 0.21, z, BARK);
-  vb.box(0.06, 0.24, 0.06, x + 0.1, 0.4, z, BARK, 0, 0, -0.6);
-  const leaves = 0x5fb84a;
-  const pads = [[0, 0.5, 0, 0.78], [0.12, 0.72, -0.05, 0.6], [-0.1, 0.9, 0.06, 0.42]];
-  for (const [dx, y, dz, w] of pads) {
-    vb.box(w, 0.2, w * 0.9, x + dx, y, z + dz, leaves, 0, rand(0, 1), 0);
-    for (let i = 0; i < 4; i++) {
-      vb.box(0.09, 0.05, 0.09, x + dx + rand(-w, w) * 0.4, y + 0.11, z + dz + rand(-w, w) * 0.35, pick([0xffffff, 0xfff0f5]));
+  vb.cyl(0.05, 0.06, 0.42, x, 0.21, z, BARK);
+  vb.cap(0.03, 0.2, x + 0.1, 0.4, z, BARK, 0, 0, -0.6);
+  for (const [dx, y, dz, w] of [[0, 0.5, 0, 0.8], [0.12, 0.72, -0.05, 0.62], [-0.1, 0.9, 0.06, 0.44]]) {
+    vb.ball(w / 2, 0.11, w * 0.45, x + dx, y, z + dz, 0x5fb84a);
+    for (let i = 0; i < 5; i++) {
+      const a = rand(0, Math.PI * 2), rr = rand(0.2, 0.85);
+      vb.ball(0.05, 0.03, 0.05, x + dx + Math.cos(a) * w * 0.4 * rr, y + 0.09, z + dz + Math.sin(a) * w * 0.36 * rr, pick([0xffffff, 0xfff0f5]));
     }
-    vb.box(0.09, 0.09, 0.03, x + dx + rand(-0.2, 0.2), y, z + dz + w * 0.45, 0xffffff);
   }
 }
 function crepeMyrtle(vb, x, z) {     // several smooth pale trunks, puffs of pink bloom
-  for (const a of [-0.35, 0, 0.35]) vb.box(0.06, 0.6, 0.06, x + a * 0.25, 0.3, z + a * 0.1, 0xc9a98a, 0, 0, a);
+  for (const a of [-0.35, 0, 0.35]) vb.cap(0.03, 0.55, x + a * 0.25, 0.3, z + a * 0.1, 0xc9a98a, 0, 0, a);
   const pinks = pick([[0xff6fb5, 0xe64a9a], [0xd77bff, 0xb35ae0], [0xff8fa3, 0xf2607e]]);
-  for (const [dx, y, dz, s] of [[-0.18, 0.72, 0, 0.36], [0.18, 0.76, 0.04, 0.34], [0, 0.95, -0.04, 0.38], [0.02, 0.68, 0.18, 0.28]]) {
-    vb.box(s, s * 0.85, s, x + dx, y, z + dz, pinks[0], 0, rand(0, 1), 0);
-    vb.box(s * 0.6, s * 0.5, s * 0.6, x + dx + 0.05, y + s * 0.4, z + dz, pinks[1], 0, rand(0, 1), 0);
+  vb.ball(0.26, 0.08, 0.2, x, 0.6, z, 0x5fa83a);
+  for (const [dx, y, dz, s] of [[-0.18, 0.72, 0, 0.19], [0.18, 0.76, 0.04, 0.18], [0, 0.95, -0.04, 0.2], [0.02, 0.68, 0.18, 0.15]]) {
+    vb.ball(s, s * 0.85, s, x + dx, y, z + dz, pinks[0]);
+    vb.ball(s * 0.6, s * 0.5, s * 0.6, x + dx + 0.05, y + s * 0.5, z + dz, pinks[1]);
   }
-  vb.box(0.5, 0.12, 0.4, x, 0.6, z, 0x5fa83a);
 }
 function birch(vb, x, z) {           // white bark with dark marks, small airy crown
-  vb.box(0.12, 0.85, 0.12, x, 0.425, z, 0xf2efe6);
-  for (const y of [0.2, 0.45, 0.7]) vb.box(0.13, 0.03, 0.06, x, y, z + 0.035, 0x333333);
+  vb.cyl(0.055, 0.065, 0.85, x, 0.425, z, 0xf2efe6);
+  for (const y of [0.2, 0.45, 0.7]) vb.cyl(0.068, 0.068, 0.03, x, y, z, 0x333333);
   const g = 0x8fd15a;
-  vb.box(0.44, 0.34, 0.44, x, 0.95, z, g, 0, 0.6, 0);
-  vb.box(0.3, 0.26, 0.3, x + 0.12, 1.18, z, shade(g, 1.08), 0, 0.2, 0);
-  vb.box(0.26, 0.22, 0.26, x - 0.14, 0.8, z + 0.08, shade(g, 0.92));
+  vb.ball(0.24, 0.19, 0.24, x, 0.95, z, g);
+  vb.ball(0.16, 0.14, 0.16, x + 0.12, 1.16, z, shade(g, 1.08));
+  vb.ball(0.14, 0.12, 0.14, x - 0.14, 0.82, z + 0.08, shade(g, 0.92));
 }
-function appleTree(vb, x, z) {       // rounded crown built from a plus of boxes, red apples
-  vb.box(0.18, 0.36, 0.18, x, 0.18, z, BARK);
+function appleTree(vb, x, z) {       // big round crown, red apples
+  vb.cyl(0.08, 0.1, 0.38, x, 0.19, z, BARK);
   const g = pick(GREENS);
-  vb.box(0.76, 0.42, 0.5, x, 0.6, z, g);
-  vb.box(0.5, 0.42, 0.76, x, 0.6, z, g);
-  vb.box(0.5, 0.26, 0.5, x, 0.9, z, shade(g, 1.1), 0, Math.PI / 4, 0);
-  for (let i = 0; i < 4; i++) vb.box(0.09, 0.09, 0.09, x + rand(-0.3, 0.3), rand(0.45, 0.8), z + 0.38, 0xff3b3b);
-  for (let i = 0; i < 2; i++) vb.box(0.09, 0.09, 0.09, x + 0.38, rand(0.45, 0.8), z + rand(-0.2, 0.2), 0xff3b3b);
+  vb.ball(0.4, 0.3, 0.37, x, 0.66, z, g);
+  vb.ball(0.24, 0.17, 0.22, x - 0.05, 0.93, z - 0.02, shade(g, 1.1));
+  for (let i = 0; i < 6; i++) {
+    const a = rand(-0.3, Math.PI * 0.8), yy = rand(0.5, 0.8);
+    vb.ball(0.045, 0.045, 0.045, x + Math.cos(a) * 0.38, yy, z + Math.sin(a) * 0.35, 0xff3b3b);
+  }
 }
 // Playable lanes get the shorter species so they don't hide oncoming traffic
 // at the low camera angle; the tall, skinny ones stand along the edges.
@@ -945,29 +947,31 @@ function tree(vb, x, tall) {
   pick(tall ? ALL_TREES : SHORT_TREES)(vb, x + rand(-0.08, 0.08), rand(-0.08, 0.08));
 }
 function bush(vb, x) {
-  vb.box(0.72, 0.42, 0.62, x, 0.21, 0, 0x4fae3f);
-  vb.box(0.46, 0.2, 0.4, x - 0.05, 0.52, 0, 0x5cbf48);
+  vb.ball(0.3, 0.22, 0.26, x - 0.1, 0.2, 0, 0x4fae3f);
+  vb.ball(0.24, 0.2, 0.22, x + 0.14, 0.18, 0.04, 0x58b844);
+  vb.ball(0.2, 0.17, 0.18, x, 0.38, -0.02, 0x5cbf48);
 }
-function hay(vb, x) {
-  vb.box(0.76, 0.55, 0.6, x, 0.275, 0, 0xe8c45c);
-  for (const s of [-1, 1]) vb.box(0.78, 0.57, 0.06, x, 0.275, s * 0.17, 0xc9a23e);
-  vb.box(0.5, 0.04, 0.4, x, 0.565, 0, 0xf2d37a);
+function hay(vb, x) {                // a round bale lying on its side
+  vb.cyl(0.28, 0.28, 0.56, x, 0.28, 0, 0xe8c45c, Math.PI / 2, 0, 0);
+  for (const s of [-1, 1]) for (const r of [0.08, 0.17]) vb.torus(r, 0.016, Math.PI * 2, x, 0.28, s * 0.28, 0xc9a23e);
 }
 function rock(vb, x) {
-  vb.box(0.62, 0.32, 0.55, x, 0.16, 0, 0x9aa0a6);
-  vb.box(0.36, 0.16, 0.32, x - 0.06, 0.4, 0.02, 0xb4babf);
+  vb.ball(0.3, 0.17, 0.26, x, 0.12, 0, 0x9aa0a6);
+  vb.ball(0.17, 0.11, 0.15, x - 0.08, 0.27, 0.02, 0xb4babf);
 }
-function pumpkin(vb, x) {
-  vb.box(0.56, 0.42, 0.56, x, 0.21, 0, 0xf08a24);
-  vb.box(0.58, 0.36, 0.1, x, 0.21, 0, 0xd8741a);
-  vb.box(0.08, 0.16, 0.08, x, 0.5, 0, 0x4c7a2a);
-  vb.box(0.16, 0.03, 0.1, x + 0.1, 0.5, 0, 0x5fa83a);
+function pumpkin(vb, x) {            // ribbed: a ring of overlapping lobes
+  for (let i = 0; i < 6; i++) {
+    const a = i * Math.PI / 3;
+    vb.ball(0.15, 0.19, 0.15, x + Math.cos(a) * 0.12, 0.2, Math.sin(a) * 0.12, i % 2 ? 0xf08a24 : 0xe07a1a);
+  }
+  vb.cyl(0.03, 0.04, 0.14, x, 0.43, 0, 0x4c7a2a, 0, 0, 0.2);
+  vb.ball(0.08, 0.015, 0.05, x + 0.08, 0.4, 0, 0x5fa83a);
 }
 function flowers(vb, x) {
   for (let i = 0; i < ri(1, 3); i++) {
     const fx = x + rand(-0.35, 0.35), fz = rand(-0.35, 0.35);
-    vb.box(0.04, 0.12, 0.04, fx, 0.06, fz, 0x3f8f2f);
-    vb.box(0.15, 0.07, 0.15, fx, 0.15, fz, pick([0xff6fae, 0xffd93b, 0xffffff, 0xb48cff]));
+    vb.cyl(0.015, 0.015, 0.12, fx, 0.06, fz, 0x3f8f2f);
+    vb.ball(0.07, 0.04, 0.07, fx, 0.14, fz, pick([0xff6fae, 0xffd93b, 0xffffff, 0xb48cff]));
   }
 }
 function blocker(vb, x, outer) {
@@ -1023,22 +1027,33 @@ function addMovers(lane, kindFn, gapMin, gapMax, y = 0) {
   for (const m of lane.movers) { m.x += shift; wrap(m); m.mesh.position.x = m.x; }
 }
 function spawnMover(lane, kind, x, y = 0) {
-  const mesh = new THREE.Mesh(geo(kind), VMAT);
+  const mdl = model(kind);
+  const mesh = new THREE.Mesh(mdl.geo, VMAT);
   mesh.castShadow = true;
   mesh.receiveShadow = true;
   mesh.position.set(x, y, 0);
   if (lane.dir < 0) mesh.rotation.y = Math.PI;
-  let spin = null;
-  if (SPINNERS[kind]) {
-    const [part, px, py, axis] = SPINNERS[kind];
-    spin = new THREE.Mesh(geo(part), VMAT);
-    spin.position.set(px, py, 0);
-    spin.castShadow = true;
-    spin.userData.axis = axis;
-    mesh.add(spin);
-  }
+  const parts = mdl.parts.map(p => {   // legs, wheels, reel, propeller
+    const pm = new THREE.Mesh(p.geo, VMAT);
+    pm.position.set(p.x, p.y, p.z);
+    pm.castShadow = true;
+    pm.userData = p;
+    mesh.add(pm);
+    return pm;
+  });
   lane.group.add(mesh);
-  return { kind, len: LEN[kind], x, y, mesh, spin, active: true, bob: 0, phase: rand(0, 6), buzz: 0 };
+  return { kind, len: LEN[kind], x, y, mesh, parts, active: true, bob: 0, phase: rand(0, 6), walk: rand(0, 6), buzz: 0 };
+}
+// Legs swing with distance travelled, wheels roll, spinners spin.
+function animateParts(m, speed, dt) {
+  const gait = GAIT[m.kind];
+  if (gait) m.walk += dt * Math.min(speed * gait[0], 30);
+  for (const p of m.parts) {
+    const u = p.userData;
+    if (u.role === 'leg') p.rotation.z = Math.sin(m.walk + u.ph) * gait[1];
+    else if (u.role === 'wheel') p.rotation.z -= dt * speed / u.r;
+    else p.rotation[u.axis] += dt * u.rate;
+  }
 }
 function wrap(m) {
   const half = SPAN / 2;
@@ -1079,14 +1094,14 @@ function addLane(r) {
     dir: Math.random() < 0.5 ? 1 : -1, speed: 0, group: new THREE.Group(),
   };
   lane.group.position.z = -r;
-  const vb = new VB();
+  const vb = new VB(0.4);   // scenery: low detail, it's everywhere
   const d = diff(r);
 
   if (type === 'forest' || type === 'grass') {
     const c = Math.abs(r) % 2 === 0 ? 0xaee667 : 0xa2dc5c;
     strip(vb, 0, c, shade(c, 0.74));
     for (let x = -VIS; x <= VIS; x++) {
-      if (Math.abs(x) <= COLS) continue;
+      if (Math.abs(x) <= COLS || Math.abs(x) > 11) continue;   // nothing past what the widest screen shows
       if (type === 'forest' || Math.random() < 0.7) blocker(vb, x, true);
       else if (Math.random() < 0.4) flowers(vb, x);
     }
@@ -1119,7 +1134,7 @@ function addLane(r) {
     strip(vb, -0.02, 0x5f5c66, shade(0x5f5c66, 0.72));
     if (prev && prev.type === 'road') {
       for (let x = -VIS; x <= VIS; x += 2) {
-        vb.box(0.7, 0.02, 0.08, x, -0.01, 0.5, Math.abs(x) <= COLS ? 0xf4f4f4 : 0xa8a8a8);
+        vb.rbox(0.7, 0.025, 0.1, x, -0.01, 0.5, Math.abs(x) <= COLS ? 0xf4f4f4 : 0xa8a8a8, 0.012);
       }
     }
     lane.speed = rand(1.5, 2.9) * (1 + 0.7 * d);
@@ -1175,7 +1190,7 @@ function addLane(r) {
     for (let x = -VIS; x <= VIS; x++) {                   // stubble tufts, purely decoration
       for (let i = 0; i < 2; i++) {
         const tx = x + rand(-0.4, 0.4), tz = rand(-0.38, 0.38);
-        vb.box(0.05, rand(0.08, 0.16), 0.05, tx, 0.06, tz, Math.abs(tx) <= COLS + 0.5 ? 0xd4a83f : 0xa88430);
+        vb.cone(0.028, rand(0.1, 0.18), tx, 0.06, tz, Math.abs(tx) <= COLS + 0.5 ? 0xd4a83f : 0xa88430);
       }
     }
     lane.speed = rand(0.9, 1.5) * (1 + 0.5 * d);
@@ -1187,8 +1202,8 @@ function addLane(r) {
       vb.box(2 * VIS + 1, 0.03, 0.18, 0, 0.015, z, 0x6e4a2e);  // furrows
       for (let x = -VIS; x <= VIS; x++) {
         const out = Math.abs(x) > COLS;
-        vb.box(0.26, 0.18, 0.2, x + 0.25, 0.09, z, out ? 0x3f8a33 : 0x5cbf48);  // cabbages
-        vb.box(0.16, 0.06, 0.12, x + 0.25, 0.2, z, out ? 0x56a845 : 0x8fe070);
+        vb.ball(0.15, 0.1, 0.13, x + 0.25, 0.08, z, out ? 0x3f8a33 : 0x5cbf48);  // cabbages
+        vb.ball(0.09, 0.06, 0.08, x + 0.25, 0.15, z, out ? 0x56a845 : 0x8fe070);
       }
     }
     lane.speed = rand(6.5, 8.5) * (1 + 0.25 * d);
@@ -1213,13 +1228,24 @@ function addLane(r) {
       const want = Math.min(cands.length, ri(2, 4));
       while (lane.padCols.size < want) lane.padCols.add(pick(cands));
       for (const x of lane.padCols) {
-        vb.box(0.74, 0.05, 0.74, x, -0.18, 0, 0x3fae49);
-        vb.box(0.2, 0.06, 0.12, x + 0.2, -0.18, 0.28, 0x56c3ee);
-        if (Math.random() < 0.5) vb.box(0.16, 0.1, 0.16, x - 0.15, -0.11, -0.15, 0xff8fc8);
+        vb.add(prim('pad', () => new THREE.CylinderGeometry(0.36, 0.36, 0.04, 16, 1, false, 0.5, Math.PI * 2 - 0.6)), 0x3fae49, x, -0.18, 0);   // round pad with a notch
+        if (Math.random() < 0.5) {   // a water lily
+          for (let i = 0; i < 5; i++) { const a = i * Math.PI * 0.4; vb.ball(0.035, 0.07, 0.035, x - 0.12 + Math.cos(a) * 0.05, -0.1, -0.12 + Math.sin(a) * 0.05, 0xff8fc8, Math.sin(a) * 0.5, 0, -Math.cos(a) * 0.5); }
+          vb.ball(0.03, 0.03, 0.03, x - 0.12, -0.08, -0.12, 0xffd93b);
+        }
       }
     }
   }
 
+  // soft rounded banks wherever water meets dry land, and tufts in the grass
+  const wet = t => t === 'water' || t === 'pads';
+  if (prev && wet(type) !== wet(prev.type)) vb.cap(0.08, 2 * VIS, 0, -0.07, 0.5, 0xd9c48a, 0, 0, Math.PI / 2);
+  if (type === 'grass' || type === 'pasture') {
+    for (let i = 0; i < 10; i++) {
+      const tx = rand(-VIS, VIS);
+      vb.cone(0.035, 0.11, tx, 0.045, rand(-0.42, 0.42), Math.abs(tx) <= COLS + 0.5 ? 0x6cbf3f : 0x4f8f30);
+    }
+  }
   lane.static = vb.mesh();
   lane.group.add(lane.static);
   scene.add(lane.group);
@@ -1242,12 +1268,15 @@ function updateLane(lane, dt, time) {
     m.x += lane.dir * lane.speed * dt;
     wrap(m);
     m.mesh.position.x = m.x;
-    if (m.spin) m.spin.rotation[m.spin.userData.axis] += dt * (m.kind === 'plane' ? 40 : -5);
-    if (m.kind === 'cow' || m.kind === 'bull') {
-      m.mesh.position.y = Math.abs(Math.sin(time * lane.speed * 5 + m.phase)) * 0.05;
+    animateParts(m, lane.speed, dt);
+    if (m.kind === 'cow') {
+      m.mesh.position.y = Math.abs(Math.cos(m.walk)) * 0.025;            // a gentle step bob
+    } else if (m.kind === 'bull') {
+      m.mesh.position.y = Math.abs(Math.sin(m.walk)) * 0.07;             // galloping: bound and rock
+      m.mesh.rotation.z = Math.sin(m.walk) * 0.06;
     } else if (m.kind === 'geese') {
-      m.mesh.rotation.x = Math.sin(time * 14 + m.phase) * 0.08;   // waddle
-      m.mesh.position.y = Math.abs(Math.sin(time * 14 + m.phase)) * 0.03;
+      m.mesh.rotation.x = Math.sin(m.walk) * 0.07;                       // waddle
+      m.mesh.position.y = Math.abs(Math.sin(m.walk)) * 0.02;
     } else if (m.kind === 'plane') {
       m.mesh.position.y = Math.sin(time * 3 + m.phase) * 0.05;
       if (Math.abs(m.x) < VIS && Math.random() < dt * 25) {
@@ -1297,7 +1326,9 @@ function updateStampede(lane, dt) {
       if (!m.active) continue;
       m.x += lane.dir * lane.speed * dt;
       m.mesh.position.x = m.x;
-      m.mesh.position.y = Math.abs(Math.sin(m.x * 2)) * 0.08;
+      animateParts(m, lane.speed, dt);
+      m.mesh.position.y = Math.abs(Math.sin(m.walk)) * 0.09;
+      m.mesh.rotation.z = Math.sin(m.walk) * 0.07;
       if (lane.dir * m.x > VIS + 3) { m.active = false; m.mesh.visible = false; }
       else {
         any = true;
