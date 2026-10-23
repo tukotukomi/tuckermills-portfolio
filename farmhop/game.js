@@ -1,4 +1,4 @@
-// Betty Lou's Street Hop: a Crossy Road-style hopper.
+// Betty Lou's Farm Hop: hop across the farm before the sun sets, then grow the Fish Pond back home.
 // One cell = one world unit. Row r sits at z = -r, so "forward" is -z.
 // Playable columns are -COLS..COLS. The world is drawn wider than that, and
 // the cells outside the playable strip are shaded darker, like Crossy Road.
@@ -1883,7 +1883,8 @@ function pathClear(ax, az, bx, bz) {
 function nextSpot(w) {
   for (let tries = 0; tries < 40; tries++) {
     const x = rand(YARD.x0, YARD.x1), z = rand(YARD.z0, YARD.z1);
-    if (Math.hypot(x - w.x, z - w.z) > 1.2 && !blockedAt(x, z) && pathClear(w.x, w.z, x, z)) return [x, z];
+    const roomy = (farm.walkers || []).every(o => o === w || Math.hypot(x - o.tx, z - o.tz) > 1.4);   // don't crowd the others
+    if (Math.hypot(x - w.x, z - w.z) > 1.2 && roomy && !blockedAt(x, z) && pathClear(w.x, w.z, x, z)) return [x, z];
   }
   return [w.x, w.z];
 }
