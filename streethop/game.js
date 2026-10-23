@@ -3,6 +3,7 @@
 // Playable columns are -COLS..COLS. The world is drawn wider than that, and
 // the cells outside the playable strip are shaded darker, like Crossy Road.
 import * as THREE from 'three';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 
 // ---------- tuning ----------
 const COLS = 4;                 // playable columns either side of centre
@@ -187,6 +188,22 @@ const FACES = [
 ];
 const _v = new THREE.Vector3(), _n = new THREE.Vector3(), _c = new THREE.Color();
 const _q = new THREE.Quaternion(), _e = new THREE.Euler();
+const _w = new THREE.Vector3(), _sc = new THREE.Vector3(), _m4 = new THREE.Matrix4(), _nm = new THREE.Matrix3();
+const PRIMS = {};
+const prim = (key, make) => (PRIMS[key] ||= make());
+// Flat outline -> soft-edged solid, centred on z = 0 (stars, the leaf).
+function extrudeShape(shape, depth, bevelSize, bevelThickness, curveSegments = 12) {
+  const g = new THREE.ExtrudeGeometry(shape, { depth, curveSegments, bevelEnabled: true, bevelSize, bevelThickness, bevelSegments: 3 });
+  g.translate(0, 0, -depth / 2);
+  return g;
+}
+const leafGeo = () => prim('leaf', () => {
+  const s = new THREE.Shape();
+  s.moveTo(0, -0.42);
+  s.bezierCurveTo(0.36, -0.3, 0.32, 0.22, 0, 0.5);
+  s.bezierCurveTo(-0.32, 0.22, -0.36, -0.3, 0, -0.42);
+  return extrudeShape(s, 0.07, 0.03, 0.03);
+});
 const VMAT = toon({ vertexColors: true });
 
 class VB {
@@ -225,6 +242,33 @@ class VB {
     m.receiveShadow = true;
     return m;
   }
+  // Append any geometry, placed, turned and scaled. `color` is a hex, or
+  // (x, y, z) => hex | THREE.Color in model space, for stripes and gradients.
+  add(g, color, x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0, sx = 1, sy = 1, sz = 1) {
+    _m4.compose(_w.set(x, y, z), _q.setFromEuler(_e.set(rx, ry, rz)), _sc.set(sx, sy, sz));
+    _nm.getNormalMatrix(_m4);
+    const pos = g.attributes.position, nor = g.attributes.normal, base = this.p.length / 3;
+    const fn = typeof color === 'function';
+    if (!fn) _c.set(color);
+    for (let i = 0; i < pos.count; i++) {
+      _v.fromBufferAttribute(pos, i).applyMatrix4(_m4);
+      _n.fromBufferAttribute(nor, i).applyMatrix3(_nm).normalize();
+      if (fn) { const k = color(_v.x, _v.y, _v.z); if (typeof k === 'number') _c.set(k); else _c.copy(k); }
+      this.p.push(_v.x, _v.y, _v.z);
+      this.n.push(_n.x, _n.y, _n.z);
+      this.c.push(_c.r, _c.g, _c.b);
+    }
+    if (g.index) for (let k = 0; k < g.index.count; k++) this.i.push(base + g.index.getX(k));
+    else for (let k = 0; k < pos.count; k++) this.i.push(base + k);
+    return this;
+  }
+  // Rounded primitives. Shared geometry is cached by size, so repeated parts are cheap to build.
+  ball(rx, ry, rz, x, y, z, color, ax = 0, ay = 0, az = 0) { return this.add(prim('ball', () => new THREE.SphereGeometry(1, 20, 14)), color, x, y, z, ax, ay, az, rx, ry, rz); }
+  hiBall(rx, ry, rz, x, y, z, color, ax = 0, ay = 0, az = 0) { return this.add(prim('hiBall', () => new THREE.SphereGeometry(1, 40, 28)), color, x, y, z, ax, ay, az, rx, ry, rz); }
+  cap(r, len, x, y, z, color, ax = 0, ay = 0, az = 0) { return this.add(prim(`cap${r}/${len}`, () => new THREE.CapsuleGeometry(r, len, 6, 14)), color, x, y, z, ax, ay, az); }
+  rbox(w, h, d, x, y, z, color, rad, ax = 0, ay = 0, az = 0) { return this.add(prim(`rbox${w}/${h}/${d}/${rad}`, () => new RoundedBoxGeometry(w, h, d, 4, rad)), color, x, y, z, ax, ay, az); }
+  cone(r, h, x, y, z, color, ax = 0, ay = 0, az = 0) { return this.add(prim(`cone${r}/${h}`, () => new THREE.ConeGeometry(r, h, 18)), color, x, y, z, ax, ay, az); }
+  torus(R, tube, arc, x, y, z, color, ax = 0, ay = 0, az = 0) { return this.add(prim(`torus${R}/${tube}/${arc}`, () => new THREE.TorusGeometry(R, tube, 10, 28, arc)), color, x, y, z, ax, ay, az); }
 }
 const shade = (hex, f) => new THREE.Color(hex).multiplyScalar(f).getHex();
 
@@ -238,54 +282,45 @@ const XRAY_MAT = new THREE.MeshBasicMaterial({
   stencilWrite: true, stencilRef: 1, stencilFunc: THREE.NotEqualStencilFunc,
 });
 
+// ---------- the four hoppers, built from rounded "toy" shapes ----------
+const hairAt = x => RAINBOW[clamp(Math.floor((x + 0.27) / 0.54 * 6), 0, 5)];   // rainbow stripes, side to side
+
 function buildGirl() {
   const SKIN = 0xffd3b4, DENIM = 0x3e6fd8, DENIM_D = 0x2c56b0, SHIRT = 0xff8fc8;
-  const group = new THREE.Group();
-  const inner = new THREE.Group();
+  const group = new THREE.Group(), inner = new THREE.Group();
   group.add(inner);
   const b = new VB();
   for (const s of [-1, 1]) {
-    b.box(0.14, 0.08, 0.2, s * 0.09, 0.04, -0.02, 0xffffff);      // sneakers
-    b.box(0.15, 0.02, 0.21, s * 0.09, 0.005, -0.02, 0xff5fa2);    // soles
-    b.box(0.15, 0.05, 0.15, s * 0.09, 0.1, 0, DENIM_D);           // rolled cuffs
-    b.box(0.14, 0.14, 0.14, s * 0.09, 0.19, 0, DENIM);            // legs
-    b.box(0.09, 0.1, 0.12, s * 0.225, 0.5, 0, SHIRT);             // sleeves
-    b.box(0.08, 0.12, 0.09, s * 0.225, 0.39, 0, SKIN);            // hands
-    b.box(0.05, 0.02, 0.27, s * 0.11, 0.565, 0, DENIM);           // straps over shoulders
-    b.box(0.05, 0.13, 0.02, s * 0.11, 0.5, 0.13, DENIM);          // straps, back
-    b.box(0.035, 0.035, 0.02, s * 0.09, 0.535, -0.15, 0xffd23f);  // buttons
-    b.box(0.06, 0.09, 0.02, s * 0.09, 0.79, -0.205, 0x222222);    // eyes
-    b.box(0.025, 0.03, 0.01, s * 0.09 + 0.012, 0.815, -0.217, 0xffffff);
-    b.box(0.08, 0.04, 0.02, s * 0.15, 0.715, -0.203, 0xff9eb5);   // cheeks
-    b.box(0.04, 0.24, 0.4, s * 0.23, 0.86, 0.01, s < 0 ? RAINBOW[0] : RAINBOW[5]); // side hair
+    b.ball(0.075, 0.05, 0.1, s * 0.09, 0.05, -0.03, 0xffffff);          // sneakers
+    b.ball(0.08, 0.022, 0.105, s * 0.09, 0.022, -0.03, 0xff5fa2);
+    b.cap(0.055, 0.1, s * 0.09, 0.18, 0, DENIM);                        // legs
+    b.rbox(0.13, 0.045, 0.13, s * 0.09, 0.115, 0, DENIM_D, 0.02);      // rolled cuffs
+    b.ball(0.065, 0.06, 0.07, s * 0.19, 0.53, 0, SHIRT);               // puffy sleeves
+    b.cap(0.038, 0.09, s * 0.2, 0.43, 0, SKIN, 0, 0, s * 0.12);        // arms
+    b.ball(0.048, 0.05, 0.048, s * 0.21, 0.35, -0.01, SKIN);           // hands
+    b.cap(0.022, 0.2, s * 0.08, 0.59, 0, DENIM, Math.PI / 2, 0, 0);    // straps over the shoulders
+    b.ball(0.022, 0.022, 0.012, s * 0.075, 0.53, -0.148, 0xffd23f);   // buttons
+    b.ball(0.032, 0.046, 0.02, s * 0.085, 0.8, -0.222, 0x222222);      // eyes
+    b.ball(0.012, 0.014, 0.008, s * 0.085 + 0.01, 0.818, -0.24, 0xffffff);
+    b.ball(0.04, 0.022, 0.01, s * 0.15, 0.73, -0.178, 0xff9eb5);       // cheeks
+    b.ball(0.065, 0.12, 0.09, s * 0.23, 0.82, 0.08, hairAt);            // side hair, behind the cheeks
   }
-  b.box(0.36, 0.2, 0.26, 0, 0.35, 0, DENIM);       // overalls
-  b.box(0.34, 0.11, 0.24, 0, 0.5, 0, SHIRT);       // shirt
-  b.box(0.22, 0.13, 0.03, 0, 0.49, -0.13, DENIM);  // bib
-  b.box(0.1, 0.06, 0.02, 0, 0.48, -0.148, DENIM_D);// bib pocket
-  b.box(0.42, 0.38, 0.4, 0, 0.78, 0, SKIN);        // head
-  b.box(0.07, 0.025, 0.02, 0, 0.69, -0.203, 0xc2475f); // smile
-  const w = 0.47 / 6;
-  RAINBOW.forEach((col, i) => {                    // rainbow hair, striped side to side
-    const x = -0.235 + w * (i + 0.5);
-    b.box(w, 0.08, 0.46, x, 1.0, 0.01, col);
-    b.box(w, 0.32, 0.06, x, 0.83, 0.225, col);
-    b.box(w, 0.08, 0.04, x, 0.93, -0.215, col);
-  });
+  b.ball(0.2, 0.16, 0.16, 0, 0.34, 0, DENIM);                          // overalls
+  b.ball(0.17, 0.13, 0.14, 0, 0.48, 0, SHIRT);                         // shirt
+  b.rbox(0.2, 0.15, 0.05, 0, 0.47, -0.12, DENIM, 0.022);               // bib
+  b.rbox(0.09, 0.05, 0.02, 0, 0.455, -0.146, DENIM_D, 0.008);          // bib pocket
+  b.hiBall(0.25, 0.23, 0.23, 0, 0.8, 0, SKIN);                         // head
+  b.hiBall(0.268, 0.17, 0.25, 0, 0.93, 0.02, hairAt);                   // rainbow hair, hairline above the eyes
+  for (const x of [-0.12, -0.04, 0.04, 0.12]) b.ball(0.06, 0.04, 0.04, x, 0.885, -0.2, hairAt);  // little fringe
+  b.torus(0.035, 0.009, Math.PI, 0, 0.712, -0.214, 0xc2475f, 0, 0, Math.PI); // smile
   inner.add(b.mesh());
-
-  // High pigtails: their own meshes so they can bounce.
-  const tails = [];
+  const tails = [];                                                    // high pigtails, puffs of rainbow
   for (const s of [-1, 1]) {
     const t = new VB();
-    t.box(0.11, 0.1, 0.11, 0, 0, 0, 0xff5fa2);
-    [[0.07, 0.09, 0.14], [0.15, 0.13, 0.135], [0.23, 0.12, 0.125], [0.29, 0.06, 0.115], [0.32, -0.03, 0.105], [0.33, -0.13, 0.095]]
-      .forEach(([x, y, sz], i) => t.box(sz, sz, sz, s * x, y, 0, RAINBOW[i]));
-    const m = t.mesh();
-    m.position.set(s * 0.24, 1.0, 0.04);
-    m.userData.side = s;
-    inner.add(m);
-    tails.push(m);
+    t.ball(0.055, 0.055, 0.055, 0, 0, 0, 0xff5fa2);
+    [[0.07, 0.09, 0.075], [0.15, 0.13, 0.072], [0.23, 0.12, 0.068], [0.29, 0.06, 0.063], [0.32, -0.03, 0.058], [0.33, -0.13, 0.05]]
+      .forEach(([x, y, r], i) => t.ball(r, r, r * 0.9, s * x, y, 0, RAINBOW[i]));
+    tails.push(wobble(inner, t, s * 0.25, 1.0, 0.03, s));
   }
   return finishHero(group, inner, tails);
 }
@@ -328,129 +363,123 @@ function starMesh(r, depth, color) {
     s.quadraticCurveTo(p.x, p.y, b.x, b.y);
   });
   s.closePath();
-  const g = new THREE.ExtrudeGeometry(s, {
-    depth, curveSegments: 4, bevelEnabled: true, bevelThickness: depth * 0.4, bevelSize: r * 0.07, bevelSegments: 2,
-  });
-  g.translate(0, 0, -depth / 2);
-  const pos = g.attributes.position, cols = new Float32Array(pos.count * 3), c = new THREE.Color();
-  for (let i = 0; i < pos.count; i++) {
-    if (typeof color === 'function') c.copy(color(pos.getX(i), pos.getY(i))); else c.set(color);
-    cols[i * 3] = c.r; cols[i * 3 + 1] = c.g; cols[i * 3 + 2] = c.b;
-  }
-  g.setAttribute('color', new THREE.BufferAttribute(cols, 3));
-  return new THREE.Mesh(g);   // finishHero gives it the hero material
+  return new VB().add(extrudeShape(s, depth, r * 0.07, depth * 0.4, 4), color).mesh();   // finishHero gives it the hero material
 }
 const rainbowAt = (x, y) => new THREE.Color().setHSL((Math.atan2(y, x) / (2 * Math.PI) + 1.25) % 1, 0.95, 0.58);
+
 function buildAxolotl() {
   const PINK = 0xffb3d1, PINK_D = 0xff8fbf, BELLY = 0xffe0ec, GILL = 0xff4f9a, GOLD = 0xffd23f;
   const group = new THREE.Group(), inner = new THREE.Group();
   group.add(inner);
   const b = new VB();
   for (const s of [-1, 1]) {
-    b.box(0.13, 0.08, 0.17, s * 0.1, 0.04, -0.02, PINK_D);           // feet
-    b.box(0.12, 0.12, 0.12, s * 0.1, 0.14, 0, PINK);                  // legs
-    b.box(0.09, 0.18, 0.1, s * 0.245, 0.37, -0.02, PINK);             // arms
-    b.box(0.1, 0.06, 0.1, s * 0.245, 0.25, -0.02, PINK_D);
-    b.box(0.07, 0.08, 0.02, s * 0.17, 0.74, -0.222, 0x222222);        // eyes
-    b.box(0.025, 0.03, 0.01, s * 0.17 + 0.012, 0.765, -0.234, 0xffffff);
-    b.box(0.08, 0.04, 0.02, s * 0.2, 0.655, -0.221, 0xff7aa8);        // cheeks
-    b.box(0.05, 0.1, 0.04, s * 0.1, 0.97, -0.1, GOLD);                // tiara side points
-    b.box(0.04, 0.04, 0.03, s * 0.1, 0.95, -0.125, GILL);
+    b.ball(0.07, 0.04, 0.09, s * 0.1, 0.04, -0.03, PINK_D);            // feet
+    b.cap(0.05, 0.06, s * 0.1, 0.12, 0, PINK);                          // legs
+    b.cap(0.04, 0.1, s * 0.2, 0.37, -0.02, PINK, 0, 0, s * 0.5);       // arms
+    b.ball(0.045, 0.045, 0.045, s * 0.245, 0.29, -0.03, PINK_D);       // hands
+    b.ball(0.035, 0.042, 0.02, s * 0.165, 0.745, -0.198, 0x222222);    // eyes, set wide
+    b.ball(0.012, 0.014, 0.008, s * 0.165 + 0.01, 0.762, -0.215, 0xffffff);
+    b.ball(0.045, 0.022, 0.01, s * 0.22, 0.665, -0.163, 0xff7aa8);    // cheeks
+    b.cone(0.026, 0.1, s * 0.075, 0.95, -0.085, GOLD, -0.2, 0, -s * 0.15); // tiara side points
+    b.ball(0.022, 0.022, 0.014, s * 0.075, 0.915, -0.11, GILL);
   }
-  b.box(0.4, 0.34, 0.32, 0, 0.36, 0, PINK);                           // body
-  b.box(0.26, 0.24, 0.02, 0, 0.34, -0.165, BELLY);
-  b.box(0.58, 0.36, 0.44, 0, 0.7, 0, PINK);                           // wide head
-  b.box(0.18, 0.025, 0.02, 0, 0.635, -0.221, 0xc2475f);               // wide smile
-  b.box(0.32, 0.05, 0.22, 0, 0.905, -0.02, GOLD);                     // tiara band
-  b.box(0.06, 0.16, 0.04, 0, 0.99, -0.1, GOLD);                       // centre point
-  b.box(0.06, 0.06, 0.03, 0, 0.98, -0.125, 0x46a6ff);                 // gem
+  b.ball(0.2, 0.19, 0.17, 0, 0.32, 0, PINK);                           // body
+  b.ball(0.13, 0.14, 0.05, 0, 0.31, -0.135, BELLY);
+  b.hiBall(0.32, 0.2, 0.24, 0, 0.7, 0, PINK);                          // wide, round head
+  b.torus(0.06, 0.01, Math.PI, 0, 0.655, -0.228, 0xc2475f, 0, 0, Math.PI); // wide smile
+  b.torus(0.1, 0.02, Math.PI * 2, 0, 0.885, -0.01, GOLD, Math.PI / 2, 0, 0);  // tiara band
+  b.cone(0.032, 0.14, 0, 0.97, -0.095, GOLD, -0.2, 0, 0);
+  b.ball(0.032, 0.032, 0.02, 0, 0.93, -0.12, 0x46a6ff);                // gem
   inner.add(b.mesh());
   const wob = [];
-  for (const s of [-1, 1]) {                                          // frilly gills
+  for (const s of [-1, 1]) {                                          // three frilly gill fronds a side
     const g = new VB();
-    for (const [x, y, sz] of [[0.06, 0.12, 0.08], [0.11, 0.22, 0.07], [0.1, 0.04, 0.08], [0.2, 0.07, 0.07], [0.08, -0.06, 0.08], [0.17, -0.12, 0.07]]) {
-      g.box(sz, sz, sz, s * x, y, 0, GILL);
-      g.box(sz * 0.5, sz * 0.5, sz * 1.05, s * (x + sz * 0.3), y + sz * 0.3, 0, 0xff8cc0);
+    for (const [a, len] of [[0.9, 0.13], [0.25, 0.15], [-0.4, 0.12]]) {
+      const dx = s * Math.cos(a), dy = Math.sin(a), rz = Math.atan2(-dx, dy);
+      g.cap(0.03, len, dx * (len / 2 + 0.03), dy * (len / 2 + 0.03), 0, GILL, 0, 0, rz);
+      g.ball(0.042, 0.042, 0.036, dx * (len + 0.06), dy * (len + 0.06), 0, 0xff8cc0);
     }
-    wob.push(wobble(inner, g, s * 0.29, 0.72, 0.06, s));
+    wob.push(wobble(inner, g, s * 0.3, 0.72, 0.04, s));
   }
   const t = new VB();                                                 // wagging tail with a fin
-  t.box(0.13, 0.14, 0.3, 0, 0, 0.15, PINK);
-  t.box(0.06, 0.26, 0.28, 0, 0.02, 0.38, PINK_D);
-  wob.push(wobble(inner, t, 0, 0.27, 0.13, 1, 'y'));
+  t.ball(0.07, 0.075, 0.16, 0, 0, 0.12, PINK);
+  t.ball(0.022, 0.1, 0.13, 0, 0.03, 0.2, PINK_D);
+  wob.push(wobble(inner, t, 0, 0.26, 0.13, 1, 'y'));
   return finishHero(group, inner, wob);
 }
 
 function buildCatstar() {
-  const K = 0x262630, W = 0xffffff, PINK = 0xff8fb0, STAR = 0xffcf2a;
+  const K = 0x262630, W = 0xffffff, PINK = 0xff8fb0, STAR = 0xffcf2a, CAP = 0x8a5cff;
   const group = new THREE.Group(), inner = new THREE.Group();
   group.add(inner);
   const b = new VB();
   for (const s of [-1, 1]) {
-    b.box(0.13, 0.07, 0.2, s * 0.09, 0.035, -0.03, W);                // white feet
-    b.box(0.13, 0.16, 0.14, s * 0.09, 0.15, 0, K);
-    b.box(0.08, 0.2, 0.1, s * 0.21, 0.4, -0.02, K);                   // arms
-    b.box(0.09, 0.07, 0.1, s * 0.21, 0.27, -0.03, W);                 // paws
-    b.box(0.08, 0.09, 0.02, s * 0.12, 0.77, -0.195, 0x9ee34a);        // green eyes
-    b.box(0.03, 0.08, 0.01, s * 0.12, 0.77, -0.207, 0x111111);
-    b.box(0.15, 0.012, 0.012, s * 0.2, 0.645, -0.2, W, 0, 0, s * 0.12); // whiskers
-    b.box(0.15, 0.012, 0.012, s * 0.2, 0.62, -0.2, W, 0, 0, -s * 0.08);
-    b.box(0.12, 0.15, 0.08, s * 0.15, 0.95, 0, K, 0, 0, -s * 0.2);    // ears
-    b.box(0.06, 0.08, 0.02, s * 0.15, 0.94, -0.045, PINK, 0, 0, -s * 0.2);
-    b.box(0.05, 0.02, 0.28, s * 0.1, 0.525, 0, 0xe2412f);             // backpack straps
+    b.ball(0.07, 0.045, 0.1, s * 0.09, 0.045, -0.03, W);               // white feet
+    b.cap(0.055, 0.08, s * 0.09, 0.16, 0, K);
+    b.cap(0.04, 0.12, s * 0.185, 0.41, -0.02, K, 0, 0, s * 0.25);      // arms
+    b.ball(0.045, 0.045, 0.045, s * 0.21, 0.31, -0.03, W);             // paws
+    b.ball(0.07, 0.055, 0.05, s * 0.05, 0.645, -0.185, W);             // muzzle puffs
+    b.ball(0.044, 0.05, 0.02, s * 0.1, 0.77, -0.187, 0x9ee34a);        // green eyes
+    b.ball(0.012, 0.04, 0.01, s * 0.1, 0.77, -0.205, 0x111111);        // slit pupils
+    b.ball(0.01, 0.012, 0.006, s * 0.1 + 0.015, 0.785, -0.208, W);
+    b.cap(0.006, 0.13, s * 0.17, 0.65, -0.17, W, 0, 0, Math.PI / 2 + s * 0.12);  // whiskers
+    b.cap(0.006, 0.13, s * 0.17, 0.625, -0.17, W, 0, 0, Math.PI / 2 - s * 0.08);
+    b.cone(0.075, 0.15, s * 0.14, 0.92, 0, K, 0, 0, -s * 0.3);         // ears
+    b.cone(0.045, 0.09, s * 0.14, 0.905, -0.04, PINK, 0, 0, -s * 0.3);
+    b.cap(0.02, 0.22, s * 0.09, 0.5, 0, 0xe2412f, Math.PI / 2, 0, 0);  // backpack straps
   }
-  b.box(0.34, 0.3, 0.26, 0, 0.37, 0, K);
-  b.box(0.2, 0.24, 0.02, 0, 0.38, -0.135, W);                         // white chest
-  b.box(0.46, 0.36, 0.38, 0, 0.72, 0, K);                             // head
-  b.box(0.22, 0.12, 0.03, 0, 0.63, -0.2, W);                          // muzzle
-  b.box(0.08, 0.14, 0.02, 0, 0.76, -0.195, W);                        // blaze
-  b.box(0.06, 0.04, 0.02, 0, 0.675, -0.218, PINK);
-  b.box(0.2, 0.07, 0.22, 0, 0.935, 0.01, 0x8a5cff);                  // little cap for the spring
-  b.box(0.2, 0.02, 0.1, 0, 0.91, -0.15, 0x8a5cff);
+  b.ball(0.17, 0.17, 0.14, 0, 0.36, 0, K);                             // body
+  b.ball(0.1, 0.12, 0.04, 0, 0.38, -0.115, W);                         // white chest
+  b.hiBall(0.25, 0.2, 0.21, 0, 0.72, 0, K);                            // head
+  b.ball(0.05, 0.035, 0.04, 0, 0.6, -0.17, W);                         // chin
+  b.ball(0.035, 0.07, 0.02, 0, 0.76, -0.2, W);                         // blaze
+  b.ball(0.026, 0.018, 0.015, 0, 0.675, -0.228, PINK);                 // nose
+  b.ball(0.13, 0.055, 0.13, 0, 0.915, 0, CAP);                         // little cap for the spring
+  b.ball(0.09, 0.015, 0.07, 0, 0.9, -0.115, CAP);
   inner.add(b.mesh());
   const pack = starMesh(0.2, 0.07, STAR);                             // star backpack
-  pack.position.set(0, 0.42, 0.2);
+  pack.position.set(0, 0.4, 0.17);
   inner.add(pack);
   const t = new VB();                                                 // swishy tail, white tip
-  for (const [y, z] of [[0.02, 0.06], [0.1, 0.12], [0.2, 0.15], [0.3, 0.14]]) t.box(0.07, 0.1, 0.07, 0, y, z, K);
-  t.box(0.08, 0.08, 0.08, 0, 0.38, 0.11, W);
+  for (const [y, z] of [[0.02, 0.06], [0.1, 0.11], [0.19, 0.14], [0.28, 0.14]]) t.ball(0.05, 0.055, 0.05, 0, y, z, K);
+  t.ball(0.055, 0.06, 0.055, 0, 0.36, 0.12, W);
   const sp = new VB();                                                // coiled spring on the cap
-  for (let i = 0; i < 5; i++) sp.box(0.11, 0.022, 0.03, 0, 0.025 + i * 0.05, 0, 0xcfd6e0, 0, 0, i % 2 ? 0.35 : -0.35);
-  for (const s of [-1, 1]) sp.box(0.025, 0.035, 0.02, s * 0.035, 0.32, -0.04, 0x111111);  // the star's eyes
-  const spring = wobble(inner, sp, 0, 0.97, 0.01, 1, 'x');
+  for (let i = 0; i < 5; i++) sp.torus(0.045, 0.012, Math.PI * 2, i % 2 ? 0.008 : -0.008, 0.03 + i * 0.045, 0, 0xcfd6e0, Math.PI / 2, 0, 0);
+  for (const s of [-1, 1]) sp.ball(0.016, 0.022, 0.01, s * 0.032, 0.315, -0.045, 0x111111);  // the star's eyes
+  const spring = wobble(inner, sp, 0, 0.95, 0, 1, 'x');
   spring.userData.boing = true;                                       // stretches as well as sways
   const hatStar = starMesh(0.11, 0.05, STAR);
-  hatStar.position.set(0, 0.31, 0);
+  hatStar.position.set(0, 0.3, 0);
   spring.add(hatStar);
   return finishHero(group, inner, [wobble(inner, t, 0, 0.24, 0.12, 1), spring]);
 }
 
 function buildLeafWish() {
-  const LEAF = 0x6cc94a, LEAF_D = 0x58b43c, VEIN = 0xb8f08a, TWIG = 0x6b4a2a;
+  const LEAF = 0x7ad653, LEAF_D = 0x4fa83a, VEIN = 0xc4f59a, TWIG = 0x6b4a2a, STEM = 0x4c7a2a;
   const group = new THREE.Group(), inner = new THREE.Group();
   group.add(inner);
   const b = new VB();
+  const leafShade = (x, y) => new THREE.Color(LEAF_D).lerp(new THREE.Color(LEAF), clamp((y - 0.24) / 0.9, 0, 1));
+  b.add(leafGeo(), leafShade, 0, 0.66, 0);                            // the leaf itself: pointed tip, soft edges
   for (const s of [-1, 1]) {
-    b.box(0.05, 0.18, 0.05, s * 0.08, 0.09, 0, TWIG);                 // twig legs
-    b.box(0.1, 0.04, 0.13, s * 0.08, 0.02, -0.02, TWIG);
-    b.box(0.07, 0.09, 0.02, s * 0.11, 0.74, -0.085, 0x222222);        // eyes
-    b.box(0.025, 0.03, 0.01, s * 0.11 + 0.012, 0.765, -0.097, 0xffffff);
-    b.box(0.08, 0.04, 0.02, s * 0.17, 0.665, -0.083, 0xff9eb5);       // cheeks
-    for (const y of [0.45, 0.65, 0.85]) b.box(0.16, 0.02, 0.02, s * 0.1, y + 0.04, 0.086, VEIN, 0, 0, s * 0.5); // back veins
+    b.cap(0.025, 0.14, s * 0.08, 0.12, 0, TWIG);                       // twig legs
+    b.ball(0.05, 0.03, 0.065, s * 0.08, 0.03, -0.02, TWIG);
+    b.ball(0.033, 0.045, 0.015, s * 0.095, 0.76, -0.068, 0x222222);    // eyes
+    b.ball(0.012, 0.014, 0.006, s * 0.095 + 0.01, 0.777, -0.08, 0xffffff);
+    b.ball(0.04, 0.02, 0.008, s * 0.155, 0.69, -0.066, 0xff9eb5);      // cheeks
+    for (const y of [0.5, 0.66, 0.82]) b.cap(0.009, 0.14, s * 0.07, y, 0.062, VEIN, 0, 0, -s * 0.9); // back veins
   }
-  b.box(0.04, 0.18, 0.04, -0.27, 0.56, -0.02, TWIG, 0, 0, -0.5);       // left arm
-  b.box(0.04, 0.16, 0.04, 0.28, 0.5, -0.04, TWIG, 0, 0, 0.9);         // right arm, holding the wand
-  [0.16, 0.32, 0.42, 0.48, 0.5, 0.48, 0.42, 0.32, 0.18].forEach((w, i) =>   // leaf blade
-    b.box(w, 0.1, 0.16, 0, 0.25 + i * 0.1, 0, i % 2 ? LEAF : LEAF_D));
-  b.box(0.03, 0.84, 0.02, 0, 0.64, 0.086, VEIN);                      // midrib on the back
-  b.box(0.08, 0.025, 0.02, 0, 0.66, -0.083, 0xc2475f);                // smile
+  b.cap(0.012, 0.7, 0, 0.67, 0.064, VEIN);                             // midrib on the back
+  b.torus(0.035, 0.009, Math.PI, 0, 0.685, -0.07, 0xc2475f, 0, 0, Math.PI); // smile
+  b.cap(0.02, 0.16, -0.27, 0.58, -0.02, TWIG, 0, 0, -0.6);             // left arm
+  b.cap(0.02, 0.14, 0.28, 0.52, -0.04, TWIG, 0, 0, 0.9);               // right arm, holding the wand
   inner.add(b.mesh());
   const st = new VB();                                                // curly stem on top
-  st.box(0.05, 0.14, 0.05, 0, 0.06, 0, 0x4c7a2a);
-  st.box(0.1, 0.05, 0.05, 0.04, 0.14, 0, 0x4c7a2a);
+  st.cap(0.018, 0.06, 0, 0.04, 0, STEM);
+  st.torus(0.045, 0.016, Math.PI * 1.3, 0.045, 0.1, 0, STEM, 0, 0, Math.PI * 0.6);
   const w = new VB();                                                 // wishing wand
-  w.box(0.035, 0.42, 0.035, 0, 0.18, 0, 0xb48cff);
-  for (const [x, y] of [[0.12, 0.52], [-0.1, 0.56], [0.08, 0.32]]) w.box(0.04, 0.04, 0.04, x, y, 0, 0xffffff);
+  w.cap(0.018, 0.38, 0, 0.19, 0, 0xb48cff);
+  for (const [x, y] of [[0.12, 0.52], [-0.1, 0.56], [0.08, 0.32]]) w.ball(0.022, 0.022, 0.022, x, y, 0, 0xffffff);
   const wand = wobble(inner, w, 0.34, 0.45, -0.06, -1, 'x');
   const wishStar = starMesh(0.14, 0.05, rainbowAt);                    // rainbow star tip
   wishStar.position.set(0, 0.46, 0);
