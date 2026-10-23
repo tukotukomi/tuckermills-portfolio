@@ -13,8 +13,8 @@ const AHEAD = 27, BEHIND = 22;  // rows kept around the camera
 const HOP_T = 0.13;             // seconds per hop
 const CAM_OFF = new THREE.Vector3(2.4, 5.6, 7.2); // behind-right, a low 36° look across the fields
 const _feet = new THREE.Vector3();
-// The hawk only swoops once the hopper's feet have reached the bottom edge of the screen.
-const offBottom = () => _feet.set(P.x, 0, P.z).project(camera).y < -0.98;
+// Is a spot on the ground (x, z) below the bottom edge of the screen? Hoppers can't back off-screen.
+const belowScreen = (x, z) => _feet.set(x, 0, z).project(camera).y < -0.92;
 const RAINBOW = [0xff4b4b, 0xff9a2e, 0xffd93b, 0x5fd35f, 0x46a6ff, 0x9b6bff];
 const GREENS = [0x5cb83a, 0x4faa38, 0x68c444, 0x55b03f];
 
@@ -105,6 +105,7 @@ const postMat = new THREE.ShaderMaterial({
     depthRange: { value: camera.far - camera.near },
     ink: { value: INK },
     inkMix: { value: 0.9 },
+    grade: { value: new THREE.Color(1, 1, 1) },   // time-of-day tint over the whole picture
     sat: { value: 1 },
   },
   vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0., 1.); }',
@@ -114,12 +115,13 @@ const postMat = new THREE.ShaderMaterial({
     uniform float depthRange;
     uniform vec3 ink;
     uniform float inkMix, sat;
+    uniform vec3 grade;
     varying vec2 vUv;
     float D(vec2 uv) { return texture2D(tDepth, uv).x * depthRange; }
     vec3 N(vec2 uv) { return texture2D(tNormal, uv).xyz; }
     void main() {
       vec3 col = texture2D(tColor, vUv).rgb;
-      col = max(mix(vec3(dot(col, vec3(0.2126, 0.7152, 0.0722))), col, sat), 0.);
+      col = max(mix(vec3(dot(col, vec3(0.2126, 0.7152, 0.0722))), col, sat), 0.) * grade;
       vec2 dx = vec2(texel.x, 0.), dy = vec2(0., texel.y);
       float dc = D(vUv);
       // second difference: flat (even sloped) ground cancels out, steps don't
@@ -138,10 +140,13 @@ const postMat = new THREE.ShaderMaterial({
 const postQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), postMat);
 renderer.shadowMap.autoUpdate = false;
 
+const GLOW_LAYER = 1;
 function renderCel() {
   renderer.shadowMap.needsUpdate = true;
   renderer.setRenderTarget(rtColor);
+  camera.layers.enable(GLOW_LAYER);    // glowing bits (fireflies) are drawn but get no ink outline
   renderer.render(scene, camera);
+  camera.layers.disable(GLOW_LAYER);
   const bg = scene.background;
   scene.overrideMaterial = normalMat;
   scene.background = null;
@@ -175,6 +180,59 @@ function applyLook(name) {
   postMat.uniforms.sat.value = L.sat;
   lineScale = L.line;
   resizeCel();
+}
+
+// ---------- the farming day ----------
+// Daylight (1 = full, 0 = night) runs down while you dawdle and comes back with
+// every new row reached. When it runs out, night falls and the farming day is
+// over. The drain matches the old camera creep: on average you need to reach
+// that many new rows per second to keep the sun up.
+const DAY_GAIN = 0.05;   // daylight per new row
+const dayDrain = r => DAY_GAIN * (0.22 + 0.12 * warm(r) + 0.3 * diff(r));
+// Lighting keyframes: daylight, sun colour, sun strength, sky, ground bounce,
+// ambient strength, whole-picture tint, sun height (lower = longer shadows).
+const DAY_KEYS = [
+  [1.0, 0xfff3dc, 1.0, 0xfff4ec, 0x7d6fa8, 1.0, 0xffffff, 12],    // midday
+  [0.45, 0xffcf94, 1.0, 0xffe4c8, 0x8a6fa8, 0.95, 0xfff0dc, 7],    // golden hour
+  [0.2, 0xffd6c4, 0.8, 0xdcc8ff, 0x6a5aa0, 0.9, 0xece4fa, 4],    // dusk: lavender, grass stays green
+  [0.0, 0xa8bcff, 0.5, 0x7088d0, 0x30306a, 0.72, 0x93a8ee, 6],    // night, moonlit blue
+];
+const _ca = new THREE.Color(), _cb = new THREE.Color();
+const mixHex = (a, b, t, out) => out.copy(_ca.setHex(a)).lerp(_cb.setHex(b), t);
+function updateDay() {
+  const d = clamp(game.day, 0, 1);
+  let i = 0;
+  while (i < DAY_KEYS.length - 2 && d < DAY_KEYS[i + 1][0]) i++;
+  const A = DAY_KEYS[i], B = DAY_KEYS[i + 1], t = clamp((A[0] - d) / (A[0] - B[0]), 0, 1);
+  mixHex(A[1], B[1], t, sun.color);
+  sun.intensity = look.sun * lerp(A[2], B[2], t);
+  mixHex(A[3], B[3], t, hemi.color);
+  if (look.sky === look.ground) hemi.groundColor.copy(hemi.color);   // the Bold look keeps its flat ambient
+  else mixHex(A[4], B[4], t, hemi.groundColor);
+  hemi.intensity = look.hemi * lerp(A[5], B[5], t);
+  mixHex(A[6], B[6], t, postMat.uniforms.grade.value);
+  SUN_OFF.y = lerp(A[7], B[7], t);
+}
+
+// Fireflies come out at dusk: little glowing dots drifting around the hopper.
+const flies = [];
+const FLY_MAT = new THREE.MeshBasicMaterial({ color: 0xfff27a });
+function updateFlies(dt) {
+  if (game.day < 0.35 && game.state === 'play' && flies.length < 30 && Math.random() < dt * 14) {
+    const m = new THREE.Mesh(PGEO, FLY_MAT);
+    m.layers.set(GLOW_LAYER);
+    m.position.set(P.x + rand(-5, 5), rand(0.3, 1.4), P.z + rand(-9, 3));
+    scene.add(m);
+    flies.push({ m, t: 0, life: rand(2, 4), ph: rand(0, 6) });
+  }
+  for (let i = flies.length - 1; i >= 0; i--) {
+    const f = flies[i];
+    f.t += dt;
+    f.m.position.x += Math.cos(f.t * 2 + f.ph) * dt * 0.25;
+    f.m.position.y += Math.sin(f.t * 3 + f.ph) * dt * 0.3;
+    f.m.scale.setScalar(0.1 * Math.max(0, Math.sin(Math.PI * f.t / f.life)));
+    if (f.t > f.life) { scene.remove(f.m); flies.splice(i, 1); }
+  }
 }
 
 // ---------- voxel builder: many boxes -> one vertex-coloured mesh ----------
@@ -744,36 +802,6 @@ const FLOWER_GEO = (() => {
 })();
 const FLOWER_MAT = toon({ vertexColors: true, emissive: 0x3a2400 });
 
-function buildHawk() {
-  const group = new THREE.Group();
-  const b = new VB();
-  const BR = 0x7a4a2a, DK = 0x5a3520, Y = 0xffc21a;
-  b.box(0.7, 0.5, 1.1, 0, 0, 0, BR);
-  b.box(0.5, 0.2, 0.8, 0, -0.25, 0, 0xe8d3b0);
-  b.box(0.5, 0.45, 0.45, 0, 0.15, -0.7, 0xffffff);
-  b.box(0.18, 0.16, 0.25, 0, 0.1, -1.0, Y);
-  b.box(0.12, 0.1, 0.1, 0, 0.0, -1.1, Y);
-  for (const s of [-1, 1]) {
-    b.box(0.02, 0.1, 0.1, s * 0.255, 0.22, -0.78, 0x111111);
-    b.box(0.03, 0.04, 0.16, s * 0.26, 0.29, -0.78, DK);
-    b.box(0.1, 0.28, 0.1, s * 0.15, -0.42, -0.1, Y);
-  }
-  b.box(0.5, 0.1, 0.55, 0, 0.05, 0.78, DK);
-  group.add(b.mesh());
-  const wings = [];
-  for (const s of [-1, 1]) {
-    const wv = new VB();
-    wv.box(1.3, 0.08, 0.72, s * 0.65, 0, 0, BR);
-    wv.box(0.45, 0.07, 0.6, s * 1.5, 0, 0.05, DK);
-    const m = wv.mesh();
-    m.position.set(s * 0.35, 0.15, 0);
-    group.add(m);
-    wings.push(m);
-  }
-  group.scale.setScalar(1.35);
-  return { group, wings };
-}
-
 // ---------- audio (tiny synth, no files) ----------
 const sfx = (() => {
   let ctx = null, master = null, noiseBuf = null;
@@ -835,7 +863,7 @@ const sfx = (() => {
     moo() { tone(150, 105, 0.7, 'sawtooth', 0.07); tone(152, 108, 0.7, 'triangle', 0.12); },
     ding() { tone(1500, null, 0.14, 'triangle', 0.12); },
     snort() { noise(0.35, 0.35, 'bandpass', 500); tone(90, 60, 0.3, 'sawtooth', 0.1); },
-    screech() { tone(2300, 1200, 0.55, 'sawtooth', 0.05); tone(2000, 1400, 0.45, 'square', 0.03, 0.05); },
+    lullaby() { tone(784, null, 0.4, 'triangle', 0.08); tone(659, null, 0.4, 'triangle', 0.08, 0.35); tone(523, null, 0.9, 'triangle', 0.08, 0.7); },
     launch() { tone(300, 1200, 0.4, 'square', 0.07); },
     honk() { tone(420, 330, 0.18, 'sawtooth', 0.09); tone(430, 340, 0.2, 'sawtooth', 0.09, 0.2); },
     buzz() { tone(110, 120, 0.45, 'sawtooth', 0.025); },
@@ -1347,8 +1375,7 @@ function updateStampede(lane, dt) {
 
 // ---------- player ----------
 const P = {};
-const game = { state: 'title', score: 0, top: store.get('bl-top', 0), coins: store.get('bl-coins', 0), camX: 0, camZ: 0, time: 0 };
-let hawk = null;
+const game = { state: 'title', day: 1, score: 0, top: store.get('bl-top', 0), coins: store.get('bl-coins', 0), camX: 0, camZ: 0, time: 0 };
 
 function resetPlayer() {
   if (P.model) scene.remove(P.model.group);
@@ -1374,7 +1401,8 @@ function move(dx, dr) {
   const land = lane.type !== 'water';
   let tx = P.x + dx;
   if (land) tx = Math.round(tx);
-  const blocked = Math.abs(tx) > COLS + (land ? 0 : 0.49) || ((lane.type === 'grass' || lane.type === 'forest') && lane.blocked.has(tx));
+  const blocked = Math.abs(tx) > COLS + (land ? 0 : 0.49) || ((lane.type === 'grass' || lane.type === 'forest') && lane.blocked.has(tx))
+    || (dr < 0 && belowScreen(tx, -tr));   // can't back off the bottom of the screen
   if (blocked) {
     P.hop = { fx: P.x, fz: P.z, fy: P.y, tx: P.x, tz: P.z, ty: P.y, t: 0, fromR: P.r, toR: P.r, h: 0.15, bump: true };
     sfx.bump();
@@ -1413,7 +1441,11 @@ function land() {
     burst(P.x, 0.6, P.z, [0xffd23f, 0xffe680, 0xffffff], 10, 1.5, 4, 0.08, 0.5);
     hud();
   }
-  if (P.r > game.score) { game.score = P.r; hud(); }
+  if (P.r > game.score) {   // new ground: the sun climbs back up a little
+    game.day = Math.min(1, game.day + DAY_GAIN * (P.r - game.score));
+    game.score = P.r;
+    hud();
+  }
   if (P.queue) { const q = P.queue; P.queue = null; move(...q); }
 }
 
@@ -1423,7 +1455,7 @@ const DEATH_MSG = {
   launch: 'Launched by a bull!',
   splash: "Splash! {name} can't swim!",
   swept: 'Swept down the creek!',
-  hawk: 'Snatched by a hawk!',
+  night: 'The sun set on the farming day!',
   goose: 'Chased off by geese!',
   harvest: 'Baled up by a combine!',
   dusted: 'Buzzed by a crop duster!',
@@ -1475,15 +1507,12 @@ function die(kind, mover, lane) {
   } else if (kind === 'splash' || kind === 'swept') {
     sfx.splash();
     burst(P.x, 0, P.z, [0xffffff, 0xbfe9ff, 0x56c3ee], 18, 1.8, 5, 0.12, 0.7);
-  } else if (kind === 'hawk') {
-    sfx.screech();
-    hawk = buildHawk();
-    hawk.group.rotation.y = Math.PI;
-    hawk.t = 0;
-    scene.add(hawk.group);
+  } else if (kind === 'night') {        // the sun went down: turn round, yawn, lie down for the night
+    P.faceTarget = Math.PI + 0.36;
+    sfx.lullaby();
   }
   if (game.score > game.top) { game.top = game.score; store.set('bl-top', game.top); game.record = true; }
-  setTimeout(gameOver, kind === 'hawk' ? 1500 : 1100);
+  setTimeout(gameOver, kind === 'night' ? 1800 : 1100);
 }
 
 function updatePlayer(dt) {
@@ -1537,21 +1566,8 @@ function updatePlayer(dt) {
       if (t < 0.35) P.x += P.vx * 2.5 * dt;
     } else if (P.death === 'splash' || P.death === 'swept') {
       P.y = lerp(P.y, -1.3, Math.min(1, dt * 4));
-    } else if (P.death === 'hawk' && hawk) {
-      hawk.t += dt;
-      const ht = hawk.t;
-      if (ht < 0.55) {
-        const k = ht / 0.55, e = 1 - (1 - k) * (1 - k);
-        hawk.group.position.set(P.x, lerp(4, 1.6, e), P.z + lerp(-16, 0, e));
-      } else {
-        const k = (ht - 0.55) / 0.9;
-        hawk.group.position.set(P.x, 1.6 + k * 4, P.z + k * 18);
-        P.y = hawk.group.position.y - 1.25;
-        group.position.z = hawk.group.position.z;
-      }
-      const flap = Math.sin(ht * 22) * 0.7;
-      hawk.wings[0].rotation.z = -flap;
-      hawk.wings[1].rotation.z = flap;
+    } else if (P.death === 'night' && t > 0.5) {
+      inner.rotation.x = lerp(inner.rotation.x, 1.35, Math.min(1, dt * 3));   // settles onto her back
     }
   }
 
@@ -1591,7 +1607,6 @@ window.addEventListener('resize', resize);
 
 const _t = new THREE.Vector3();
 function updateCamera(dt) {
-  if (game.state === 'play') game.camZ -= (0.22 + 0.12 * warm(P.r) + 0.3 * diff(P.r)) * dt;
   const desired = P.z - 4;
   if (P.alive && desired < game.camZ) game.camZ += (desired - game.camZ) * Math.min(1, dt * 5);
   if (P.alive) game.camX += (clamp(P.x, -2.5, 2.5) * 0.6 - game.camX) * Math.min(1, dt * 3);
@@ -1600,9 +1615,7 @@ function updateCamera(dt) {
   camera.lookAt(_t);
   sun.position.copy(_t).add(SUN_OFF);
   sun.target.position.copy(_t);
-  // hawk check runs here, against this frame's camera (not last game's, after a restart)
   camera.updateMatrixWorld();
-  if (game.state === 'play' && P.alive && offBottom()) die('hawk');
 }
 
 function ensureLanes() {
@@ -1613,6 +1626,13 @@ function ensureLanes() {
 
 // ---------- flow ----------
 const $ = id => document.getElementById(id);
+let sunDot = null, skyBar = null;
+function hudDay() {   // slide the sun along the daylight dial
+  sunDot ||= $('sunDot'); skyBar ||= $('sky');
+  sunDot.style.left = (clamp(game.day, 0, 1) * 100).toFixed(1) + '%';
+  sunDot.classList.toggle('moon', game.day < 0.15);
+  skyBar.classList.toggle('low', game.day < 0.25 && game.state === 'play');
+}
 function hud() {
   $('score').textContent = game.score;
   $('top').textContent = 'TOP ' + game.top;
@@ -1623,7 +1643,9 @@ function newWorld() {
   for (const lane of [...lanes.values()]) removeLane(lane);
   for (const p of parts) scene.remove(p.m);
   parts.length = 0;
-  if (hawk) { scene.remove(hawk.group); hawk = null; }
+  for (const f of flies) scene.remove(f.m);
+  flies.length = 0;
+  game.day = 1;
   queue = [];
   genRow = -BEHIND - 3;
   game.score = 0;
@@ -1733,6 +1755,13 @@ function step(dt) {
   updateCamera(dt);
   ensureLanes();
   updateParts(dt);
+  if (game.state === 'play' && P.alive) {   // the day wears on
+    game.day -= dayDrain(P.r) * dt;
+    if (game.day <= 0) { game.day = 0; die('night'); }
+  }
+  updateDay();
+  updateFlies(dt);
+  hudDay();
   renderCel();
 }
 function frame(now) {

@@ -182,3 +182,21 @@ body.title #titleBtns { display: flex; }
 }
 /* controller focus ring in the picker (only once a controller or keys are used) */
 body.pad .heroCard.focus, body.keys .heroCard.focus, .heroCard:focus-visible { outline: 5px solid #46a6ff; outline-offset: 2px; transform: scale(1.04); }
+
+/* ---------- daylight dial: the sun slides toward night as the day runs down ---------- */
+#sky {
+  position: relative; width: 132px; height: 16px; margin-top: 12px;
+  border: 3px solid #000; border-radius: 10px;
+  background: linear-gradient(90deg, #262b66 0%, #c9609a 20%, #ffb86b 42%, #8fd8ff 72%, #c4ecff 100%);
+  box-shadow: 0 3px 0 rgba(0, 0, 0, .35);
+}
+body.title #sky { visibility: hidden; }
+#sky.low { animation: pulse .7s ease-in-out infinite; }
+#sunDot {
+  position: absolute; top: 50%; left: 100%;
+  width: 26px; height: 26px; border-radius: 50%;
+  background: #ffd23f; border: 3px solid #000;
+  box-shadow: inset -4px -4px 0 #f0a81a;
+  transform: translate(-50%, -50%);
+}
+#sunDot.moon { background: #eef2ff; box-shadow: inset 7px -3px 0 #b8c2ec; }
