@@ -1681,7 +1681,7 @@ function hudDay() {   // slide the sun along the daylight dial
 }
 function hud() {
   $('score').textContent = game.score;
-  $('top').textContent = 'TOP ' + game.top;
+  $('top').textContent = 'Best ' + game.top;
   $('coinN').textContent = game.coins;
 }
 
