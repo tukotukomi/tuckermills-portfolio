@@ -201,7 +201,7 @@ const DAY_KEYS = [
 const _ca = new THREE.Color(), _cb = new THREE.Color();
 const mixHex = (a, b, t, out) => out.copy(_ca.setHex(a)).lerp(_cb.setHex(b), t);
 function updateDay() {
-  const d = clamp(game.day, 0, 1);
+  const d = clamp(game.light, 0, 1);
   let i = 0;
   while (i < DAY_KEYS.length - 2 && d < DAY_KEYS[i + 1][0]) i++;
   const A = DAY_KEYS[i], B = DAY_KEYS[i + 1], t = clamp((A[0] - d) / (A[0] - B[0]), 0, 1);
@@ -330,6 +330,8 @@ class VB {
   rbox(w, h, d, x, y, z, color, rad, ax = 0, ay = 0, az = 0) { const a = this.seg(4, 2); return this.add(prim(`rbox${w}/${h}/${d}/${rad}/${a}`, () => new RoundedBoxGeometry(w, h, d, a, rad)), color, x, y, z, ax, ay, az); }
   cone(r, h, x, y, z, color, ax = 0, ay = 0, az = 0) { const a = this.seg(18, 6); return this.add(prim(`cone${r}/${h}/${a}`, () => new THREE.ConeGeometry(r, h, a)), color, x, y, z, ax, ay, az); }
   cyl(rt, rb, h, x, y, z, color, ax = 0, ay = 0, az = 0) { const a = this.seg(20, 7); return this.add(prim(`cyl${rt}/${rb}/${h}/${a}`, () => new THREE.CylinderGeometry(rt, rb, h, a)), color, x, y, z, ax, ay, az); }
+  // Gable roof: a triangular prism, ridge along x, apex up; flat-shaded. h squashes its height.
+  roof(w, len, h, x, y, z, color) { return this.add(prim(`roof${w}`, () => { const g = new THREE.CylinderGeometry(w / Math.sqrt(3), w / Math.sqrt(3), 1, 3).toNonIndexed(); g.computeVertexNormals(); return g; }), color, x, y, z, -Math.PI / 2, 0, Math.PI / 2, 1, len, h); }
   torus(R, tube, arc, x, y, z, color, ax = 0, ay = 0, az = 0) { const a = this.seg(10, 4), b = this.seg(28, 8); return this.add(prim(`torus${R}/${tube}/${arc}/${b}`, () => new THREE.TorusGeometry(R, tube, a, b, arc)), color, x, y, z, ax, ay, az); }
 }
 const shade = (hex, f) => new THREE.Color(hex).multiplyScalar(f).getHex();
@@ -879,6 +881,8 @@ const sfx = (() => {
     rumble(k = 1) { noise(0.55, 0.55 * k, 'lowpass', 140); tone(58, 44, 0.5, 'sine', 0.18 * k); },
     creak() { tone(320, 170, 0.45, 'sawtooth', 0.035); tone(260, 210, 0.3, 'square', 0.02, 0.15); },
     snort() { noise(0.35, 0.35, 'bandpass', 500); tone(90, 60, 0.3, 'sawtooth', 0.1); },
+    rooster() { tone(700, 900, 0.12, 'sawtooth', 0.045); tone(900, 760, 0.12, 'sawtooth', 0.045, 0.13); tone(760, 1020, 0.14, 'sawtooth', 0.045, 0.27); tone(1020, 640, 0.55, 'sawtooth', 0.045, 0.43); },
+    upgrade() { tone(784, null, 0.1, 'square', 0.06); tone(988, null, 0.1, 'square', 0.06, 0.1); tone(1319, null, 0.32, 'square', 0.06, 0.2); noise(0.4, 0.25, 'bandpass', 1400, 0.05); },
     lullaby() { tone(784, null, 0.4, 'triangle', 0.08); tone(659, null, 0.4, 'triangle', 0.08, 0.35); tone(523, null, 0.9, 'triangle', 0.08, 0.7); },
     launch() { tone(300, 1200, 0.4, 'square', 0.07); },
     honk() { tone(420, 330, 0.18, 'sawtooth', 0.09); tone(430, 340, 0.2, 'sawtooth', 0.09, 0.2); },
@@ -1420,7 +1424,7 @@ function updateStampede(lane, dt) {
 
 // ---------- player ----------
 const P = {};
-const game = { state: 'title', day: 1, shake: 0, score: 0, top: store.get('bl-top', 0), coins: store.get('bl-coins', 0), camX: 0, camZ: 0, time: 0 };
+const game = { state: 'farm', where: 'farm', light: 1, dawn: 1, today: 0, day: 1, shake: 0, score: 0, top: store.get('bl-top', 0), coins: store.get('bl-coins', 0), camX: 0, camZ: 0, time: 0 };
 
 function resetPlayer() {
   if (P.model) scene.remove(P.model.group);
@@ -1481,6 +1485,7 @@ function land() {
     lane.group.remove(coin.m);
     lane.coins.splice(lane.coins.indexOf(coin), 1);
     game.coins++;
+    game.today++;
     store.set('bl-coins', game.coins);
     sfx.coin();
     burst(P.x, 0.6, P.z, [0xffd23f, 0xffe680, 0xffffff], 10, 1.5, 4, 0.08, 0.5);
@@ -1652,10 +1657,13 @@ window.addEventListener('resize', resize);
 
 const _t = new THREE.Vector3();
 function updateCamera(dt) {
-  const desired = P.z - 4;
-  if (P.alive && desired < game.camZ) game.camZ += (desired - game.camZ) * Math.min(1, dt * 5);
-  if (P.alive) game.camX += (clamp(P.x, -2.5, 2.5) * 0.6 - game.camX) * Math.min(1, dt * 3);
-  _t.set(game.camX, 0, game.camZ);
+  if (game.where === 'farm') _t.set(0, 0, FARM_Z - 1.4);   // the farm: a fixed, framed view
+  else {
+    const desired = P.z - 4;
+    if (P.alive && desired < game.camZ) game.camZ += (desired - game.camZ) * Math.min(1, dt * 5);
+    if (P.alive) game.camX += (clamp(P.x, -2.5, 2.5) * 0.6 - game.camX) * Math.min(1, dt * 3);
+    _t.set(game.camX, 0, game.camZ);
+  }
   camera.position.copy(_t).add(CAM_OFF);
   camera.lookAt(_t);
   if (game.shake > 0.002) {             // the ground rumbles when bulls are about to charge
@@ -1674,6 +1682,215 @@ function ensureLanes() {
   for (const lane of [...lanes.values()]) if (lane.r < camRow - BEHIND) removeLane(lane);
 }
 
+// ---------- Betty Lou's farm: the hub between rounds ----------
+// Built far behind the road (z = FARM_Z) in the same scene, so the same camera,
+// lights and ink outlines draw it. While you're at the farm the road is paused.
+const FARM_Z = 160;
+const FARM_LIGHT = 0.8;   // the farm sits in soft morning light
+// What each Fish Pond level adds. Level n costs n sunflowers (1, 2, 3, ...).
+const POND_STEPS = ['Fish move in', 'Lily pads', 'A little dock', 'Koi', 'Ducks', 'A bigger pond with a stone rim', 'A fountain', 'A frog', 'Lanterns'];
+const pondNext = lvl => POND_STEPS[lvl] || 'Another fish';
+const pondCost = lvl => lvl + 1;
+const POND = new THREE.Vector3(1.3, 0, 1.2);   // pond centre, farm-local
+const HERO_SPOT = new THREE.Vector3(-1.1, 0, -1.9);
+
+const farm = { group: new THREE.Group(), pond: new THREE.Group(), fish: [], ducks: [], spray: 0, hero: null, level: store.get('bl-pond', 0) };
+farm.group.position.set(0, 0, FARM_Z);
+farm.group.add(farm.pond);
+scene.add(farm.group);
+
+function buildFarm() {
+  const vb = new VB(0.45);
+  const GRASS = 0x9bd85a, PATH = 0xdcc08a, WOOD = 0x9c6b3c;
+  vb.rbox(32, 1, 36, 0, -0.5, 0, GRASS, 0.3);                               // the yard
+  vb.rbox(1.2, 0.04, 9, -1.1, 0.01, 1.5, PATH, 0.3);                         // path from the porch
+  for (let i = 0; i < 40; i++) vb.cone(0.035, 0.11, rand(-11, 11), 0.045, rand(-12, 10), 0x7cc24a);  // tufts
+
+  // farmhouse: cream walls, red gable roof, porch, door and windows
+  const hx = -1.6, hz = -5;
+  vb.rbox(2.8, 1.6, 2.2, hx, 0.8, hz, 0xfff1d8, 0.08);
+  vb.roof(2.6, 3.2, 0.62, hx, 1.6 + 2.6 / Math.sqrt(3) / 2 * 0.62, hz, 0xd8473a);   // sits on the walls
+  vb.cyl(0.14, 0.14, 0.7, hx + 0.8, 2.05, hz - 0.3, 0xb35a3a);                // chimney
+  vb.rbox(0.5, 0.9, 0.06, hx, 0.45, hz + 1.11, 0x8a5a33, 0.05);              // door
+  vb.ball(0.04, 0.04, 0.03, hx + 0.15, 0.45, hz + 1.15, 0xffd23f);
+  for (const s of [-1, 1]) {
+    vb.rbox(0.5, 0.5, 0.06, hx + s * 0.85, 0.95, hz + 1.11, 0xbfe9ff, 0.06);  // windows
+    vb.rbox(0.56, 0.06, 0.08, hx + s * 0.85, 0.68, hz + 1.12, 0xffffff, 0.02);
+    vb.rbox(0.56, 0.12, 0.14, hx + s * 0.85, 0.62, hz + 1.18, 0x8a5a33, 0.03); // flower boxes
+    for (let i = 0; i < 3; i++) vb.ball(0.05, 0.05, 0.05, hx + s * 0.85 + (i - 1) * 0.16, 0.71, hz + 1.2, [0xff6fae, 0xffd93b, 0xb48cff][i]);
+  }
+  vb.rbox(2.4, 0.12, 0.8, hx, 0.06, hz + 1.5, WOOD, 0.04);                   // porch
+  for (const s of [-1, 1]) vb.cyl(0.05, 0.05, 1.1, hx + s * 1.1, 0.6, hz + 1.85, 0xffffff);
+  vb.rbox(2.5, 0.08, 0.9, hx, 1.18, hz + 1.5, 0xd8473a, 0.03);               // porch roof
+
+  // red barn with white trim and a hayloft
+  const bx = 3.3, bz = -6;
+  vb.rbox(2.6, 2.0, 2.8, bx, 1.0, bz, 0xc9473a, 0.08);
+  vb.roof(3.0, 3.0, 0.75, bx, 2.0 + 3.0 / Math.sqrt(3) / 2 * 0.75, bz, 0x6e3a3a);
+  vb.rbox(1.1, 1.3, 0.06, bx, 0.65, bz + 1.42, 0xa8352c, 0.04);              // big door
+  for (const s of [-1, 1]) vb.rbox(0.08, 1.6, 0.04, bx, 0.65, bz + 1.46, 0xffffff, 0.02, 0, 0, s * 0.7);   // the X
+  vb.rbox(1.2, 0.08, 0.05, bx, 1.32, bz + 1.45, 0xffffff, 0.02);
+  vb.rbox(0.6, 0.5, 0.06, bx, 1.75, bz + 1.42, 0x5a2a24, 0.05);              // hayloft
+  vb.cyl(0.26, 0.26, 0.5, bx - 1.7, 0.26, bz + 1.6, 0xe8c45c, Math.PI / 2, 0, 0);   // hay bales by the barn
+  vb.cyl(0.26, 0.26, 0.5, bx - 1.6, 0.72, bz + 1.6, 0xe8c45c, Math.PI / 2, 0, 0);
+
+  // sunflower patch and a mailbox
+  for (let i = 0; i < 9; i++) {
+    const x = -3.6 + (i % 3) * 0.45 + rand(-0.08, 0.08), z = 1.8 + Math.floor(i / 3) * 0.5;
+    vb.cyl(0.02, 0.02, 0.55, x, 0.28, z, 0x3f8f2f);
+    vb.cyl(0.13, 0.13, 0.04, x, 0.6, z + 0.02, 0xffc21a, Math.PI / 2, 0, 0);
+    vb.cyl(0.06, 0.06, 0.05, x, 0.6, z + 0.04, 0x7a4a1c, Math.PI / 2, 0, 0);
+  }
+  vb.cyl(0.04, 0.04, 0.8, -2.3, 0.4, 3.6, WOOD);
+  vb.rbox(0.36, 0.26, 0.24, -2.3, 0.9, 3.6, 0x5bb4ff, 0.1);
+  vb.rbox(0.05, 0.16, 0.04, -2.1, 1.0, 3.6, 0xff4b4b, 0.02);
+
+  // fence along the front, trees all round
+  for (let x = -6; x <= 6; x += 1) {
+    vb.cyl(0.05, 0.06, 0.6, x, 0.3, 5.2, 0xf4ead8);
+    vb.ball(0.06, 0.04, 0.06, x, 0.62, 5.2, 0xf4ead8);
+  }
+  for (const y of [0.25, 0.48]) vb.rbox(12.2, 0.06, 0.05, 0, y, 5.2, 0xf4ead8, 0.02);
+  for (let x = -11; x <= 11; x += 1.3) for (const z of [-9.5, -11.5]) pick(ALL_TREES)(vb, x + rand(-0.3, 0.3), z + rand(-0.3, 0.3));
+  for (let z = -8; z <= 8; z += 1.4) for (const x of [-5.6, -6.8, -8.2, 5.8, 7, 8.4]) pick(ALL_TREES)(vb, x + rand(-0.3, 0.3), z + rand(-0.3, 0.3));
+  bush(vb, -3.3, 0); bush(vb, 4.6, 0);
+  const m = vb.mesh();
+  farm.group.add(m);
+  buildPond();
+}
+
+// Little animated bits for the pond: fish and ducks are their own meshes so they can swim.
+function fishMesh(colors) {
+  const v = new VB(0.6);
+  v.ball(0.14, 0.07, 0.07, 0, 0, 0, (x, y, z) => colors.length > 1 && (x > 0.04 || (z > 0.02 && x < -0.03)) ? colors[1] : colors[0]);
+  v.cone(0.06, 0.12, -0.16, 0, 0, colors[0], 0, 0, Math.PI / 2);
+  v.ball(0.015, 0.015, 0.015, 0.1, 0.025, 0.05, 0x111111);
+  const mesh = v.mesh();
+  farm.pond.add(mesh);
+  return mesh;
+}
+function duckMesh(s) {
+  const v = new VB(0.6);
+  v.ball(0.2 * s, 0.12 * s, 0.13 * s, 0, 0.08 * s, 0, s > 0.8 ? 0xffffff : 0xffe46b);
+  v.ball(0.09 * s, 0.09 * s, 0.09 * s, 0.14 * s, 0.24 * s, 0, s > 0.8 ? 0xffffff : 0xffe46b);
+  v.cone(0.035 * s, 0.09 * s, 0.25 * s, 0.22 * s, 0, 0xff9a2e, 0, 0, -Math.PI / 2);
+  for (const z of [-1, 1]) v.ball(0.015 * s, 0.018 * s, 0.012 * s, 0.18 * s, 0.27 * s, z * 0.06 * s, 0x111111);
+  const mesh = v.mesh();
+  farm.pond.add(mesh);
+  return mesh;
+}
+
+// Rebuild the pond for its current level. Everything up to that level is there.
+function buildPond() {
+  const g = farm.pond, L = farm.level;
+  for (const c of [...g.children]) { g.remove(c); if (c.geometry !== PGEO) c.geometry?.dispose(); }   // PGEO is shared with particles
+  farm.fish = []; farm.ducks = [];
+  const s = L >= 6 ? 1.3 : 1, rx = 1.7 * s, rz = 1.15 * s;
+  g.position.copy(POND);
+  farm.pondR = [rx, rz];
+  const v = new VB(0.6);
+  v.add(prim('disc', () => new THREE.CylinderGeometry(1, 1, 0.1, 28)), 0xd9c48a, 0, -0.02, 0, 0, 0, 0, rx + 0.18, 1, rz + 0.18);   // sandy edge
+  v.add(prim('disc', () => new THREE.CylinderGeometry(1, 1, 0.1, 28)), 0x5ccaf0, 0, 0.0, 0, 0, 0, 0, rx, 1, rz);                   // water
+  v.add(prim('disc', () => new THREE.CylinderGeometry(1, 1, 0.1, 28)), 0x8edcf6, 0.2, 0.012, -0.15, 0, 0, 0, rx * 0.55, 1, rz * 0.4); // shine
+  for (const a of [2.4, 2.7, 3.0]) {                                          // reeds and cattails
+    const x = Math.cos(a) * rx, z = Math.sin(a) * rz;
+    v.cyl(0.015, 0.015, 0.6, x, 0.3, z, 0x4f8f30);
+    v.cap(0.03, 0.08, x, 0.6, z, 0x7a4a1c);
+  }
+  if (L >= 2) for (const [a, r] of [[0.6, 0.6], [2.0, 0.55], [3.8, 0.65], [5.2, 0.5]]) {   // lily pads
+    v.add(prim('pad', () => new THREE.CylinderGeometry(0.36, 0.36, 0.04, 16, 1, false, 0.5, Math.PI * 2 - 0.6)), 0x3fae49, Math.cos(a) * rx * r, 0.06, Math.sin(a) * rz * r, 0, a, 0, 0.6, 1, 0.6);
+    v.ball(0.05, 0.04, 0.05, Math.cos(a) * rx * r + 0.05, 0.1, Math.sin(a) * rz * r, 0xff8fc8);
+  }
+  if (L >= 3) {                                                             // dock
+    v.rbox(0.5, 0.06, 1.1, rx * 0.55, 0.12, rz * 0.75, 0xb88a5a, 0.02);
+    for (const sx of [-1, 1]) v.cyl(0.04, 0.04, 0.3, rx * 0.55 + sx * 0.2, 0.0, rz * 0.35, 0x7a4f2c);
+  }
+  if (L >= 6) for (let i = 0; i < 18; i++) {                                // stone rim
+    const a = i / 18 * Math.PI * 2;
+    v.ball(0.16, 0.1, 0.13, Math.cos(a) * (rx + 0.22), 0.04, Math.sin(a) * (rz + 0.22), i % 2 ? 0x9aa0a6 : 0xb4babf);
+  }
+  if (L >= 7) {                                                             // fountain
+    v.cyl(0.2, 0.26, 0.3, 0, 0.12, 0, 0xb4babf);
+    v.cyl(0.08, 0.1, 0.35, 0, 0.42, 0, 0xc9cfd4);
+  }
+  if (L >= 8) {                                                             // a frog on a pad
+    const fx = Math.cos(3.8) * rx * 0.65, fz = Math.sin(3.8) * rz * 0.65;
+    v.ball(0.1, 0.07, 0.09, fx, 0.15, fz, 0x5cbf48);
+    for (const z of [-1, 1]) { v.ball(0.035, 0.035, 0.035, fx + 0.05, 0.22, fz + z * 0.05, 0xffffff); v.ball(0.017, 0.017, 0.017, fx + 0.07, 0.225, fz + z * 0.05, 0x111111); }
+  }
+  if (L >= 9) for (const a of [0.9, 2.4, 3.9, 5.4]) {                         // lanterns
+    const x = Math.cos(a) * (rx + 0.55), z = Math.sin(a) * (rz + 0.55);
+    v.cyl(0.03, 0.03, 0.8, x, 0.4, z, 0x5a3a2a);
+    const lamp = new THREE.Mesh(PGEO, FLY_MAT);
+    lamp.scale.setScalar(0.12);
+    lamp.position.set(x, 0.85, z);
+    lamp.layers.set(GLOW_LAYER);
+    g.add(lamp);
+  }
+  g.add(v.mesh());
+  // fish: two at level 1, koi at 4, then one more per level from 10 on (up to 14)
+  const fishCols = [];
+  if (L >= 1) fishCols.push([0xff8a2a], [0xff8a2a]);
+  if (L >= 4) fishCols.push([0xffffff, 0xff6a2a], [0xff6a2a, 0xffffff], [0xffd23f]);
+  for (let i = 10; i <= Math.min(L, 18); i++) fishCols.push(pick([[0xff8a2a], [0xffffff, 0xff6a2a], [0xffd23f], [0xff6fae]]));
+  fishCols.forEach((c, i) => farm.fish.push({ mesh: fishMesh(c), ph: i * 1.9, r: rand(0.35, 0.8), speed: rand(0.5, 0.9) * (i % 2 ? 1 : -1), jump: rand(3, 9) }));
+  if (L >= 5) [1, 0.6, 0.6].forEach((sz, i) => farm.ducks.push({ mesh: duckMesh(sz), ph: -i * 0.35 }));
+}
+
+function updateFarm(dt) {
+  const t = game.time, [rx, rz] = farm.pondR;
+  for (const f of farm.fish) {                     // swim in loops, now and then a little leap
+    const a = f.ph + t * f.speed;
+    f.jump -= dt;
+    let y = 0.07;
+    if (f.jump < 0) {
+      const k = -f.jump / 0.6;
+      y += Math.sin(Math.PI * Math.min(1, k)) * 0.35;
+      if (k >= 1) {
+        f.jump = rand(4, 10);
+        burst(POND.x + f.mesh.position.x, 0.08, FARM_Z + POND.z + f.mesh.position.z, [0xffffff, 0xbfe9ff], 4, 0.5, 2, 0.06, 0.4);
+      }
+    }
+    f.mesh.position.set(Math.cos(a) * rx * f.r, y, Math.sin(a) * rz * f.r);
+    f.mesh.rotation.y = -a - Math.sign(f.speed) * Math.PI / 2;
+  }
+  farm.ducks.forEach((d, i) => {                    // mother duck and ducklings paddle in a ring
+    const a = t * 0.25 + d.ph;
+    d.mesh.position.set(Math.cos(a) * rx * 0.62, 0.05 + Math.sin(t * 3 + i) * 0.01, Math.sin(a) * rz * 0.62);
+    d.mesh.rotation.y = -a - Math.PI / 2;
+  });
+  if (farm.level >= 7 && (farm.spray -= dt) < 0) {  // fountain spray
+    farm.spray = 0.05;
+    burst(POND.x, 0.65, FARM_Z + POND.z, [0xbfe9ff, 0xffffff], 1, 0.35, 3.2, 0.07, 0.6, true);
+  }
+  if (farm.hero) {                                  // the chosen hopper waits in the yard, bobbing gently
+    farm.hero.inner.position.y = Math.abs(Math.sin(t * 2.2)) * 0.05;
+    for (const w of farm.hero.tails) w.rotation[w.userData.axis || 'z'] = w.userData.side * Math.sin(t * 2.2) * 0.12;
+  }
+}
+
+function placeFarmHero() {
+  if (farm.hero) farm.group.remove(farm.hero.group);
+  farm.hero = hero().build();
+  farm.hero.group.position.copy(HERO_SPOT);
+  farm.hero.group.rotation.y = Math.PI + 0.36;     // facing the camera
+  farm.group.add(farm.hero.group);
+}
+
+function upgradePond() {
+  const cost = pondCost(farm.level);
+  if (game.coins < cost) return false;
+  game.coins -= cost;
+  store.set('bl-coins', game.coins);
+  farm.level++;
+  store.set('bl-pond', farm.level);
+  buildPond();
+  sfx.upgrade();
+  burst(POND.x, 0.3, FARM_Z + POND.z, [0xffd23f, 0xffffff, 0xff8fc8, 0x5bb4ff], 26, 2.2, 5, 0.09, 0.9);
+  burst(POND.x, 0.1, FARM_Z + POND.z, [0xffffff, 0xbfe9ff], 14, 1.2, 4, 0.12, 0.7, true);
+  hud();
+  return true;
+}
 // ---------- flow ----------
 const $ = id => document.getElementById(id);
 let sunDot = null, skyBar = null;
@@ -1700,6 +1917,7 @@ function newWorld() {
   queue = [];
   genRow = -BEHIND - 3;
   game.score = 0;
+  game.today = 0;
   game.record = false;
   game.camX = 0;
   game.camZ = -4;
@@ -1708,9 +1926,59 @@ function newWorld() {
   hud();
 }
 
+// The flow: farm -> (sunrise) -> road, waiting for the first hop ('title') -> play
+// -> dead -> over (the sign) -> (fade home) -> farm.
+function setHint() {
+  const pad = document.body.classList.contains('pad');
+  $('hint').innerHTML = game.where === 'farm'
+    ? (pad ? 'Press A to start the day<small>Y: pick a hopper &middot; X: Fish Pond</small>' : 'Start the day<small>Spend sunflowers at the Fish Pond</small>')
+    : (pad ? 'Press A to hop<small>D-pad or stick to move</small>' : 'Tap to hop<small>Swipe to turn &amp; go back</small>');
+}
+// Full-screen wipe; `swap` runs while the screen is covered.
+function transition(kind, swapAt, swap) {
+  const el = $('wipe');
+  el.className = '';
+  void el.offsetWidth;   // restart the animation
+  el.className = kind;
+  setTimeout(swap, swapAt);
+  setTimeout(() => { el.className = ''; }, kind === 'sunrise' ? 2100 : 1000);
+}
+function goRoad() {   // sunrise, then onto the road at first light
+  if (game.state !== 'farm') return;
+  game.state = 'sunrise';
+  closeHeroes();
+  closePond();
+  sfx.rooster();
+  transition('sunrise', 950, () => {
+    newWorld();
+    game.where = 'road';
+    game.state = 'title';
+    game.dawn = 0.12;
+    document.body.classList.remove('farm', 'show-logo');
+    document.body.classList.add('ready');
+    setHint();
+  });
+}
+function goFarm() {   // after a round: a quick fade home
+  if (game.state !== 'over') return;
+  game.state = 'dusk';
+  transition('dusk', 450, enterFarm);
+}
+function enterFarm() {
+  music?.setLevel(1);
+  $('over').classList.remove('show');
+  document.body.classList.remove('over', 'ready');
+  document.body.classList.add('farm');
+  game.where = 'farm';
+  game.state = 'farm';
+  placeFarmHero();
+  setHint();
+  hud();
+}
+
 function startGame() {
   game.state = 'play';
-  document.body.classList.remove('title', 'show-logo');
+  document.body.classList.remove('ready');
 }
 
 function gameOver() {
@@ -1718,19 +1986,11 @@ function gameOver() {
   game.state = 'over';
   document.body.classList.add('over');
   $('overMsg').textContent = (DEATH_MSG[P.death] || 'Oh no!').replace('{name}', hero().name);
+  $('overGain').textContent = game.today === 0 ? 'No sunflowers today' : `${game.today} sunflower${game.today === 1 ? '' : 's'} picked today`;
   const over = $('over');
   over.classList.toggle('record', !!game.record);
   over.classList.add('show');
   hud();
-}
-
-function restart() {
-  music?.setLevel(1);
-  $('over').classList.remove('show');
-  document.body.classList.remove('over');
-  document.body.classList.add('title');
-  game.state = 'title';
-  newWorld();
 }
 
 // ---------- input: tap = hop forward, swipe = direction ----------
@@ -1762,6 +2022,12 @@ const KEYS = {
 };
 window.addEventListener('keydown', e => {
   sfx.ensure();
+  if (game.picking && pondOpen()) {   // Fish Pond panel: Enter buys, Escape closes
+    if (e.code === 'Enter' || e.code === 'Space') buyPond();
+    else if (e.code === 'Escape') closePond();
+    e.preventDefault();
+    return;
+  }
   if (game.picking) {   // arrow keys + Enter work in the picker too
     const nav = { ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down' }[e.code];
     if (nav) { document.body.classList.add('keys'); heroNav(nav); }
@@ -1770,13 +2036,20 @@ window.addEventListener('keydown', e => {
     e.preventDefault();
     return;
   }
-  if (game.state === 'over' && (e.code === 'Space' || e.code === 'Enter')) { restart(); return; }
+  if (game.state === 'farm') {          // Enter starts the day, P opens the pond, C picks a hopper
+    if (e.code === 'Enter' || e.code === 'Space') { goRoad(); e.preventDefault(); }
+    else if (e.code === 'KeyP') openPond();
+    else if (e.code === 'KeyC') openHeroes();
+    return;
+  }
+  if (game.state === 'over' && (e.code === 'Space' || e.code === 'Enter')) { goFarm(); return; }
+  if (game.state !== 'title' && game.state !== 'play') return;
   if (e.code === 'Space' && !e.repeat) { move(0, 1); e.preventDefault(); return; }
   const k = KEYS[e.code];
   if (k && !e.repeat) { move(...k); e.preventDefault(); }
 });
 
-$('play').addEventListener('click', () => { sfx.ensure(); restart(); });
+$('play').addEventListener('click', () => { sfx.ensure(); goFarm(); });
 // Look: ?look=bold in the URL wins, otherwise the last one picked on this device.
 let lookName = new URLSearchParams(location.search).get('look') || store.get('bl-look', 'cel');
 if (!LOOKS[lookName]) lookName = 'cel';
@@ -1797,23 +2070,27 @@ soundBtn.addEventListener('click', () => { sfx.ensure(); soundBtn.classList.togg
 let last = performance.now();
 function step(dt) {
   game.time += dt;
-  for (const lane of lanes.values()) {
-    updateLane(lane, dt, game.time);
-    for (const c of lane.coins) {
-      c.m.rotation.y = Math.sin(game.time * 1.6 + c.c) * 0.7;
-      c.m.position.y = LANE_Y[lane.type] + Math.abs(Math.sin(game.time * 3 + c.c)) * 0.06;
+  if (game.where === 'road') {
+    for (const lane of lanes.values()) {
+      updateLane(lane, dt, game.time);
+      for (const c of lane.coins) {
+        c.m.rotation.y = Math.sin(game.time * 1.6 + c.c) * 0.7;
+        c.m.position.y = LANE_Y[lane.type] + Math.abs(Math.sin(game.time * 3 + c.c)) * 0.06;
+      }
     }
-  }
-  updatePlayer(dt);
+    updatePlayer(dt);
+  } else updateFarm(dt);
   updateCamera(dt);
-  ensureLanes();
+  if (game.where === 'road') ensureLanes();
   updateParts(dt);
   if (game.state === 'play' && P.alive) {   // the day wears on
     game.day -= dayDrain(P.r) * dt;
     if (game.day <= 0) { game.day = 0; die('night'); }
   }
+  game.dawn = Math.min(1, game.dawn + dt * 0.4);   // after the sunrise, the road brightens to full day
+  game.light = game.where === 'farm' ? FARM_LIGHT : Math.min(game.day, game.dawn);
   updateDay();
-  if (music && Math.abs(game.day - (music.day ?? -1)) > 0.02) { music.day = game.day; music.setDay(game.day); }
+  if (music && Math.abs(game.light - (music.day ?? -1)) > 0.02) { music.day = game.light; music.setDay(game.light); }
   updateFlies(dt);
   hudDay();
   renderCel();
@@ -1895,13 +2172,44 @@ function pickHero(id) {
   heroId = id;
   store.set('bl-hero', id);
   markHero();
-  if (game.state === 'title') resetPlayer();   // show the new hopper straight away
+  if (game.where === 'farm') placeFarmHero();   // show the new hopper in the yard straight away
   setTimeout(closeHeroes, 200);
 }
 document.querySelectorAll('.heroBtn').forEach(b => b.addEventListener('click', () => { sfx.ensure(); openHeroes(); }));
 $('heroClose').addEventListener('click', closeHeroes);
 $('heroes').addEventListener('click', e => { if (e.target.id === 'heroes') closeHeroes(); });
-$('start').addEventListener('click', () => { sfx.ensure(); if (game.state === 'title') startGame(); });
+$('start').addEventListener('click', () => { sfx.ensure(); goRoad(); });
+$('pondBtn').addEventListener('click', () => { sfx.ensure(); openPond(); });
+
+// ---------- Fish Pond panel ----------
+const pondOpen = () => $('pond').classList.contains('show');
+function refreshPond() {
+  const cost = pondCost(farm.level), short = cost - game.coins;
+  $('pondLevel').textContent = farm.level === 0 ? 'A muddy little pond' : `Level ${farm.level}`;
+  $('pondNext').textContent = pondNext(farm.level);
+  $('pondCost').textContent = cost;
+  $('pondBuy').disabled = short > 0;
+  $('pondNeed').textContent = short > 0 ? `Pick ${short} more sunflower${short === 1 ? '' : 's'} on the road` : '';
+}
+function openPond() {
+  if (game.state !== 'farm') return;
+  refreshPond();
+  $('pond').classList.add('show');
+  game.picking = true;
+}
+function closePond() {
+  $('pond').classList.remove('show');
+  game.picking = $('heroes').classList.contains('show');
+}
+function buyPond() {
+  if (!upgradePond()) { sfx.bump(); return; }
+  refreshPond();
+  const b = $('pondBuy');
+  b.classList.remove('yay'); void b.offsetWidth; b.classList.add('yay');
+}
+$('pondBuy').addEventListener('click', buyPond);
+$('pondClose').addEventListener('click', closePond);
+$('pond').addEventListener('click', e => { if (e.target.id === 'pond') closePond(); });
 
 // ---------- gamepad (for the big TV) ----------
 // Rumble the controller for stampedes; Android phones get a short buzz instead.
@@ -1918,7 +2226,7 @@ const pad = { prev: [], stick: null };
 function showPadHints() {
   if (document.body.classList.contains('pad')) return;
   document.body.classList.add('pad');
-  $('hint').innerHTML = 'Press A to hop<small>D-pad or stick to move &middot; Y to pick a hopper</small>';
+  setHint();
 }
 window.addEventListener('gamepadconnected', showPadHints);
 function pollPad() {
@@ -1940,20 +2248,29 @@ function pollPad() {
   if (dir || down.some(Boolean)) { showPadHints(); sfx.ensure(); }
   const pick = pressed(2) || pressed(3);
 
+  if (game.picking && pondOpen()) {
+    if (pressed(0) || pressed(9)) buyPond();
+    if (pressed(1) || pick) closePond();
+    return;
+  }
   if (game.picking) {
     if (dir) heroNav(dir);
     if (pressed(0) || pressed(9)) pickHero(HEROES[heroFocus].id);
     if (pressed(1) || pick) closeHeroes();
     return;
   }
+  if (game.state === 'farm') {          // A or Start: start the day; Y: hoppers; X: Fish Pond
+    if (pressed(0) || pressed(9)) goRoad();
+    else if (pressed(3)) openHeroes();
+    else if (pressed(2)) openPond();
+    return;
+  }
   if (game.state === 'over') {
-    if (pressed(0) || pressed(9)) restart();
-    else if (pick) openHeroes();
+    if (pressed(0) || pressed(9)) goFarm();
     return;
   }
   if (game.state === 'title' || game.state === 'play') {
-    if (game.state === 'title' && pick) { openHeroes(); return; }
-    if (game.state === 'title' && pressed(9)) { startGame(); return; }
+    if (pressed(9)) move(0, 1);
     if (dir) move(...DIRS[dir]);
     // A behaves like a tap: squash while held, hop forward on release
     if (pressed(0)) P.held = true;
@@ -1963,6 +2280,10 @@ function pollPad() {
 
 resize();
 newWorld();
-document.body.classList.add('title', 'show-logo');
+buildFarm();
+placeFarmHero();
+document.body.classList.add('farm', 'show-logo');
+setHint();
+hud();
 requestAnimationFrame(frame);
 if (new URLSearchParams(location.search).has('debug')) window.__hop = { P, game, lanes, move, step, pollPad, camera };
