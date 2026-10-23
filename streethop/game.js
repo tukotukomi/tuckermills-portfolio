@@ -802,6 +802,17 @@ const FLOWER_GEO = (() => {
 })();
 const FLOWER_MAT = toon({ vertexColors: true, emissive: 0x3a2400 });
 
+// A swinging farm gate, hinged at the origin, its panel reaching along -z.
+const GATE_GEO = (() => {
+  const v = new VB(TRAFFIC_D), W = 0xf4ead8, R = 0xc9473a;
+  for (const y of [0.22, 0.5, 0.78]) v.rbox(0.07, 0.07, 0.92, 0, y, -0.48, W, 0.025);      // rails
+  v.rbox(0.06, 0.06, 1.06, 0, 0.5, -0.48, W, 0.022, Math.atan2(0.56, 0.85), 0, 0);        // diagonal brace
+  v.rbox(0.09, 0.82, 0.09, 0, 0.42, -0.04, R, 0.03);                                     // hinge stile
+  v.rbox(0.09, 0.82, 0.09, 0, 0.42, -0.92, R, 0.03);                                     // latch stile
+  v.cyl(0.03, 0.03, 0.1, 0, 0.5, -0.98, 0x777777, Math.PI / 2, 0, 0);                    // latch
+  return v.geometry();
+})();
+
 // ---------- audio (tiny synth, no files) ----------
 const sfx = (() => {
   let ctx = null, master = null, noiseBuf = null;
@@ -861,7 +872,8 @@ const sfx = (() => {
     squash() { noise(0.3, 0.5, 'lowpass', 700); tone(180, 60, 0.3, 'sawtooth', 0.12); },
     splash() { noise(0.55, 0.45, 'bandpass', 1400); tone(600, 180, 0.25, 'sine', 0.1); },
     moo() { tone(150, 105, 0.7, 'sawtooth', 0.07); tone(152, 108, 0.7, 'triangle', 0.12); },
-    ding() { tone(1500, null, 0.14, 'triangle', 0.12); },
+    rumble(k = 1) { noise(0.55, 0.55 * k, 'lowpass', 140); tone(58, 44, 0.5, 'sine', 0.18 * k); },
+    creak() { tone(320, 170, 0.45, 'sawtooth', 0.035); tone(260, 210, 0.3, 'square', 0.02, 0.15); },
     snort() { noise(0.35, 0.35, 'bandpass', 500); tone(90, 60, 0.3, 'sawtooth', 0.1); },
     lullaby() { tone(784, null, 0.4, 'triangle', 0.08); tone(659, null, 0.4, 'triangle', 0.08, 0.35); tone(523, null, 0.9, 'triangle', 0.08, 0.7); },
     launch() { tone(300, 1200, 0.4, 'square', 0.07); },
@@ -876,9 +888,13 @@ const PGEO = new THREE.SphereGeometry(0.6, 8, 6);   // round puffs for dust, spl
 const pmats = {};
 const pmat = c => (pmats[c] ||= toon({ color: c }));
 const parts = [];
-function burst(x, y, z, colors, n, spd = 3, up = 4, size = 0.12, life = 0.7) {
+// soft = see-through puffs with no ink outline (dust, spray), so they read as clouds, not pebbles
+const softMats = {};
+const softMat = c => (softMats[c] ||= new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.55, depthWrite: false }));
+function burst(x, y, z, colors, n, spd = 3, up = 4, size = 0.12, life = 0.7, soft = false) {
   for (let i = 0; i < n; i++) {
-    const m = new THREE.Mesh(PGEO, pmat(pick(colors)));
+    const m = new THREE.Mesh(PGEO, soft ? softMat(pick(colors)) : pmat(pick(colors)));
+    if (soft) m.layers.set(GLOW_LAYER);
     const s = size * rand(0.7, 1.3);
     m.scale.setScalar(s);
     m.position.set(x, y, z);
@@ -1192,18 +1208,31 @@ function addLane(r) {
       vb.box(2 * COLS + 1, 0.012, 0.07, 0, 0.006, z, 0x9a5434);
       for (const s of [-1, 1]) vb.box(VIS - COLS, 0.012, 0.07, s * (COLS + 0.5 + (VIS - COLS) / 2), 0.006, z, 0x6e3c25);
     }
-    lane.lightMat = toon({ color: 0x661111, emissive: 0x000000 });
-    for (const s of [-1, 1]) {
-      const x = s * (COLS + 0.85);
-      vb.box(0.1, 1.15, 0.1, x, 0.575, 0.44, 0xdddddd);
-      vb.box(0.44, 0.3, 0.04, x, 1.2, 0.44, 0xffd23f);
-      vb.box(0.46, 0.32, 0.03, x, 1.2, 0.425, 0x222222);
-      vb.box(0.05, 0.13, 0.02, x, 1.23, 0.465, 0x222222);
-      vb.box(0.05, 0.05, 0.02, x, 1.12, 0.465, 0x222222);
-      const light = new THREE.Mesh(PGEO, lane.lightMat);
-      light.scale.set(0.2, 0.2, 0.08);
-      light.position.set(x, 0.82, 0.5);
-      lane.group.add(light);
+    for (let i = 0; i < 26; i++) {                         // hoofprints pressed into the dirt
+      const hx = rand(-11, 11);
+      vb.ball(0.05, 0.01, 0.04, hx, 0.004, rand(-0.36, 0.36), Math.abs(hx) <= COLS + 0.5 ? 0x8f4f30 : 0x6e3c25);
+    }
+    // The bulls wait in a little corral off one edge. A gate at each end of the lane,
+    // just outside the playable columns, swings open before they charge. The camera
+    // looks slightly from the side, so whichever end is on screen, one gate is in view.
+    const out = -lane.dir;                                 // the corral side
+    lane.gates = [];
+    for (const side of [-1, 1]) {
+      const gx = side * (COLS + 0.6);
+      for (const z of [-0.5, 0.5]) {
+        vb.cyl(0.075, 0.085, 1.0, gx, 0.5, z, 0x7a4f2c);                      // gate posts
+        vb.ball(0.085, 0.05, 0.085, gx, 1.02, z, 0x8a5a33);
+        if (side === out) {                                                   // corral fence on the bulls' side
+          for (let i = 1; i <= 4; i++) vb.cyl(0.05, 0.06, 0.8, gx + out * i, 0.4, z, 0x7a4f2c);
+          for (const y of [0.35, 0.65]) vb.rbox(4, 0.07, 0.05, gx + out * 2, y, z, 0xb88a5a, 0.022);
+        }
+      }
+      const gate = new THREE.Mesh(GATE_GEO, VMAT);
+      gate.position.set(gx, 0, 0.47);                      // hinged on the near post, panel across the lane
+      gate.castShadow = true;
+      gate.userData.open = -side * Math.PI / 2 * 0.95;     // swings outward, away from the field
+      lane.group.add(gate);
+      lane.gates.push(gate);
     }
     lane.speed = 19 + 5 * d;
     for (let i = 0; i < 3; i++) {
@@ -1212,7 +1241,7 @@ function addLane(r) {
       m.mesh.visible = false;
       lane.movers.push(m);
     }
-    lane.stamp = { state: 'wait', t: rand(1.5, 4), ding: 0 };
+    lane.stamp = { state: 'wait', t: rand(1.5, 4), cue: 0, ang: 0 };
   } else if (type === 'wheat') {
     strip(vb, 0, 0xe9c46a, shade(0xe9c46a, 0.74));
     for (let x = -VIS; x <= VIS; x++) {                   // stubble tufts, purely decoration
@@ -1283,10 +1312,6 @@ function addLane(r) {
 function removeLane(lane) {
   scene.remove(lane.group);
   lane.static.geometry.dispose();
-  if (lane.lightMat) {
-    lane.lightMat.dispose();
-    toons.splice(toons.indexOf(lane.lightMat), 1);
-  }
   lanes.delete(lane.r);
 }
 
@@ -1308,7 +1333,7 @@ function updateLane(lane, dt, time) {
     } else if (m.kind === 'plane') {
       m.mesh.position.y = Math.sin(time * 3 + m.phase) * 0.05;
       if (Math.abs(m.x) < VIS && Math.random() < dt * 25) {
-        burst(m.x - lane.dir * 0.4, 0.5, -lane.r + rand(-0.5, 0.5), [0xf3f0d0, 0xdff5c8], 1, 0.4, 0.3, 0.18, 0.9);
+        burst(m.x - lane.dir * 0.4, 0.5, -lane.r + rand(-0.5, 0.5), [0xf3f0d0, 0xdff5c8], 1, 0.4, 0.3, 0.2, 0.9, true);
       }
       m.buzz -= dt;
       if (m.buzz <= 0 && game.state === 'play' && Math.abs(lane.r - P.r) < 4 && Math.abs(m.x - P.x) < 9) {
@@ -1324,21 +1349,37 @@ function updateLane(lane, dt, time) {
   }
 }
 
+// Stampede lane: wait, then a warning (the gate rattles and swings open while
+// the ground rumbles and dust lifts), then the bulls charge through.
+const WARN_T = 1.6;
 function updateStampede(lane, dt) {
-  const s = lane.stamp;
+  const s = lane.stamp, near = Math.abs(lane.r - P.r), playing = game.state === 'play';
+  const gx = -lane.dir * (COLS + 0.6);                    // the gate the bulls come through
   s.t -= dt;
+  let open = s.state === 'charge', rattle = 0;
   if (s.state === 'wait') {
-    if (s.t <= 0) { s.state = 'warn'; s.t = 1.5; s.ding = 0; }
+    if (s.t <= 0) { s.state = 'warn'; s.t = WARN_T; s.cue = 0; }
   } else if (s.state === 'warn') {
-    lane.lightMat.emissive.setHex(Math.floor(s.t * 7) % 2 ? 0xff2020 : 0x000000);
-    s.ding -= dt;
-    if (s.ding <= 0) {
-      s.ding = 0.38;
-      if (Math.abs(lane.r - P.r) < 8 && game.state === 'play') sfx.ding();
+    const k = 1 - s.t / WARN_T;                            // 0 -> 1 through the warning
+    open = k > 0.45;
+    rattle = open ? 0 : 0.07;
+    if (near < 7 && playing) game.shake = Math.max(game.shake, 0.7 * (0.3 + 0.7 * k) * (1 - near / 7));
+    if (Math.random() < dt * (30 + 90 * k)) {              // dust lifting off the lane, thickest by the gate
+      const x = lerp(gx, -gx, Math.random() ** 1.5);
+      burst(x, 0.05, -lane.r + rand(-0.4, 0.4), [0xe8d2b0, 0xdcc09a, 0xf2e2c8], 1, 0.3, 2.6, 0.24 + 0.12 * k, 0.9, true);
     }
+    if (Math.random() < dt * 25 * k) {                     // pebbles jumping on the shaking ground
+      burst(rand(-COLS, COLS), 0.03, -lane.r + rand(-0.4, 0.4), [0x9aa0a6, 0x7a6a5a], 1, 0.15, 3.2, 0.06, 0.5);
+    }
+    s.cue -= dt;
+    if (s.cue <= 0) {
+      s.cue = 0.5;
+      if (near < 8 && playing) { sfx.rumble(0.4 + 0.6 * k); rumblePad(0.3 + 0.6 * k, 420); }
+    }
+    if (open && !s.creaked) { s.creaked = true; if (near < 8 && playing) sfx.creak(); }
     if (s.t <= 0) {
       s.state = 'charge';
-      lane.lightMat.emissive.setHex(0xff2020);
+      s.creaked = false;
       const n = ri(1, diff(lane.r) > 0.3 ? 3 : 2);
       lane.movers.forEach((m, i) => {
         m.active = i < n;
@@ -1346,7 +1387,7 @@ function updateStampede(lane, dt) {
         m.x = -lane.dir * (VIS + 2 + i * 1.9);
         m.mesh.position.x = m.x;
       });
-      if (Math.abs(lane.r - P.r) < 8) sfx.snort();
+      if (near < 8 && playing) sfx.snort();
     }
   } else {
     let any = false;
@@ -1360,22 +1401,22 @@ function updateStampede(lane, dt) {
       if (lane.dir * m.x > VIS + 3) { m.active = false; m.mesh.visible = false; }
       else {
         any = true;
+        if (near < 7 && playing && Math.abs(m.x - P.x) < 6) game.shake = Math.max(game.shake, 0.5 * (1 - near / 7));
         if (Math.random() < dt * 30 && Math.abs(m.x) < VIS) {
-          burst(m.x - lane.dir * 0.7, 0.1, -lane.r + rand(-0.3, 0.3), [0xc89a6a, 0xa87a4a], 1, 0.6, 2.5, 0.14, 0.5);
+          burst(m.x - lane.dir * 0.7, 0.1, -lane.r + rand(-0.3, 0.3), [0xe8d2b0, 0xdcc09a], 1, 0.6, 2.5, 0.2, 0.6, true);
         }
       }
     }
-    if (!any) {
-      s.state = 'wait';
-      s.t = rand(2.5, 6);
-      lane.lightMat.emissive.setHex(0x000000);
-    }
+    if (!any) { s.state = 'wait'; s.t = rand(2.5, 6); }
   }
+  // Swing the gate: snaps open fast, drifts shut slowly once the bulls are through.
+  s.ang = lerp(s.ang, open ? 1 : 0, Math.min(1, dt * (open ? 7 : 2.5)));
+  for (const g of lane.gates) g.rotation.y = g.userData.open * s.ang + rattle * Math.sin(game.time * 45 + g.position.x);
 }
 
 // ---------- player ----------
 const P = {};
-const game = { state: 'title', day: 1, score: 0, top: store.get('bl-top', 0), coins: store.get('bl-coins', 0), camX: 0, camZ: 0, time: 0 };
+const game = { state: 'title', day: 1, shake: 0, score: 0, top: store.get('bl-top', 0), coins: store.get('bl-coins', 0), camX: 0, camZ: 0, time: 0 };
 
 function resetPlayer() {
   if (P.model) scene.remove(P.model.group);
@@ -1613,6 +1654,11 @@ function updateCamera(dt) {
   _t.set(game.camX, 0, game.camZ);
   camera.position.copy(_t).add(CAM_OFF);
   camera.lookAt(_t);
+  if (game.shake > 0.002) {             // the ground rumbles when bulls are about to charge
+    camera.position.x += (Math.random() - 0.5) * game.shake * 0.18;
+    camera.position.y += (Math.random() - 0.5) * game.shake * 0.18;
+    game.shake *= Math.exp(-dt * 5);
+  }
   sun.position.copy(_t).add(SUN_OFF);
   sun.target.position.copy(_t);
   camera.updateMatrixWorld();
@@ -1646,6 +1692,7 @@ function newWorld() {
   for (const f of flies) scene.remove(f.m);
   flies.length = 0;
   game.day = 1;
+  game.shake = 0;
   queue = [];
   genRow = -BEHIND - 3;
   game.score = 0;
@@ -1766,7 +1813,7 @@ function step(dt) {
 }
 function frame(now) {
   pollPad();
-  step(Math.min(0.05, (now - last) / 1000));
+  if (!game.frozen) step(Math.min(0.05, (now - last) / 1000));   // frozen: tests drive the frames themselves
   last = now;
   requestAnimationFrame(frame);
 }
@@ -1850,6 +1897,13 @@ $('heroes').addEventListener('click', e => { if (e.target.id === 'heroes') close
 $('start').addEventListener('click', () => { sfx.ensure(); if (game.state === 'title') startGame(); });
 
 // ---------- gamepad (for the big TV) ----------
+// Rumble the controller for stampedes; Android phones get a short buzz instead.
+function rumblePad(strength, ms) {
+  const gp = [...(navigator.getGamepads ? navigator.getGamepads() : [])].find(p => p && p.connected);
+  if (gp && gp.vibrationActuator && gp.vibrationActuator.playEffect) {
+    gp.vibrationActuator.playEffect('dual-rumble', { duration: ms, strongMagnitude: strength, weakMagnitude: strength * 0.5 }).catch(() => {});
+  } else if (strength > 0.6 && navigator.vibrate && navigator.userActivation?.hasBeenActive) navigator.vibrate(40);
+}
 // Standard mapping: A 0, B 1, X 2, Y 3, Start 9, d-pad 12-15, left stick axes 0/1.
 // Polled every frame; buttons act on the press edge so holding never repeats.
 const DIRS = { up: [0, 1], down: [0, -1], left: [-1, 0], right: [1, 0] };
@@ -1904,4 +1958,4 @@ resize();
 newWorld();
 document.body.classList.add('title', 'show-logo');
 requestAnimationFrame(frame);
-if (new URLSearchParams(location.search).has('debug')) window.__hop = { P, game, lanes, move, step, pollPad };
+if (new URLSearchParams(location.search).has('debug')) window.__hop = { P, game, lanes, move, step, pollPad, camera };
