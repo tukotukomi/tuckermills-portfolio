@@ -4,6 +4,7 @@
 // the cells outside the playable strip are shaded darker, like Crossy Road.
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { createMusic } from './music.js';
 
 // ---------- tuning ----------
 const COLS = 4;                 // playable columns either side of centre
@@ -814,6 +815,7 @@ const GATE_GEO = (() => {
 })();
 
 // ---------- audio (tiny synth, no files) ----------
+let music = null;   // created with the audio context on the first tap
 const sfx = (() => {
   let ctx = null, master = null, noiseBuf = null;
   let muted = store.get('bl-mute', false);
@@ -825,6 +827,8 @@ const sfx = (() => {
       master = ctx.createGain();
       master.gain.value = muted ? 0 : 0.55;
       master.connect(ctx.destination);
+      music = createMusic(ctx, master);   // the farm tune shares the master volume, so mute covers it
+      music.start();
       noiseBuf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
       const d = noiseBuf.getChannelData(0);
       for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
@@ -1710,6 +1714,7 @@ function startGame() {
 }
 
 function gameOver() {
+  music?.setLevel(0.45);   // duck the tune under the sign
   game.state = 'over';
   document.body.classList.add('over');
   $('overMsg').textContent = (DEATH_MSG[P.death] || 'Oh no!').replace('{name}', hero().name);
@@ -1720,6 +1725,7 @@ function gameOver() {
 }
 
 function restart() {
+  music?.setLevel(1);
   $('over').classList.remove('show');
   document.body.classList.remove('over');
   document.body.classList.add('title');
@@ -1807,6 +1813,7 @@ function step(dt) {
     if (game.day <= 0) { game.day = 0; die('night'); }
   }
   updateDay();
+  if (music && Math.abs(game.day - (music.day ?? -1)) > 0.02) { music.day = game.day; music.setDay(game.day); }
   updateFlies(dt);
   hudDay();
   renderCel();
