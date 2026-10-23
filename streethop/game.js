@@ -1692,7 +1692,6 @@ const POND_STEPS = ['Fish move in', 'Lily pads', 'A little dock', 'Koi', 'Ducks'
 const pondNext = lvl => POND_STEPS[lvl] || 'Another fish';
 const pondCost = lvl => lvl + 1;
 const POND = new THREE.Vector3(1.3, 0, 1.2);   // pond centre, farm-local
-const HERO_SPOT = new THREE.Vector3(-1.1, 0, -1.9);
 
 const farm = { group: new THREE.Group(), pond: new THREE.Group(), fish: [], ducks: [], spray: 0, hero: null, level: store.get('bl-pond', 0) };
 farm.group.position.set(0, 0, FARM_Z);
@@ -1863,18 +1862,98 @@ function updateFarm(dt) {
     farm.spray = 0.05;
     burst(POND.x, 0.65, FARM_Z + POND.z, [0xbfe9ff, 0xffffff], 1, 0.35, 3.2, 0.07, 0.6, true);
   }
-  if (farm.hero) {                                  // the chosen hopper waits in the yard, bobbing gently
-    farm.hero.inner.position.y = Math.abs(Math.sin(t * 2.2)) * 0.05;
-    for (const w of farm.hero.tails) w.rotation[w.userData.axis || 'z'] = w.userData.side * Math.sin(t * 2.2) * 0.12;
-  }
+  updateWalkers(dt, t);
 }
 
+// ---------- hoppers wandering the farm ----------
+// Every unlocked hopper (all four for now) strolls around the yard between rounds:
+// waddling from spot to spot, pausing to look around. The one you'll play as has a
+// sunflower bobbing over its head, and gives a happy hop when picked or back home.
+const YARD = { x0: -4.6, x1: 4.6, z0: -3.0, z1: 4.4 };
+function blockedAt(x, z) {
+  const [rx, rz] = farm.pondR;
+  if (((x - POND.x) / (rx + 0.45)) ** 2 + ((z - POND.z) / (rz + 0.45)) ** 2 < 1) return true;   // the pond
+  if (x > -3.9 && x < -2.5 && z > 1.5 && z < 3.1) return true;                                    // sunflower patch
+  return [[-2.3, 3.6], [-3.3, 0], [4.6, 0]].some(([bx, bz]) => Math.hypot(x - bx, z - bz) < 0.55);  // mailbox, bushes
+}
+function pathClear(ax, az, bx, bz) {
+  for (let i = 1; i <= 12; i++) if (blockedAt(lerp(ax, bx, i / 12), lerp(az, bz, i / 12))) return false;
+  return true;
+}
+function nextSpot(w) {
+  for (let tries = 0; tries < 40; tries++) {
+    const x = rand(YARD.x0, YARD.x1), z = rand(YARD.z0, YARD.z1);
+    if (Math.hypot(x - w.x, z - w.z) > 1.2 && !blockedAt(x, z) && pathClear(w.x, w.z, x, z)) return [x, z];
+  }
+  return [w.x, w.z];
+}
+const MARKER_GEO = (() => {                        // a little sunflower that floats over your hopper
+  const v = new VB(0.6);
+  for (let i = 0; i < 10; i++) {
+    const a = i * Math.PI / 5;
+    v.ball(0.04, 0.09, 0.025, Math.cos(a) * 0.12, Math.sin(a) * 0.12, 0, i % 2 ? 0xffcc1a : 0xffb000, 0, 0, a - Math.PI / 2);
+  }
+  v.cyl(0.085, 0.085, 0.06, 0, 0, 0.02, 0x7a4a1c, Math.PI / 2, 0, 0);
+  return v.geometry();
+})();
+function spawnWalkers() {
+  for (const w of farm.walkers || []) farm.group.remove(w.m.group);
+  farm.walkers = HEROES.map(h => {
+    const m = h.build();
+    const w = { id: h.id, m, x: 0, z: 0, tx: 0, tz: 0, wait: rand(0.3, 2.5), ph: rand(0, 6), face: Math.PI + 0.36, hop: 0 };
+    do { w.x = rand(YARD.x0, YARD.x1); w.z = rand(YARD.z0, YARD.z1); } while (blockedAt(w.x, w.z));
+    w.tx = w.x; w.tz = w.z;
+    m.group.position.set(w.x, 0, w.z);
+    w.top = new THREE.Box3().setFromObject(m.group).max.y;   // where the marker floats
+    farm.group.add(m.group);
+    return w;
+  });
+  if (!farm.marker) {
+    farm.marker = new THREE.Mesh(MARKER_GEO, VMAT);
+    farm.marker.castShadow = true;
+    farm.group.add(farm.marker);
+  }
+}
+function updateWalkers(dt, t) {
+  for (const w of farm.walkers) {
+    const { inner, group, tails } = w.m;
+    const dx = w.tx - w.x, dz = w.tz - w.z, d = Math.hypot(dx, dz);
+    let sway = Math.sin(t * 2.2 + w.ph) * 0.1;
+    if (w.hop > 0) {                                 // happy hop
+      w.hop = Math.max(0, w.hop - dt);
+      inner.position.y = Math.sin(Math.PI * (1 - w.hop / 0.5)) * 0.4;
+    } else if (d > 0.05) {                           // waddle toward the next spot
+      const s = Math.min(d, dt * 0.9);
+      w.x += dx / d * s;
+      w.z += dz / d * s;
+      w.face = Math.atan2(-dx, -dz);
+      w.ph += dt * 9;
+      inner.position.y = Math.abs(Math.sin(w.ph)) * 0.07;
+      inner.rotation.z = Math.sin(w.ph) * 0.1;
+      sway = Math.sin(w.ph) * 0.18;
+      if (d - s <= 0.05) { w.wait = rand(1, 3.5); w.face = Math.PI + rand(-0.4, 0.9); }   // arrive, look around
+    } else {                                         // stand and look around for a bit
+      inner.position.y = lerp(inner.position.y, 0, Math.min(1, dt * 10));
+      inner.rotation.z = lerp(inner.rotation.z, 0, Math.min(1, dt * 10));
+      if ((w.wait -= dt) <= 0) [w.tx, w.tz] = nextSpot(w);
+    }
+    let da = w.face - group.rotation.y;
+    da = Math.atan2(Math.sin(da), Math.cos(da));
+    group.rotation.y += da * Math.min(1, dt * 8);
+    group.position.set(w.x, 0, w.z);
+    for (const tl of tails) tl.rotation[tl.userData.axis || 'z'] = tl.userData.side * sway;
+  }
+  const me = farm.walkers.find(w => w.id === heroId);
+  if (me) {
+    farm.marker.position.set(me.x, me.top + 0.32 + Math.sin(t * 3) * 0.06 + me.m.inner.position.y, me.z);
+    farm.marker.rotation.y = Math.sin(t * 1.5) * 0.5;
+  }
+}
+// Called when arriving at the farm or picking a hopper: your hopper hops and turns to you.
 function placeFarmHero() {
-  if (farm.hero) farm.group.remove(farm.hero.group);
-  farm.hero = hero().build();
-  farm.hero.group.position.copy(HERO_SPOT);
-  farm.hero.group.rotation.y = Math.PI + 0.36;     // facing the camera
-  farm.group.add(farm.hero.group);
+  if (!farm.walkers) spawnWalkers();
+  const me = farm.walkers.find(w => w.id === heroId);
+  if (me) { me.hop = 0.5; me.face = Math.PI + 0.36; }
 }
 
 function upgradePond() {
@@ -2286,4 +2365,4 @@ document.body.classList.add('farm', 'show-logo');
 setHint();
 hud();
 requestAnimationFrame(frame);
-if (new URLSearchParams(location.search).has('debug')) window.__hop = { P, game, lanes, move, step, pollPad, camera };
+if (new URLSearchParams(location.search).has('debug')) window.__hop = { P, game, lanes, move, step, pollPad, camera, farm };
