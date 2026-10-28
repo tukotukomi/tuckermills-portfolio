@@ -10,7 +10,7 @@ export const JOURNAL = [
     date: '2026-10-28',
     title: "Fang's Magnetic Field",
     notes: [
-      "Everyone now carries Fang's Magnetic Field: switch it on for 15 minutes of coins zapping straight into your purse.",
+      "Everyone now carries Fang's Magnetic Field: switch it on for 15 minutes and a little glowing orb sucks in the coins as the party meets them.",
       'It can be used again 30 minutes after you switched it on.',
       'Scroll storage has one more slot, so Fang fits beside any Rereviver Scroll you find.',
       'The Compendium has an Items tab showing every item in the game. Ones you have not had yet are greyed out.',
@@ -19,7 +19,7 @@ export const JOURNAL = [
     es: {
       title: 'El Campo magnético de Fang',
       notes: [
-        'Ahora todos llevan el Campo magnético de Fang: enciéndelo 15 minutos y las monedas volarán directas a tu bolsa.',
+        'Ahora todos llevan el Campo magnético de Fang: enciéndelo 15 minutos y un pequeño orbe brillante absorberá las monedas cuando el grupo las alcance.',
         'Puede volver a usarse 30 minutos después de encenderlo.',
         'El almacén de pergaminos tiene una ranura más, así que Fang cabe junto a cualquier Pergamino de Rerevivir que encuentres.',
         'El Compendio tiene una pestaña de Objetos con todo lo que hay en el juego. Lo que aún no has tenido aparece atenuado.',
@@ -29,7 +29,7 @@ export const JOURNAL = [
     zh: {
       title: 'Fang 的磁场',
       notes: [
-        '现在每个人都带有 Fang 的磁场：启动后 15 分钟内，金币会直接被电击吸进钱袋。',
+        '现在每个人都带有 Fang 的磁场：启动后 15 分钟内，一颗发光的小球会把队伍遇到的金币吸进来。',
         '启动 30 分钟后可再次使用。',
         '卷轴栏多了一格，所以 Fang 可以和你找到的复活卷轴一起带着。',
         '图鉴新增“物品”标签页，列出游戏中的所有物品。还没拥有过的会显示为灰色。',

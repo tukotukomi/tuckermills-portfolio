@@ -6,7 +6,6 @@ import { Sound } from './sfx.js';
 import { Sprites } from './sprites.js';
 import { t } from './i18n.js';
 import { enumOf, kindOfEnum } from './health.js';
-import { hash } from './util.js';
 
 export const SCROLL_IDS = ['Rereviver', 'Fang'];
 /** The scrolls a monster can leave behind (Fang's Magnetic Field is every adventurer's own, and is never found on the road). */
@@ -20,7 +19,7 @@ export const SCROLL_DEFS = {
 export const SCROLL_DROP_CHANCE = 0.2;
 /** Fang's Magnetic Field: how long it lasts once switched on, and how long after that switching it can be switched on again (adventuring time). */
 export const FANG_ACTIVE_SECONDS = 15 * 60, FANG_COOLDOWN_SECONDS = 30 * 60;
-const FANG_ZAP_SECONDS = 0.3;
+const FANG_PULL_SECONDS = 0.25, FANG_PULL_RANGE = 46;   // a coin within this many pixels of the orb is pulled into it, taking this long
 /** A time left as m:ss. */
 export function fangClock(seconds) { const n = Math.ceil(Math.max(0, seconds)); return Math.trunc(n / 60) + ':' + String(n % 60).padStart(2, '0'); }
 const SCROLL_FLY_SECONDS = 1.1, REREVIVE_PULSE_SECONDS = 1.3, SEASON_DAYS = 5;
@@ -41,7 +40,7 @@ export function installScroll(P) {
     this.scrollPromptHasNew = false;
     this.scrollDrops = [];          // flying to the party
     this.rerevivePulses = [];
-    this.fangActiveLeft = 0; this.fangCooldownLeft = 0; this.fangZaps = [];   // Fang's Magnetic Field: the time left on, and the wait left before it can be switched on again
+    this.fangActiveLeft = 0; this.fangCooldownLeft = 0; this.fangPulls = []; this.fangFlash = 0;   // Fang's Magnetic Field: the time left on, and the wait left before it can be switched on again
   };
 
   /** Every item and scroll the party has ever held (ids), for the compendium's Items tab: it keeps them once they are used up. */
@@ -190,31 +189,40 @@ export function installScroll(P) {
 
   // ---- Time ------------------------------------------------------------------------------------------------
 
-  /** Fang's Magnetic Field, in adventuring time: both clocks run, and while it is on every Gold Coin that reaches the party is zapped in. */
+  /** Where the orb is: held out in front of the party member who leads. */
+  m._fangOrbPosition = function () {
+    const fr = this._rectOf(this._frontKind());
+    return { x: fr.x + fr.w + 4, y: fr.y + fr.h * 0.42 + Math.sin(this.time * 3) * 0.8 };
+  };
+
+  /** Fang's Magnetic Field, in adventuring time: both clocks run, and while it is on a Gold Coin that comes within reach of the orb is pulled into it. */
   m._advanceFang = function (dt, paused) {
     if (paused) return;
     if (this.fangCooldownLeft > 0) this.fangCooldownLeft = Math.max(0, this.fangCooldownLeft - dt);
     if (this.fangActiveLeft <= 0) return;
     this.fangActiveLeft = Math.max(0, this.fangActiveLeft - dt);
     if (this.coins.length === 0 || this.party.length === 0 || this.isGameOver) return;
-    const fr = this._rectOf(this._frontKind()), reach = fr.x + fr.w + 4;   // the coin has met the party
-    let zapped = false;
+    const reach = this._fangOrbPosition().x + FANG_PULL_RANGE;
+    let pulled = false;
     for (let i = this.coins.length - 1; i >= 0; i--) {
       const c = this.coins[i];
       if (this._coinX(c) > reach) continue;
-      this.flying.push({ x: this._coinX(c), y: this._coinY(c), age: 0 });
-      this.fangZaps.push({ x: this._coinX(c), y: this._coinY(c), age: 0 });
+      this.fangPulls.push({ x: this._coinX(c), y: this._coinY(c), age: 0 });
       this.coins.splice(i, 1);
-      this.gold++;
-      zapped = true;
+      this.gold++;   // (counted at once; the coin's trip into the orb, and on to the counter, is for show)
+      pulled = true;
     }
-    if (zapped) { Sound.play('Zap'); this.raiseProgress(); }
+    if (pulled) { Sound.play('Zap'); this.raiseProgress(); }
   };
 
   m._advanceScroll = function (dt) {
-    for (let i = this.fangZaps.length - 1; i >= 0; i--) {
-      this.fangZaps[i].age += dt;
-      if (this.fangZaps[i].age >= FANG_ZAP_SECONDS) this.fangZaps.splice(i, 1);
+    if (this.fangFlash > 0) this.fangFlash = Math.max(0, this.fangFlash - dt / 0.25);
+    for (let i = this.fangPulls.length - 1; i >= 0; i--) {
+      this.fangPulls[i].age += dt;
+      if (this.fangPulls[i].age < FANG_PULL_SECONDS) continue;
+      this.fangPulls.splice(i, 1);
+      if (this.party.length > 0) { const orb = this._fangOrbPosition(); this.flying.push({ x: orb.x, y: orb.y, age: 0 }); }   // the coin goes on from the orb to the counter
+      this.fangFlash = 1;
     }
     // Rerevive runs out at the end of its year of playing time.
     for (const k of Object.keys(this.rerevive)) if (this.rerevive[k] <= this.playDays) delete this.rerevive[k];
@@ -232,7 +240,7 @@ export function installScroll(P) {
   m._resetScroll = function () {
     this.scrolls = []; this.scrollSel = 0; this.targetScroll = null; this.rerevive = {}; this.scrollPrompt = null; this.scrollPromptHasNew = false;
     this.scrollDrops = []; this.rerevivePulses = [];
-    this.fangActiveLeft = 0; this.fangCooldownLeft = 0; this.fangZaps = [];
+    this.fangActiveLeft = 0; this.fangCooldownLeft = 0; this.fangPulls = []; this.fangFlash = 0;
     this._ensureFang();
   };
 
@@ -278,56 +286,36 @@ export function installScroll(P) {
   // ---- Drawing ---------------------------------------------------------------------------------------------
 
   /** A scroll flying to the party, and the little heart over each member who has Rerevive (with a ring of light when it is given or used). */
-  /** A faint field of electricity round the party while Fang's Magnetic Field is on, crackling at its edge, and the bolt that zaps each coin in. */
+  /** The magnetic orb while Fang's Magnetic Field is on: a small glowing ball of blue light, with two sparks circling it, held out in front of the leader; and the
+   *  coins being drawn into it. */
   m._drawFangField = function (g) {
-    const ctx = g.ctx;
-    if (this.fangActiveLeft > 0 && this.party.length > 0) {
-      let left = Infinity, right = -Infinity, top = Infinity, bottom = -Infinity;
-      for (const k of Object.keys(this.memberRects)) {
-        if (this.party.indexOf(k) < 0) continue;
-        const r = this.memberRects[k];
-        left = Math.min(left, r.x); right = Math.max(right, r.x + r.w); top = Math.min(top, r.y); bottom = Math.max(bottom, r.y + r.h);
-      }
-      if (left <= right) {
-        const pulse = 0.5 + 0.5 * Math.sin(this.time * 6);
-        const cx = (left + right) / 2, cy = (top + bottom) / 2, rx = (right - left) / 2 + 12, ry = (bottom - top) / 2 + 9;
-        ctx.save();
-        ctx.beginPath(); ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(120,210,255,' + ((14 + 12 * pulse) / 255).toFixed(3) + ')'; ctx.fill();
-        ctx.strokeStyle = 'rgba(150,225,255,' + ((90 + 80 * pulse) / 255).toFixed(3) + ')'; ctx.lineWidth = 1; ctx.stroke();
-        const slice = Math.trunc(this.time * 14);
-        ctx.strokeStyle = 'rgba(255,244,150,0.92)'; ctx.lineWidth = 1;
-        for (let i = 0; i < 6; i++) {
-          const hz = hash(i + slice * 7, 91);
-          if (((hz >>> 5) % 3) !== 0) continue;
-          const a = ((hz >>> 9) % 360) * Math.PI / 180;
-          const x0 = cx + Math.cos(a) * rx, y0 = cy + Math.sin(a) * ry;
-          const x1 = x0 + Math.cos(a) * 3 + ((hz >>> 3) % 5 - 2), y1 = y0 + Math.sin(a) * 3 + ((hz >>> 6) % 5 - 2);
-          const x2 = x1 + Math.cos(a) * 3 - ((hz >>> 11) % 5 - 2), y2 = y1 + Math.sin(a) * 3 + ((hz >>> 14) % 5 - 2);
-          ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
-        }
-        ctx.restore();
-      }
-    }
-    if (this.fangZaps.length === 0 || this.party.length === 0) return;
-    const fr = this._rectOf(this._frontKind());
-    for (const z of this.fangZaps) {
-      const u = Math.min(1, z.age / FANG_ZAP_SECONDS), a = (1 - u);
-      const sx = fr.x + fr.w - 2, sy = fr.y + fr.h * 0.45, SEG = 5, slice = Math.trunc(z.age * 40);
-      const pts = [];
-      for (let i = 0; i <= SEG; i++) {
-        const f = i / SEG, jitter = i === 0 || i === SEG ? 0 : (hash(i + slice * 5 + Math.trunc(z.x), 17) % 7) - 3;
-        pts.push([sx + (z.x - sx) * f, sy + (z.y - sy) * f + jitter]);
-      }
+    if (this.party.length === 0) return;
+    const ctx = g.ctx, orb = this._fangOrbPosition();
+    if (this.fangActiveLeft > 0) {
+      const pulse = 0.5 + 0.5 * Math.sin(this.time * 5), flash = this.fangFlash, cx = orb.x, cy = orb.y;
       ctx.save();
-      ctx.lineJoin = 'round';
-      ctx.strokeStyle = 'rgba(120,210,255,' + (a / 3).toFixed(3) + ')'; ctx.lineWidth = 3;
-      ctx.beginPath(); pts.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])); ctx.stroke();
-      ctx.strokeStyle = 'rgba(255,248,190,' + a.toFixed(3) + ')'; ctx.lineWidth = 1.2;
-      ctx.beginPath(); pts.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])); ctx.stroke();
-      ctx.fillStyle = 'rgba(255,240,150,' + (a / 2).toFixed(3) + ')';
-      ctx.beginPath(); ctx.arc(z.x, z.y, 5, 0, Math.PI * 2); ctx.fill();
+      const disc = (r, rgba) => { ctx.fillStyle = rgba; ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill(); };
+      disc(7, 'rgba(120,210,255,' + ((34 + 26 * pulse + 60 * flash) / 255).toFixed(3) + ')');
+      disc(4, 'rgba(140,222,255,' + ((110 + 50 * pulse) / 255).toFixed(3) + ')');
+      disc(2, 'rgb(236,252,255)');
+      if (flash > 0) {
+        ctx.strokeStyle = 'rgba(200,240,255,' + (0.78 * flash).toFixed(3) + ')'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.arc(cx, cy, 8 + 3 * (1 - flash), 0, Math.PI * 2); ctx.stroke();
+      }
+      ctx.fillStyle = 'rgba(255,244,150,0.94)';
+      for (let i = 0; i < 2; i++) { const a = this.time * 4.5 + i * Math.PI; ctx.fillRect(Math.round(cx + Math.cos(a) * 6), Math.round(cy + Math.sin(a) * 3), 1, 1); }
       ctx.restore();
+    }
+    const coin = Sprites.coin;
+    for (const p of this.fangPulls) {
+      const u = Math.min(1, p.age / FANG_PULL_SECONDS), e = u * u;   // it starts slowly and is snatched in at the end
+      const x = p.x + (orb.x - p.x) * e, y = p.y + (orb.y - p.y) * e;
+      for (let k = 1; k <= 2; k++) {   // a short faint trail behind it
+        const ue = Math.max(0, u - 0.08 * k), ee = ue * ue;
+        g.rect(Math.round(p.x + (orb.x - p.x) * ee), Math.round(p.y + (orb.y - p.y) * ee), 1, 1, CA(Math.trunc(120 / k), 160, 226, 255));
+      }
+      const s = 1 - 0.55 * u, w = Math.max(2, Math.round(coin.width * s)), h = Math.max(2, Math.round(coin.height * s));
+      g.image(coin, Math.round(x - w / 2), Math.round(y - h / 2), false, undefined, w, h);
     }
   };
 
