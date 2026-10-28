@@ -808,6 +808,14 @@ async function main() {
     portraits[key] = seen ? src : silhouetteImage(src, C(12, 10, 30));
     return portraits[key];
   }
+  /** An item's or scroll's icon, or as a solid dark silhouette if it has not been found. */
+  function itemPortrait(b, seen) {
+    const key = b.icon + ':' + b.id + (seen ? '' : '#');
+    if (portraits[key]) return portraits[key];
+    const src = (b.icon === 'scroll' ? Sprites.scroll : Sprites.items)[b.id];
+    portraits[key] = seen ? src : silhouetteImage(src, C(12, 10, 30));
+    return portraits[key];
+  }
   /** The card's portrait window: a bit of sky over a strip of grass, with the picture standing on it. */
   function cardCanvas(img, seen) {
     const cv = document.createElement('canvas');
@@ -856,6 +864,27 @@ async function main() {
         cards.append(card);
       }
       $('compFoot').textContent = t('DISCOVERED {a}/{b}   DEFEATED {n}', { a: known, b: book.length, n: kills });
+    } else if (compTab === 2) {
+      const book = scene.itemBook();
+      let found = 0;
+      for (const b of book) {
+        if (b.seen) found++;
+        const seen = b.seen || compReveal;
+        const card = el('div', 'card' + (seen ? '' : ' unknown'));
+        const mid = el('div');
+        if (seen) {
+          mid.append(el('div', 'nm', t(b.name).toUpperCase()));
+          const st = el('div', 'st');
+          st.innerHTML = '<b>' + t(b.kind) + '</b>' + (b.detail ? ' &nbsp; <span class="iv">' + t(b.detail) + '</span>' : '');
+          const nt = el('div', 'nt'); nt.append(el('span', 'lbl', t('NOTES')), t(b.blurb));
+          mid.append(st, nt);
+        } else { mid.append(el('div', 'nm', '???'), el('div', 'nt', t('Not yet found.'))); }
+        const right = el('div', 'kills');
+        if (seen && b.count >= 0) right.append(el('div', 'n', 'x ' + b.count), el('div', 'l', t('OWNED')));
+        card.append(cardCanvas(itemPortrait(b, seen), seen), mid, right);
+        cards.append(card);
+      }
+      $('compFoot').textContent = t('ITEMS FOUND {a}/{b}', { a: found, b: book.length });
     } else {
       const book = scene.partyBook();
       let used = 0;

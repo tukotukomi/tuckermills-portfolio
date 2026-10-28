@@ -6,6 +6,7 @@ import { Sprites } from './sprites.js';
 import { Sound } from './sfx.js';
 import { TRAIT_OWNER } from './traits.js';
 import { t } from './i18n.js';
+import { SCROLL_IDS, SCROLL_DEFS } from './scrolls.js';
 
 export const ITEM_IDS = ['SynergyElixir', 'PotionRed', 'PotionBlue', 'PotionGreen'];
 export const HOT_SLOT_COUNT = 4;
@@ -51,7 +52,7 @@ export function installItems(P) {
 
   m._giveStarterItems = function () {
     this.items = {};
-    for (const id of ITEM_IDS) { const n = ITEM_DEFS[id].start === undefined ? 5 : ITEM_DEFS[id].start; if (n > 0) this.items[id] = n; }   // the starter potions
+    for (const id of ITEM_IDS) { const n = ITEM_DEFS[id].start === undefined ? 5 : ITEM_DEFS[id].start; if (n > 0) { this.items[id] = n; this._seen().add(id); } }   // the starter potions
   };
 
   // ---- What the page can read ------------------------------------------------------------------------------
@@ -78,7 +79,7 @@ export function installItems(P) {
 
   // ---- Items -----------------------------------------------------------------------------------------------
 
-  m._addItem = function (id, n) { this.items[id] = Math.max(0, this.itemCount(id) + n); };
+  m._addItem = function (id, n) { this.items[id] = Math.max(0, this.itemCount(id) + n); if (n > 0) this._seen().add(id); };
 
   /** Buys one at the Merchant. False when there isn't the gold (or it isn't for sale). */
   m.buyItem = function (id) {
@@ -352,6 +353,42 @@ export function installItems(P) {
     this.synergyFlash = 0; this.buyFlash = 0;
     this.targetItem = null; this.targetHover = null;
     this.berserkMult = 1; this.berserkLeft = 0;
+  };
+
+  /** Counts everything in the bag and the scroll storage as seen (for a save from before the compendium kept track, and the Monster Berserker, which is always there). */
+  m._noteHeldItems = function () {
+    for (const id of ITEM_IDS) if (ITEM_DEFS[id].infinite || (this.items[id] || 0) > 0) this._seen().add(id);
+    for (const s of this.scrolls) this._seen().add(s);
+  };
+  m._saveSeenFields = function () { this._noteHeldItems(); return Array.from(this._seen()).sort().join(','); };
+  m._loadSeenFields = function (field) {
+    this._seen().clear();
+    if (field === null || field === undefined) {   // an older save: what it started with, plus whatever is held now
+      for (const id of ITEM_IDS) { const n = ITEM_DEFS[id].start === undefined ? 5 : ITEM_DEFS[id].start; if (n > 0) this._seen().add(id); }
+    } else for (const s of field.split(',').filter(x => x)) this._seen().add(s);
+    this._noteHeldItems();
+  };
+
+  /** One entry per item and scroll in the game, held yet or not, for the compendium's Items tab. */
+  m.itemBook = function () {
+    this._noteHeldItems();
+    const list = [];
+    for (const id of ['PotionGreen', 'PotionBlue', 'SynergyElixir', 'PotionRed']) {
+      const d = ITEM_DEFS[id];
+      list.push({
+        id: id, icon: 'item', name: d.name, kind: id === 'PotionRed' ? 'DEV TOOL' : id === 'SynergyElixir' ? 'ELIXIR' : 'POTION',
+        detail: d.infinite ? 'Not for sale: a dev tool' : d.price > 0 ? 'Sold by the Merchant for ' + d.price + ' coins' : '',
+        blurb: d.blurb, seen: this._seen().has(id), count: d.infinite ? -1 : (this.items[id] || 0),
+      });
+    }
+    for (const id of SCROLL_IDS) {
+      const d = SCROLL_DEFS[id];
+      list.push({
+        id: id, icon: 'scroll', name: d.name, kind: 'SCROLL', detail: d.permanent ? 'Every adventurer starts with one' : 'Dropped by the Gargogryph, Wickedgryph and Toucan',
+        blurb: d.blurb, seen: this._seen().has(id), count: d.permanent ? -1 : this.scrolls.filter(s => s === id).length,
+      });
+    }
+    return list;
   };
 
   // ---- Saved: "SynergyElixir=1;PotionRed=5" | "SynergyElixir,PotionRed,PotionBlue,PotionGreen,0" | merchant day ----------------

@@ -402,6 +402,18 @@ const RECIPES = {
     layer(d, note(1318.5, 0.2, 0.09, p => sqr(p, 0.5), 0.4), 0.06, 1);
     return d;
   },
+  Zap() {   // an electric zap: a buzz that falls fast, crackling, with a bright ping on top
+    let ph = 0, ph2 = 0;
+    return make(0.34, t => {
+      const u = t / 0.34;
+      ph += (2400 * Math.pow(1 - u, 2.2) + 180) / R;
+      ph2 += (3600 - 2400 * u) / R;
+      const env = attack(t, 0.003) * Math.exp(-u * 3.4);
+      const n = noise();
+      const crackle = n > 0.55 ? n * 0.9 : 0;   // sparse spits of noise: a crackle, not a hiss
+      return (saw(ph) * 0.42 + sqr(ph2, 0.5) * 0.16 + crackle * Math.exp(-u * 2.5) * 0.5) * env * 0.9;
+    });
+  },
   CoinDrop() {
     const d = new Float32Array(Math.trunc(0.25 * R));
     layer(d, note(2637, 0.15, 0.04, sin, 0.5), 0.0, 1);

@@ -11,7 +11,7 @@ import { ITEM_DEFS, HOT_SLOT_COUNT } from './items.js';
 import { t, isCjk, getLanguage } from './i18n.js';
 import { JOURNAL } from './journal.js';
 import { QUALITY, QUALITY_MODES, QUALITY_LEVELS, AutoQuality, guessLevel, isLevel } from './quality.js';
-import { SCROLL_DEFS } from './scrolls.js';
+import { SCROLL_DEFS, FANG_ACTIVE_SECONDS, FANG_COOLDOWN_SECONDS, fangClock } from './scrolls.js';
 import { UNLOCKABLE_HEROES, HERO_UNLOCK_COST, STAMP_TOAST_SECONDS } from './stamps.js';
 
 export const ZOOMED_SCALE = 5;
@@ -431,7 +431,18 @@ export class Visualizer {
   get _settingsRect() { return { x: this.vw - 34, y: 8, w: 26, h: 26 }; }          // the cog, top-right corner
   get _buttonRect() { return { x: this.vw - 68, y: 8, w: 26, h: 26 }; }
   get _compRect() { return { x: this.vw - 102, y: 8, w: 26, h: 26 }; }
-  get _tunerRect() { return { x: 8, y: this.vh - 8 - 52, w: 52, h: 52 }; }          // bottom-left
+  /** The tuner dial sits in the same column as the item and scroll buttons, under them, and is their size (it used to be a bigger dial in the bottom-left
+   *  corner, which is where a Gold Coin is grabbed at the last moment: a tap there opened the tuner instead). With no room under the scroll button
+   *  (a very short view) it goes back to the bottom-left corner. */
+  get _tunerRect() {
+    const h = this._hotRect;
+    if (!this._compactDisc) {
+      const scroll = this._scrollRect;
+      const top = (scroll.y > h.y ? scroll.y + scroll.h : h.y + h.h) + 16;
+      if (top + h.h + 8 <= this.vh) return { x: h.x, y: top, w: h.w, h: h.h };
+    }
+    return { x: 8, y: this.vh - 8 - h.h, w: h.w, h: h.h };
+  }
   // The menu: a heading row (Quality, and the level now chosen, the only level label shown), a slider with the Auto checkbox beside it,
   // and the Restart item. Nothing is a fixed width: the menu is as wide as its words are in the current language (so a longer word, as in
   // German, just widens it), within the page.
@@ -1379,7 +1390,7 @@ export class Visualizer {
     const h = this._hotRect;
     if (!this._compactDisc) {
       const below = { x: h.x, y: h.y + h.h + 16, w: h.w, h: h.h };
-      if (!this.zoomed || below.y + below.h + 10 <= this._tunerRect.y) return below;
+      if (!this.zoomed || below.y + below.h + 8 <= this.vh) return below;
     }
     return { x: h.x + h.w + 10, y: h.y, w: h.w, h: h.h };
   }
@@ -1421,6 +1432,7 @@ export class Visualizer {
   /** The slot under a point in the open row, and whether the point is on its cross ({ slot: -1 } for none). */
   _scrollSlotAt(h) {
     for (let i = this.scene.scrollCount - 1; i >= 0; i--) {
+      if (SCROLL_DEFS[this.scene.scrolls[i]].permanent) continue;   // (Fang's Magnetic Field has no cross: it cannot be thrown away)
       const x = this._scrollXCenter(i);
       if ((h.x - x.x) * (h.x - x.x) + (h.y - x.y) * (h.y - x.y) <= 64) return { slot: i, cross: true };
     }
@@ -1440,6 +1452,32 @@ export class Visualizer {
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(img, Math.round(cx - w / 2), Math.round(cy - h / 2), w, h);
     ctx.restore();
+    if (id === 'Fang') this._drawFangOverlay(ctx, cx, cy, factor);
+  }
+
+  /** Fang's Magnetic Field's clock round its icon: a bright arc of the time left while it is on, a dimmed icon with a gold arc of the wait left while it recharges. */
+  _drawFangOverlay(ctx, cx, cy, factor) {
+    const s = this.scene, rad = Math.trunc(13 * factor / 2) + 3;
+    ctx.save();
+    ctx.lineCap = 'butt';
+    if (s.fangActiveLeft > 0) {
+      ctx.strokeStyle = 'rgba(120,220,255,0.92)'; ctx.lineWidth = 2.2;
+      ctx.beginPath(); ctx.arc(cx, cy, rad, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * s.fangActiveLeft / FANG_ACTIVE_SECONDS); ctx.stroke();
+    } else if (s.fangCooldownLeft > 0) {
+      ctx.fillStyle = 'rgba(10,8,30,0.47)';
+      ctx.beginPath(); ctx.arc(cx, cy, rad - 2, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = 'rgba(255,200,90,0.86)'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(cx, cy, rad, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * s.fangCooldownLeft / FANG_COOLDOWN_SECONDS); ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  /** Where Fang's Magnetic Field stands, in words. */
+  _fangStatus() {
+    const s = this.scene;
+    if (s.fangActiveLeft > 0) return t('Magnetic Field: active, {n} left', { n: fangClock(s.fangActiveLeft) });
+    if (s.fangCooldownLeft > 0) return t('Magnetic Field: recharging, {n}', { n: fangClock(s.fangCooldownLeft) });
+    return t('Magnetic Field: ready, tap to use');
   }
 
   /** A badge with some words in it, hung off the lower right of a button (the count of scrolls carried, out of what fits). */
@@ -1460,7 +1498,7 @@ export class Visualizer {
     if (has) this._drawScrollIcon(ctx, s.scrolls[s.scrollSelected], cx, cy, this._compactDisc ? 1 : 2);
     else { ctx.fillStyle = 'rgba(200,170,255,0.43)'; ctx.fillRect(cx - 1, cy - 5, 3, 11); ctx.fillRect(cx - 5, cy - 1, 11, 3); }   // an empty slot: a faint star
     this._drawTextBadge(ctx, s.scrollCount + '/' + s.scrollCapacity, r.x + r.w + 2, r.y + r.h + 2, s.scrollCount >= s.scrollCapacity);
-    if (this._overScroll && !this._scrollOpen) this._tip(ctx, t(has ? 'Scroll: tap to use, hold to choose' : 'Scrolls: none carried'), r.x + r.w + 10, r.y + r.h / 2, true);
+    if (this._overScroll && !this._scrollOpen) this._tip(ctx, has && s.scrolls[s.scrollSelected] === 'Fang' ? this._fangStatus() : t(has ? 'Scroll: tap to use, hold to choose' : 'Scrolls: none carried'), r.x + r.w + 10, r.y + r.h / 2, true);
   }
 
   _drawScrollPanel(ctx) {
@@ -1481,6 +1519,7 @@ export class Visualizer {
       ctx.setLineDash(filled ? [] : [2, 3]); ctx.stroke(); ctx.setLineDash([]);
       if (!filled) continue;
       this._drawScrollIcon(ctx, s.scrolls[i], c.x, c.y, compact ? 1 : 2);
+      if (SCROLL_DEFS[s.scrolls[i]].permanent) continue;   // (no cross on Fang's Magnetic Field)
       const x = this._scrollXCenter(i);
       ctx.beginPath(); ctx.arc(x.x, x.y, 6, 0, Math.PI * 2);
       ctx.fillStyle = i === this._scrollXHover ? 'rgb(220,70,70)' : 'rgba(70,30,50,0.92)'; ctx.fill();
@@ -1496,7 +1535,7 @@ export class Visualizer {
     // the name, for the one pointed at (or the selected one): above the disc, or beside the row in a short view
     const shown = this._scrollHover >= 0 && this._scrollHover < s.scrollCount ? this._scrollHover : s.scrollSelected;
     if (shown >= 0 && shown < s.scrollCount) {
-      const label = t(SCROLL_DEFS[s.scrolls[shown]].name) + (this._scrollXHover >= 0 ? '  (' + t('Discard') + ')' : '');
+      const label = t(SCROLL_DEFS[s.scrolls[shown]].name) + (this._scrollXHover >= 0 ? '  (' + t('Discard') + ')' : '') + (s.scrolls[shown] === 'Fang' ? '  -  ' + this._fangStatus() : '');
       if (compact) this._tip(ctx, label, b.x, b.y - 16, true);
       else {
         const px = 8.5 * PT, w = Math.round(this._measure(ctx, label, px) + 20);

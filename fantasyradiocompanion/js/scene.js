@@ -189,6 +189,7 @@ export class PixelScene {
     if (travel && this.enc === 'None') this._updateMerchant();   // on his days he comes down the road with a shop
     this._advanceCoins(dt, frozen || !travel);
     this._advanceTraits(dt, frozen || !travel);
+    this._advanceFang(dt, frozen || !travel);   // (and so does Fang's Magnetic Field)
     this._advanceEnemies(dt, frozen || !travel);
     this._advanceSky(dt);
     this._advanceDragon(dt);
@@ -1206,7 +1207,7 @@ export class PixelScene {
     this.arrived = false; this.tavernVisible = false; this.joinT = 0; this.move = 1; this.groupLeft = NaN;
     this.daysCompleted = 0; this.dayPhase = 0; this.yearDay = 0;
     this.notes.length = 0;
-    this._resetStory(); this._resetTips(); this._resetCoins(); this._resetTraits(); this._resetItems(); this._resetScroll(); this._resetStamps();   // (the tips already seen are remembered: they are for new players)
+    this._resetStory(); this._resetTips(); this._resetCoins(); this._resetTraits(); this._seen().clear(); this._resetItems(); this._resetScroll(); this._resetStamps();   // (the tips already seen are remembered: they are for new players)
     this.kills = {};
     this.newRecord = false; this.deathCounted = false;
     this._beginStart();   // and the adventure begins again at the campfire, with a new pair to pick from
@@ -1218,7 +1219,7 @@ export class PixelScene {
   saveState() {
     const f5 = this.dayPhase.toFixed(5);
     return ['3', this.party.map(k => PARTY_ENUM[k]).join(','), f5, String(this.daysCompleted), this.offer ? this.offer.map(k => PARTY_ENUM[k]).join(',') : '',
-      this._saveStoryFields(), String(this.gold), this._saveTraitFields(), this._saveBestiaryFields()].concat(this._saveItemFields(), [this._saveHpFields(), this._saveBerserkFields(), this.starting ? '1' : '', this.newRecord ? '1' : '', this._saveScrollFields(), this._saveStampFields(), this._saveSkillFields()]).join('|');
+      this._saveStoryFields(), String(this.gold), this._saveTraitFields(), this._saveBestiaryFields()].concat(this._saveItemFields(), [this._saveHpFields(), this._saveBerserkFields(), this.starting ? '1' : '', this.newRecord ? '1' : '', this._saveScrollFields(), this._saveStampFields(), this._saveSkillFields(), this._saveSeenFields()]).join('|');
   }
 
   loadState(state) {
@@ -1267,6 +1268,7 @@ export class PixelScene {
       this._loadBerserkFields(p.length > 16 ? p[16] : null);   // the Monster Berserker's multiplier and time left (absent in older saves)
       this._loadHpFields(p.length > 15 ? p[15] : null);
       this._loadScrollFields(p.length > 19 ? p[19] : null);
+      this._loadSeenFields(p.length > 22 ? p[22] : null);   // the items and scrolls ever held, for the compendium (absent in older saves)
       this._loadSkillFields(p.length > 21 ? p[21] : null);   // the skill-tree paths taken (absent in older saves)
       this._loadStampFields(p.length > 20 ? p[20] : null);   // the latest year a stamp was paid out for (absent in older saves)   // the scrolls carried and who has Rerevive (absent in older saves)
       this.newRecord = p.length > 18 && p[18] === '1';   // a reload on the defeat screen keeps its verdict

@@ -40,7 +40,7 @@ export const LOG_CATEGORIES = ['attacks', 'monsters', 'skills', 'status', 'event
 const CATEGORY_OF = {
   '{0} hit the {1} for {2} damage.': 'attacks', "{0}'s {1} hit the {2} for {3} damage.": 'attacks',
   'The {0} hit {1} for {2} damage.': 'monsters', "The {0}'s {1} hit {2} for {3} damage.": 'monsters', 'The {0} used {1}!': 'monsters',
-  '{0} used {1}.': 'skills', '{0} used {1} on {2}.': 'skills', '{0} used {1} on the {2}.': 'skills',
+  '{0} used {1}.': 'skills', '{0} used {1} on {2}.': 'skills', '{0} used {1} on the {2}.': 'skills', 'The party used {0}.': 'skills',
   '{0} used {1} on {2}, restoring {3} HP.': 'skills', '{0} used {1}, restoring {2} HP to {3}.': 'skills',
   '{0} was poisoned: {1} damage a second for {2} s.': 'status', '{0} was blinded by sand: the next attack will miss.': 'status',
   "{0}'s attack missed: blinded by sand.": 'status', "The {0}'s attack was stopped by Paralyze!": 'status', '{0} fainted.': 'status',
