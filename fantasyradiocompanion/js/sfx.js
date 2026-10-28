@@ -402,16 +402,23 @@ const RECIPES = {
     layer(d, note(1318.5, 0.2, 0.09, p => sqr(p, 0.5), 0.4), 0.06, 1);
     return d;
   },
-  Zap() {   // an electric zap: a buzz that falls fast, crackling, with a bright ping on top
-    let ph = 0, ph2 = 0;
-    return make(0.34, t => {
-      const u = t / 0.34;
-      ph += (2400 * Math.pow(1 - u, 2.2) + 180) / R;
-      ph2 += (3600 - 2400 * u) / R;
-      const env = attack(t, 0.003) * Math.exp(-u * 3.4);
+  Zap() {   // a lightning zap: a sharp crack, a fast falling buzz that stutters, spitting crackles, and a short low sizzle
+    let ph = 0, ph2 = 0, gateLeft = 0, gate = 1, prevN = 0, spike = 0;
+    return make(0.5, t => {
+      const u = t / 0.5;
       const n = noise();
-      const crackle = n > 0.55 ? n * 0.9 : 0;   // sparse spits of noise: a crackle, not a hiss
-      return (saw(ph) * 0.42 + sqr(ph2, 0.5) * 0.16 + crackle * Math.exp(-u * 2.5) * 0.5) * env * 0.9;
+      const bright = n - prevN; prevN = n;                                    // high-passed noise: the bright, hissy edge
+      const crack = bright * Math.exp(-t / 0.014) * 1.1;                       // the snap at the very start
+      ph += (2600 * Math.pow(1 - Math.min(1, t / 0.28), 2.4) + 110) / R;       // the buzz falls fast from a shriek to a growl
+      ph2 += (125 + 12 * Math.sin(t * 40)) / R;                                // the low sizzle: mains-hum rough
+      gateLeft -= 1.0 / R;
+      if (gateLeft <= 0) { gate = noise() > -0.15 ? 1 : 0.15; gateLeft = 0.004 + 0.008 * (noise() * 0.5 + 0.5); }   // the arc stutters on and off
+      const buzz = (saw(ph) * 0.5 + sqr(ph * 2.01, 0.3) * 0.22) * gate * Math.exp(-t / 0.13);
+      const sizzle = saw(ph2) * 0.32 * Math.exp(-u * 2.6) * (0.6 + 0.4 * gate);
+      if (Math.abs(spike) < 0.02 && noise() > 0.985 - 0.02 * Math.exp(-u * 3)) spike = noise() > 0 ? 1 : -1;   // single spits of crackle, thickest early
+      const crackle = spike * 0.7;
+      spike *= 0.6;
+      return (crack + buzz + sizzle + crackle) * 0.8;
     });
   },
   CoinDrop() {
