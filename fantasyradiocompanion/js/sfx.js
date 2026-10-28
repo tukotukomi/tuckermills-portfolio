@@ -402,8 +402,8 @@ const RECIPES = {
     layer(d, note(1318.5, 0.2, 0.09, p => sqr(p, 0.5), 0.4), 0.06, 1);
     return d;
   },
-  Zap() {   // a lightning zap: a sharp crack, a fast falling buzz that stutters, spitting crackles, and a short low sizzle
-    let ph = 0, ph2 = 0, gateLeft = 0, gate = 1, prevN = 0, spike = 0;
+  Zap() {   // a lightning zap: a sharp crack, a fast falling, fuzzy buzz that stutters, spitting crackles, a bed of static, and a short low sizzle
+    let ph = 0, ph2 = 0, gateLeft = 0, gate = 1, prevN = 0, spike = 0, hold = 0, holdLeft = 0;
     return make(0.5, t => {
       const u = t / 0.5;
       const n = noise();
@@ -413,12 +413,14 @@ const RECIPES = {
       ph2 += (125 + 12 * Math.sin(t * 40)) / R;                                // the low sizzle: mains-hum rough
       gateLeft -= 1.0 / R;
       if (gateLeft <= 0) { gate = noise() > -0.15 ? 1 : 0.15; gateLeft = 0.004 + 0.008 * (noise() * 0.5 + 0.5); }   // the arc stutters on and off
-      const buzz = (saw(ph) * 0.5 + sqr(ph * 2.01, 0.3) * 0.22) * gate * Math.exp(-t / 0.13);
+      const buzz = Math.tanh((saw(ph) * 0.5 + sqr(ph * 2.01, 0.3) * 0.22) * 2.6) * 0.62 * gate * Math.exp(-t / 0.13);   // (driven hard: a fuzzy, distorted buzz)
+      if (--holdLeft <= 0) { hold = noise(); holdLeft = 3 + Math.trunc(Math.abs(noise()) * 5); }   // sample-and-hold noise: gritty static, a few kHz wide
+      const stat = hold * 0.3 * Math.exp(-u * 2.2) * (0.55 + 0.45 * gate);                          // the bed of static, flickering with the arc and lasting longer than the buzz
       const sizzle = saw(ph2) * 0.32 * Math.exp(-u * 2.6) * (0.6 + 0.4 * gate);
       if (Math.abs(spike) < 0.02 && noise() > 0.985 - 0.02 * Math.exp(-u * 3)) spike = noise() > 0 ? 1 : -1;   // single spits of crackle, thickest early
       const crackle = spike * 0.7;
       spike *= 0.6;
-      return (crack + buzz + sizzle + crackle) * 0.8;
+      return (crack + buzz + sizzle + crackle + stat) * 0.8;
     });
   },
   CoinDrop() {
