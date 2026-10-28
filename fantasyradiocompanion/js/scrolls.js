@@ -19,7 +19,7 @@ export const SCROLL_DEFS = {
 export const SCROLL_DROP_CHANCE = 0.2;
 /** Fang's Magnetic Field: how long it lasts once switched on, and how long after that switching it can be switched on again (adventuring time). */
 export const FANG_ACTIVE_SECONDS = 15 * 60, FANG_COOLDOWN_SECONDS = 30 * 60;
-const FANG_PULL_SECONDS = 0.25, FANG_PULL_RANGE = 46;   // a coin within this many pixels of the orb is pulled into it, taking this long
+const FANG_PULL_SECONDS = 0.2, FANG_PULL_RANGE = 18;   // a coin that passes within this many pixels of the orb is pulled into it, taking this long
 /** A time left as m:ss. */
 export function fangClock(seconds) { const n = Math.ceil(Math.max(0, seconds)); return Math.trunc(n / 60) + ':' + String(n % 60).padStart(2, '0'); }
 const SCROLL_FLY_SECONDS = 1.1, REREVIVE_PULSE_SECONDS = 1.3, SEASON_DAYS = 5;
@@ -189,13 +189,19 @@ export function installScroll(P) {
 
   // ---- Time ------------------------------------------------------------------------------------------------
 
-  /** Where the orb is: held out in front of the party member who leads. */
+  /** Where the orb floats: just behind the party, out of the way of the fighting at the front. A coin has to pass the whole party to reach it. */
   m._fangOrbPosition = function () {
-    const fr = this._rectOf(this._frontKind());
-    return { x: fr.x + fr.w + 4, y: fr.y + fr.h * 0.42 + Math.sin(this.time * 3) * 0.8 };
+    let rear = null;
+    for (const k of Object.keys(this.memberRects)) {
+      if (this.party.indexOf(k) < 0) continue;
+      const r = this.memberRects[k];
+      if (rear === null || r.x < rear.x) rear = r;
+    }
+    if (rear === null) rear = this._rectOf(this._frontKind());
+    return { x: Math.max(6, rear.x - 8), y: rear.y + rear.h * 0.4 + Math.sin(this.time * 3) * 0.8 };
   };
 
-  /** Fang's Magnetic Field, in adventuring time: both clocks run, and while it is on a Gold Coin that comes within reach of the orb is pulled into it. */
+  /** Fang's Magnetic Field, in adventuring time: both clocks run, and while it is on a Gold Coin that passes the orb behind the party is pulled into it. */
   m._advanceFang = function (dt, paused) {
     if (paused) return;
     if (this.fangCooldownLeft > 0) this.fangCooldownLeft = Math.max(0, this.fangCooldownLeft - dt);
@@ -286,7 +292,7 @@ export function installScroll(P) {
   // ---- Drawing ---------------------------------------------------------------------------------------------
 
   /** A scroll flying to the party, and the little heart over each member who has Rerevive (with a ring of light when it is given or used). */
-  /** The magnetic orb while Fang's Magnetic Field is on: a small glowing ball of blue light, with two sparks circling it, held out in front of the leader; and the
+  /** The magnetic orb while Fang's Magnetic Field is on: a small glowing ball of blue light, with two sparks circling it, floating behind the party; and the
    *  coins being drawn into it. */
   m._drawFangField = function (g) {
     if (this.party.length === 0) return;

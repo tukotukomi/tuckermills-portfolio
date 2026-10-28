@@ -1,5 +1,5 @@
 // Caches the app's own files so it opens instantly and works offline. Streams and anything from other sites are never touched.
-const CACHE = 'fmc-v137';
+const CACHE = 'fmc-v138';
 const SHELL = [
   './', 'index.html', 'manifest.webmanifest', 'css/style.css',
   'js/main.js', 'js/scene.js', 'js/util.js', 'js/sprites.js', 'js/sfx.js', 'js/coins.js', 'js/story.js', 'js/traits.js', 'js/enemies.js', 'js/items.js', 'js/tutorial.js', 'js/quality.js', 'js/scrolls.js', 'js/stamps.js', 'js/journal.js', 'js/desert.js', 'js/skills.js', 'js/advlog.js', 'js/playlists.js', 'js/tags.js', 'js/health.js', 'js/inn.js',
