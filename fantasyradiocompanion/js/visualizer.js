@@ -448,25 +448,31 @@ export class Visualizer {
   // German, just widens it), within the page.
   _qLabel(level) { return t(level.charAt(0).toUpperCase() + level.slice(1)); }
 
+  /** Whether this browser can keep the screen awake (the Screen Wake Lock API); when it cannot, the menu simply has no such row. */
+  get _awakeShown() { return !!(this.host.wakeSupported && this.host.wakeSupported()); }
+
   _settingsLayout() {
     const ctx = this.ctx, px = 8.5 * PT, c = this._settingsRect, pad = 10, box = 14, gap = 12, minSlider = 90;
+    const awakeShown = this._awakeShown, extra = awakeShown ? 30 : 0;
+    const awakeW = awakeShown ? box + 8 + this._measure(ctx, t('Keep device awake'), px) + 14 : 0;
     const widest = Math.max(...QUALITY_LEVELS.map(l => this._measure(ctx, this._qLabel(l), px)));
     const headW = this._measure(ctx, t('Quality'), px);
     const autoW = box + 6 + this._measure(ctx, t('Auto'), px);
     const restartW = Math.max(this._measure(ctx, t('Restart'), 9.5 * PT), this._measure(ctx, t('Developer Updates'), 9.5 * PT)) + 24;
-    let w = Math.ceil(Math.max(headW + gap + widest, minSlider + gap + autoW, restartW) + pad * 2);
+    let w = Math.ceil(Math.max(headW + gap + widest, minSlider + gap + autoW, restartW, awakeW) + pad * 2);
     w = Math.max(150, Math.min(w, Math.trunc(this.vw - 16)));
     const x = c.x + c.w - w, y = c.y + c.h + 6, rowY = y + 4 + 20;
     const autoRect = { x: x + w - pad - autoW, y: rowY, w: autoW, h: 28 };
     const sliderLeft = x + pad + 7, sliderRight = autoRect.x - gap - 7;
     return {
-      menu: { x: x, y: y, w: w, h: 4 + 20 + 28 + 6 + 30 + 30 + 4 },
+      menu: { x: x, y: y, w: w, h: 4 + 20 + 28 + 6 + 30 + 30 + extra + 4 },
       head: { x: x + pad, y: y + 4, w: w - pad * 2, h: 20 },
       auto: autoRect, box: box,
       slider: { x: sliderLeft, y: rowY + 14, w: Math.max(20, sliderRight - sliderLeft) },   // the track's centre line; the thumb has a radius of 7
       sliderHit: { x: x + pad, y: rowY, w: Math.max(20, autoRect.x - gap - (x + pad)), h: 28 },
-      dev: { x: x + 4, y: rowY + 28 + 6, w: w - 8, h: 30 },
-      restart: { x: x + 4, y: rowY + 28 + 6 + 30, w: w - 8, h: 30 },
+      awake: awakeShown ? { x: x + 4, y: rowY + 28 + 6, w: w - 8, h: 30 } : null,
+      dev: { x: x + 4, y: rowY + 28 + 6 + extra, w: w - 8, h: 30 },
+      restart: { x: x + 4, y: rowY + 28 + 6 + extra + 30, w: w - 8, h: 30 },
     };
   }
   get _settingsMenuRect() { return this._settingsLayout().menu; }
@@ -545,6 +551,18 @@ export class Visualizer {
     }
     this._text(ctx, t('Auto'), bx + L.box + 6, L.auto.y + L.auto.h / 2 + 0.5, { px: px, color: 'white' });
     ctx.lineCap = 'butt'; ctx.lineJoin = 'miter';
+    if (L.awake) {
+      // The Keep device awake checkbox, with its label to the right, on a row of its own.
+      const aw = L.awake, on = !!this.keepAwake, bx2 = aw.x + 8, by2 = aw.y + (aw.h - L.box) / 2;
+      if (this.hover.qawake) this._pill(ctx, aw.x, aw.y, aw.w, aw.h, 5, 'rgba(90,70,150,0.47)');
+      this._pill(ctx, bx2, by2, L.box, L.box, 3, on ? 'rgb(255,204,82)' : 'rgba(60,52,110,0.55)', on ? 'rgb(255,244,190)' : 'rgba(170,186,240,0.7)', 1.2);
+      if (on) {
+        ctx.strokeStyle = 'rgb(70,36,8)'; ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+        ctx.beginPath(); ctx.moveTo(bx2 + 3.5, by2 + 7.5); ctx.lineTo(bx2 + 6, by2 + 10); ctx.lineTo(bx2 + 10.5, by2 + 4.5); ctx.stroke();
+        ctx.lineCap = 'butt'; ctx.lineJoin = 'miter';
+      }
+      this._text(ctx, t('Keep device awake'), bx2 + L.box + 8, aw.y + aw.h / 2 + 0.5, { px: px, color: 'white' });
+    }
     const dv = L.dev;
     if (this.hover.dev) this._pill(ctx, dv.x, dv.y, dv.w, dv.h, 5, 'rgba(90,70,150,0.47)');
     this._text(ctx, t('Developer Updates'), dv.x + dv.w / 2, dv.y + dv.h / 2 + 0.5, { px: 9.5 * PT, color: 'white', align: 'center' });
@@ -2269,6 +2287,7 @@ export class Visualizer {
       dev: this._settingsOpen && this._inRect(h, this._settingsLayout().dev),
       qslider: this._settingsOpen && this._inRect(h, this._settingsLayout().sliderHit),
       qauto: this._settingsOpen && this._inRect(h, this._settingsLayout().auto),
+      qawake: this._settingsOpen && !!this._settingsLayout().awake && this._inRect(h, this._settingsLayout().awake),
       tuner: this._inTuner(h),
       comp: this.zoomed && this._inRect(h, this._compRect),
       card: -1, tile: -1, levelUp: false
@@ -2301,7 +2320,7 @@ export class Visualizer {
     this.hover = hover;
     this._overSkills = this._inSkills(h);
     const overCoin = !s.isLevelSelect && !s.isDialogue && !s.isChoosing && s.isCoinAt(p.x, p.y);
-    this.canvas.style.cursor = hover.button || hover.settings || hover.restart || hover.dev || this._overSkills || hover.qslider || hover.qauto || hover.tuner || hover.comp || this._overHot || this._overScroll || this._overTShop || this._scrollHover >= 0 || this._discHover >= 0 || hover.card >= 0 || hover.tile >= 0 || hover.levelUp || overCoin ? 'pointer' : 'default';
+    this.canvas.style.cursor = hover.button || hover.settings || hover.restart || hover.dev || this._overSkills || hover.qslider || hover.qauto || hover.qawake || hover.tuner || hover.comp || this._overHot || this._overScroll || this._overTShop || this._scrollHover >= 0 || this._discHover >= 0 || hover.card >= 0 || hover.tile >= 0 || hover.levelUp || overCoin ? 'pointer' : 'default';
   }
 
   _onDown(e) {
@@ -2385,6 +2404,7 @@ export class Visualizer {
         return;
       }
       if (this._inRect(h, SL.auto)) { this.setAuto(this._qMode !== 'auto'); Sound.play('DiscClick'); return; }
+      if (SL.awake && this._inRect(h, SL.awake)) { this.keepAwake = !this.keepAwake; this.host.keepAwakeChanged && this.host.keepAwakeChanged(this.keepAwake); Sound.play('DiscClick'); return; }
       if (this._inRect(h, SL.dev)) { this._settingsOpen = false; this.hover.dev = false; this._openDev(); Sound.play('DiscClick'); return; }
       if (this._inRect(h, this._restartItemRect)) { this._settingsOpen = false; this.hover.restart = false; this.host.restartRequested && this.host.restartRequested(); return; }
       if (this._inRect(h, this._settingsMenuRect)) return;   // the menu's own heading and gaps do nothing

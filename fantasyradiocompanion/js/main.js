@@ -215,6 +215,21 @@ async function main() {
   window.addEventListener('pagehide', () => store.set('save', scene.saveState()));
   document.addEventListener('visibilitychange', () => { if (document.hidden) store.set('save', scene.saveState()); });
 
+  // ---- Keep device awake: a screen wake lock, held while the setting is on and the page is showing ------------------------------------------
+  let wakeLock = null, wakeBusy = false, keepAwake = store.get('keepAwake', '0') === '1';
+  async function applyWake() {
+    if (wakeBusy) return;   // (one request at a time: a second would leave the first lock held for good)
+    wakeBusy = true;
+    const wanted = keepAwake;
+    try {
+      if (wanted && 'wakeLock' in navigator && document.visibilityState === 'visible') {
+        if (!wakeLock) { const lock = await navigator.wakeLock.request('screen'); wakeLock = lock; lock.addEventListener('release', () => { if (wakeLock === lock) wakeLock = null; }); }
+      } else if (wakeLock) { const lock = wakeLock; wakeLock = null; await lock.release(); }
+    } catch (e) { wakeLock = null; /* refused (low battery, a policy): the setting stays, and it is tried again when the page is shown or tapped */ }
+    wakeBusy = false;
+    if (keepAwake !== wanted) applyWake();   // the setting was changed while that was going on
+  }
+
   const vis = new Visualizer(canvas, scene, {
     spectrum: () => player.spectrum(),
     level: () => player.level(),
@@ -232,10 +247,18 @@ async function main() {
     openCompendium: () => openCompendium(),
     toggleFullscreen: () => toggleFullscreen(),
     restartRequested: () => restartAdventure(),
+    wakeSupported: () => 'wakeLock' in navigator,   // the settings menu's "Keep device awake" row only shows where the browser can do it
+    keepAwakeChanged: on => { keepAwake = on; store.set('keepAwake', on ? '1' : '0'); applyWake(); },
     qualityChanged: (mode, autoLevel) => { store.set('quality', mode); store.set('qualityAuto', autoLevel); },   // the settings menu's Quality (and the level Auto settled on)
     startOver: () => { scene.resetProgress(); store.set('save', scene.saveState()); },   // from the game-over card: no confirmation
   });
   vis.setQuality(store.get('quality', 'auto'), store.get('qualityAuto', ''));
+  vis.keepAwake = keepAwake;
+  applyWake();
+  // The page asks for the wake lock again whenever it comes back to the front (the browser lets go of it when the page is hidden), and on the first tap
+  // if the browser would not give it before the page had been touched.
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') applyWake(); });
+  document.addEventListener('pointerdown', () => { if (keepAwake && !wakeLock) applyWake(); });
   vis.start();
 
   // The scene reads what is playing every frame.

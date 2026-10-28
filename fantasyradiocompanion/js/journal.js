@@ -14,7 +14,8 @@ export const JOURNAL = [
       'It can be used again 30 minutes after you switched it on.',
       'Scroll storage has one more slot, so Fang fits beside any Rereviver Scroll you find.',
       'The Compendium has an Items tab showing every item in the game. Ones you have not had yet are greyed out.',
-      'The radio dial now sits under the item and scroll buttons, the same size, so a late grab for a coin does not open it.'
+      'The radio dial now sits under the item and scroll buttons, the same size, so a late grab for a coin does not open it.',
+      'New Keep device awake setting in the cog menu stops your screen sleeping while you play (a fan request).'
     ],
     es: {
       title: 'El Campo magnético de Fang',
@@ -23,7 +24,8 @@ export const JOURNAL = [
         'Puede volver a usarse 30 minutos después de encenderlo.',
         'El almacén de pergaminos tiene una ranura más, así que Fang cabe junto a cualquier Pergamino de Rerevivir que encuentres.',
         'El Compendio tiene una pestaña de Objetos con todo lo que hay en el juego. Lo que aún no has tenido aparece atenuado.',
-        'El dial de radio ahora está bajo los botones de objetos y pergaminos, del mismo tamaño, para que un intento tardío de coger una moneda no lo abra.'
+        'El dial de radio ahora está bajo los botones de objetos y pergaminos, del mismo tamaño, para que un intento tardío de coger una moneda no lo abra.',
+        'Nuevo ajuste «Mantener el dispositivo activo» en el menú de la rueda dentada: evita que la pantalla se apague mientras juegas (petición de un fan).'
       ]
     },
     zh: {
@@ -33,7 +35,8 @@ export const JOURNAL = [
         '启动 30 分钟后可再次使用。',
         '卷轴栏多了一格，所以 Fang 可以和你找到的复活卷轴一起带着。',
         '图鉴新增“物品”标签页，列出游戏中的所有物品。还没拥有过的会显示为灰色。',
-        '电台旋钮现在位于物品和卷轴按钮下方，大小相同，这样最后一刻去抢金币时就不会误点到它。'
+        '电台旋钮现在位于物品和卷轴按钮下方，大小相同，这样最后一刻去抢金币时就不会误点到它。',
+        '齿轮菜单新增“保持设备唤醒”设置，让屏幕在你游玩时不会休眠（来自一位粉丝的建议）。'
       ]
     }
   },
