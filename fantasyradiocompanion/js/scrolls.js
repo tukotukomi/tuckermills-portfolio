@@ -6,6 +6,7 @@ import { Sound } from './sfx.js';
 import { Sprites } from './sprites.js';
 import { t } from './i18n.js';
 import { enumOf, kindOfEnum } from './health.js';
+import { hash } from './util.js';
 
 export const SCROLL_IDS = ['Rereviver', 'Fang'];
 /** The scrolls a monster can leave behind (Fang's Magnetic Field is every adventurer's own, and is never found on the road). */
@@ -19,7 +20,7 @@ export const SCROLL_DEFS = {
 export const SCROLL_DROP_CHANCE = 0.2;
 /** Fang's Magnetic Field: how long it lasts once switched on, and how long after that switching it can be switched on again (adventuring time). */
 export const FANG_ACTIVE_SECONDS = 15 * 60, FANG_COOLDOWN_SECONDS = 30 * 60;
-const FANG_PULL_SECONDS = 0.2, FANG_PULL_RANGE = 18;   // a coin that passes within this many pixels of the orb is pulled into it, taking this long
+const FANG_PULL_SECONDS = 0.2, FANG_PULL_RANGE = 36;   // a coin that passes within this many pixels of the orb is pulled into it, taking this long
 /** A time left as m:ss. */
 export function fangClock(seconds) { const n = Math.ceil(Math.max(0, seconds)); return Math.trunc(n / 60) + ':' + String(n % 60).padStart(2, '0'); }
 const SCROLL_FLY_SECONDS = 1.1, REREVIVE_PULSE_SECONDS = 1.3, SEASON_DAYS = 5;
@@ -316,6 +317,26 @@ export function installScroll(P) {
     for (const p of this.fangPulls) {
       const u = Math.min(1, p.age / FANG_PULL_SECONDS), e = u * u;   // it starts slowly and is snatched in at the end
       const x = p.x + (orb.x - p.x) * e, y = p.y + (orb.y - p.y) * e;
+      if (u < 0.75) {
+        // Lightning: a flickering jagged bolt from the orb to the coin as it is grabbed (it follows the coin in), with a short fork and a flash where the coin was.
+        const a = 1 - u / 0.75, SEG = 9, slice = Math.trunc(p.age * 50), pts = [];
+        for (let i = 0; i <= SEG; i++) {
+          const f = i / SEG, jit = i === 0 || i === SEG ? 0 : ((hash(i + slice * 7 + Math.trunc(p.x), 17) % 13) - 6) * 0.9;
+          pts.push([orb.x + (x - orb.x) * f, orb.y + (y - orb.y) * f + jit]);
+        }
+        const ctx = g.ctx;
+        ctx.save(); ctx.lineJoin = 'round';
+        ctx.strokeStyle = 'rgba(120,210,255,' + (a / 3).toFixed(3) + ')'; ctx.lineWidth = 3;
+        ctx.beginPath(); pts.forEach((q, i) => i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1])); ctx.stroke();
+        ctx.strokeStyle = 'rgba(255,250,200,' + a.toFixed(3) + ')'; ctx.lineWidth = 1.2;
+        ctx.beginPath(); pts.forEach((q, i) => i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1])); ctx.stroke();
+        const mid = pts[SEG >> 1];
+        ctx.strokeStyle = 'rgba(255,244,170,' + (a * 2 / 3).toFixed(3) + ')'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(mid[0], mid[1]); ctx.lineTo(mid[0] + 5, mid[1] + ((hash(slice + 3, 29) % 9) - 4) * 2); ctx.stroke();
+        ctx.fillStyle = 'rgba(255,244,170,' + (a / 2).toFixed(3) + ')';
+        ctx.beginPath(); ctx.arc(p.x, p.y, 5, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+      }
       for (let k = 1; k <= 2; k++) {   // a short faint trail behind it
         const ue = Math.max(0, u - 0.08 * k), ee = ue * ue;
         g.rect(Math.round(p.x + (orb.x - p.x) * ee), Math.round(p.y + (orb.y - p.y) * ee), 1, 1, CA(Math.trunc(120 / k), 160, 226, 255));
