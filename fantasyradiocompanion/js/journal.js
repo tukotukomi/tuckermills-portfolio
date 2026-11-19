@@ -7,6 +7,28 @@
 // This file is plain data (the generator reads it): { date: 'YYYY-MM-DD', title, notes: [...], es: { title, notes }, zh: { title, notes } }.
 export const JOURNAL = [
   {
+    date: '2026-11-19',
+    title: 'Swap game music files',
+    notes: [
+      'In the Windows app, the Audio to BGW/SPW tab now accepts a BGW or SPW file as its input.',
+      'It copies the file under a new name without touching the sound, so you can swap one of the game\'s tracks for another.'
+    ],
+    es: {
+      title: 'Cambia archivos de música del juego',
+      notes: [
+        'En la aplicación de Windows, la pestaña Audio a BGW/SPW ahora acepta un archivo BGW o SPW como entrada.',
+        'Lo copia con otro nombre sin tocar el sonido, así que puedes cambiar una pista del juego por otra.'
+      ]
+    },
+    zh: {
+      title: '替换游戏音乐文件',
+      notes: [
+        '在 Windows 应用中，“音频转 BGW/SPW”标签页现在可以把 BGW 或 SPW 文件作为输入。',
+        '它会以新名称复制该文件而不改动声音，所以你可以把游戏中的一首曲目换成另一首。'
+      ]
+    }
+  },
+  {
     date: '2026-10-28',
     title: "Fang's Magnetic Field",
     notes: [
