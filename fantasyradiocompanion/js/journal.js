@@ -11,20 +11,23 @@ export const JOURNAL = [
     title: 'Swap game music files',
     notes: [
       'In the Windows app, the Audio to BGW/SPW tab now accepts a BGW or SPW file as its input.',
-      'It copies the file under a new name without touching the sound, so you can swap one of the game\'s tracks for another.'
+      'It copies the file under a new name without touching the sound, so you can swap one of the game\'s tracks for another.',
+      'ATRAC3 tracks cannot just be renamed (they play as static), so those are converted to the format the game plays under any name.'
     ],
     es: {
       title: 'Cambia archivos de música del juego',
       notes: [
         'En la aplicación de Windows, la pestaña Audio a BGW/SPW ahora acepta un archivo BGW o SPW como entrada.',
-        'Lo copia con otro nombre sin tocar el sonido, así que puedes cambiar una pista del juego por otra.'
+        'Lo copia con otro nombre sin tocar el sonido, así que puedes cambiar una pista del juego por otra.',
+        'Las pistas ATRAC3 no pueden simplemente renombrarse (suenan como ruido blanco), así que se convierten al formato que el juego reproduce con cualquier nombre.'
       ]
     },
     zh: {
       title: '替换游戏音乐文件',
       notes: [
         '在 Windows 应用中，“音频转 BGW/SPW”标签页现在可以把 BGW 或 SPW 文件作为输入。',
-        '它会以新名称复制该文件而不改动声音，所以你可以把游戏中的一首曲目换成另一首。'
+        '它会以新名称复制该文件而不改动声音，所以你可以把游戏中的一首曲目换成另一首。',
+        'ATRAC3 曲目不能直接改名（会变成白噪声），所以会被转换为游戏换名后也能播放的格式。'
       ]
     }
   },
