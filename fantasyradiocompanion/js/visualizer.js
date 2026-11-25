@@ -127,7 +127,7 @@ export class Visualizer {
   _frame(now) {
     if (!this.running) return;
     requestAnimationFrame(this._frame);
-    const cap = this._q.fps;
+    const cap = this.scene.jamActive ? (this._q.fps ? Math.min(this._q.fps, 30) : 30) : this._q.fps;   // (the tavern moves slowly: 30 frames a second is plenty, and half the work)
     if (cap && now - this._lastDraw < 1000 / cap - 2) return;   // Low and Medium draw less often (the time carries over: dt runs from the last frame drawn)
     const frameStart = performance.now(), interval = now - this._lastDraw;
     this._lastDraw = now;

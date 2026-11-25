@@ -190,22 +190,27 @@ export function installJam(P) {
 
   // ---- The camera -----------------------------------------------------------------------------------
 
-  /** A new shot: wide, medium or close, now and then the fire, or (when a hero is heading for the rack) following them there. */
+  /** A new shot. Mostly the camera stays well back (the whole room, the stage, the fire); now and then it moves in on one hero (a "portrait").
+   *  When a hero is heading for the rack it follows them there. */
   m._jamNextShot = function (first, follow) {
     const mem = this.jamMembers;
     const pick = mem.length ? mem[rnd(mem.length)] : null;
-    let kind = first ? 'wide' : ['wide', 'medium', 'close', 'close', 'fire', 'medium'][rnd(6)];
+    let kind = first ? 'wide' : ['wide', 'wide', 'stage', 'stage', 'fire', 'portrait'][rnd(6)];
+    if (kind === 'portrait' && this._jamLastKind === 'portrait') kind = 'wide';   // (never two close shots in a row)
     if (follow) kind = 'follow';
+    this._jamLastKind = kind;
     const aspect = this.jamAspect || 3;
     let s;
-    if (kind === 'wide') s = { x: JAM_W / 2 + (Math.random() - 0.5) * 24, y: 48, vh0: 88, vh1: 76 };
-    else if (kind === 'medium') s = { x: pick ? pick.home : 130, y: 51, vh0: 52, vh1: 44 };
-    else if (kind === 'close') s = { x: pick ? pick.home : 130, y: 54, vh0: 42, vh1: 34 };
-    else if (kind === 'fire') s = { x: 52, y: 48, vh0: 46, vh1: 38 };
-    else s = { x: follow.x, y: 54, vh0: 48, vh1: 44, follow: follow };   // (the camera stays with them: see _jamAdvanceCamera)
-    s.dur = kind === 'follow' ? 60 : 9 + Math.random() * 7;
+    if (kind === 'wide') s = { x: JAM_W / 2 + (Math.random() - 0.5) * 24, y: 48, vh0: 96, vh1: 86 };
+    else if (kind === 'stage') s = { x: pick ? pick.home : 130, y: 50, vh0: 82, vh1: 72 };
+    else if (kind === 'fire') s = { x: 60, y: 48, vh0: 80, vh1: 70 };
+    else if (kind === 'portrait') {
+      s = { x: pick ? pick.home : 130, y: 54, vh0: 42, vh1: 34 };
+      if (rnd(2) === 0) { s.vh0 = 52; s.vh1 = 44; }
+    } else s = { x: follow.x, y: 54, vh0: 66, vh1: 58, follow: follow };   // (the camera stays with them: see _jamAdvanceCamera)
+    s.dur = kind === 'follow' ? 60 : kind === 'portrait' ? 7 + Math.random() * 5 : 10 + Math.random() * 7;
     s.dx = (s.follow ? 0 : (Math.random() - 0.5) * 10) * (aspect > 1.5 ? 1 : 0.4);   // a slow drift sideways while the shot lasts
-    if (kind === 'wide' && aspect < 1.1) { s.vh0 = 70; s.vh1 = 62; s.dx = (Math.random() < 0.5 ? 1 : -1) * 100; }   // a tall, narrow screen cannot hold the whole stage: the wide shot pans along it
+    if (kind !== 'portrait' && aspect < 1.1) { s.vh0 = 96; s.vh1 = 88; s.dx = (Math.random() < 0.5 ? 1 : -1) * 100; }   // a tall, narrow screen cannot hold the whole stage: the shot pans along it
     this.jamShot = s; this.jamShotT = 0;
   };
 
@@ -216,7 +221,7 @@ export function installJam(P) {
     if (this.jamShotT > s.dur || (s.follow && !this.jamSwap)) { this._jamNextShot(false); return; }
     const u = Math.min(1, this.jamShotT / s.dur), e = ease(u);
     let tx = s.x + s.dx * (u - 0.5), ty = s.y, tvh = s.vh0 + (s.vh1 - s.vh0) * e;
-    if (s.follow) { tx = s.follow.x + s.follow.face * 8; ty = s.follow.feet - 8; tvh = 46 - 4 * ease(Math.min(1, this.jamShotT / 8)); }
+    if (s.follow) { tx = s.follow.x + s.follow.face * 8; ty = s.follow.feet - 8; tvh = 62 - 4 * ease(Math.min(1, this.jamShotT / 8)); }
     // a gentle sway on top, so even a held shot is never still
     tx += Math.sin(this.jamT * 0.31) * 3; ty += Math.sin(this.jamT * 0.23 + 1) * 1.2; tvh *= 1 + Math.sin(this.jamT * 0.17) * 0.02;
     const k = Math.min(1, dt * 1.4);   // the camera eases toward where the shot wants it
@@ -233,14 +238,25 @@ export function installJam(P) {
       this.jamCanvas = document.createElement('canvas'); this.jamCanvas.width = JAM_W * SS; this.jamCanvas.height = JAM_H * SS;
       this.jamG = new Pix(this.jamCanvas);
       this.jamBg = this._jamBuildBackground();
-      this.jamLight = { canvas: document.createElement('canvas') };
+      this.jamLight = { canvas: document.createElement('canvas'), tick: 0 };
       this.jamLight.canvas.width = JAM_W / 2; this.jamLight.canvas.height = JAM_H / 2;
+      this.jamLight.image = this.jamLight.canvas.getContext('2d').createImageData(JAM_W / 2, JAM_H / 2);
+      this.jamLight.sums = new Float32Array((JAM_W / 2) * (JAM_H / 2) * 4);
     }
+
+    // The camera: a window of the room, as tall as the shot says and as wide as the control needs, kept inside the room.
+    const cam = this.jamCam, aspect = w / h;
+    let vh = Math.min(JAM_H, cam.vh * (1 - this.jamBeatKick * 0.012)), vw = vh * aspect;
+    if (vw > JAM_W) { vw = JAM_W; vh = vw / aspect; }
+    const x0 = Math.max(0, Math.min(JAM_W - vw, cam.x - vw / 2)), y0 = Math.max(0, Math.min(JAM_H - vh, cam.y - vh / 2));
+    this.jamView = { x0: x0, y0: y0, vw: vw, vh: vh };
+
     const g = this.jamG, cx = g.ctx;
     cx.setTransform(1, 0, 0, 1, 0, 0);
-    cx.clearRect(0, 0, this.jamCanvas.width, this.jamCanvas.height);
     cx.imageSmoothingEnabled = false;
+    cx.globalCompositeOperation = 'copy';   // the room's own picture is opaque: copy it over, no blending
     cx.drawImage(this.jamBg, 0, 0);
+    cx.globalCompositeOperation = 'source-over';
     cx.setTransform(SS, 0, 0, SS, 0, 0);
     this._jamDrawFire(g);
     this._jamDrawLanterns(g);
@@ -252,21 +268,11 @@ export function installJam(P) {
     this._jamDrawGlows(g);
     cx.setTransform(1, 0, 0, 1, 0, 0);
 
-    // The camera: a window of the room, as tall as the shot says and as wide as the control needs, kept inside the room.
-    const cam = this.jamCam, aspect = w / h;
-    let vh = Math.min(JAM_H, cam.vh * (1 - this.jamBeatKick * 0.012)), vw = vh * aspect;
-    if (vw > JAM_W) { vw = JAM_W; vh = vw / aspect; }
-    const x0 = Math.max(0, Math.min(JAM_W - vw, cam.x - vw / 2)), y0 = Math.max(0, Math.min(JAM_H - vh, cam.y - vh / 2));
     ctx.save();
     ctx.imageSmoothingEnabled = false;   // (the room is drawn 3x as fine as its pixels, so a slow pan still moves smoothly and the pixels stay sharp)
     ctx.drawImage(this.jamCanvas, x0 * SS, y0 * SS, vw * SS, vh * SS, 0, 0, w, h);
-    // A soft dark rim round the picture.
-    const vg = ctx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.35, w / 2, h / 2, Math.max(w, h) * 0.75);
-    vg.addColorStop(0, 'rgba(6,4,14,0)'); vg.addColorStop(1, 'rgba(6,4,14,0.55)');
-    ctx.fillStyle = vg; ctx.fillRect(0, 0, w, h);
     if (this.jamFade < 1) { ctx.fillStyle = 'rgba(0,0,0,' + (1 - ease(this.jamFade)).toFixed(3) + ')'; ctx.fillRect(0, 0, w, h); }
     ctx.restore();
-    this.jamView = { x0: x0, y0: y0, vw: vw, vh: vh };
   };
 
   // ---- The room that does not move ------------------------------------------------------------------------
@@ -475,32 +481,45 @@ export function installJam(P) {
     return L;
   };
 
-  /** The light map: a small grid, where every cell is as dark as the room is there and as warm as the lamps make it, laid over the room. */
+  /** The light map: a small grid, where every cell is as dark as the room is there and as warm as the lamps make it, laid over the room.
+   *  The lamps flicker slowly, so the grid is worked out every other frame (and each lamp only touches the cells it reaches). The dark rim round
+   *  the camera's picture is part of it too: it costs nothing here, where a full-screen overlay would cost a lot at full-screen sizes. */
   m._jamApplyLight = function (cx) {
     const lc = this.jamLight.canvas, lw = lc.width, lh = lc.height, lctx = lc.getContext('2d');
-    const img = lctx.createImageData(lw, lh), d = img.data, L = this._jamLights();
-    const amb = 0.62, dark = [10, 8, 28];
-    for (let y = 0; y < lh; y++) for (let x = 0; x < lw; x++) {
-      const wx = x * 2 + 1, wy = y * 2 + 1;
-      let r = 0, gg = 0, b = 0, tot = 0;
+    if ((this.jamLight.tick++ & 1) === 0) {
+      const img = this.jamLight.image, d = img.data, sums = this.jamLight.sums, L = this._jamLights();
+      sums.fill(0);
       for (const l of L) {
-        const dx = wx - l.x, dy = (wy - l.y) * 1.15, q = (dx * dx + dy * dy) / (l.r * l.r);
-        if (q >= 1) continue;
-        const w = l.k * Math.pow(1 - q, 1.4);
-        r += w * l.c[0]; gg += w * l.c[1]; b += w * l.c[2]; tot += w;
+        const cx0 = Math.max(0, Math.floor((l.x - l.r) / 2)), cx1 = Math.min(lw - 1, Math.ceil((l.x + l.r) / 2));
+        const cy0 = Math.max(0, Math.floor((l.y - l.r / 1.15) / 2)), cy1 = Math.min(lh - 1, Math.ceil((l.y + l.r / 1.15) / 2));
+        const inv = 1 / (l.r * l.r);
+        for (let y = cy0; y <= cy1; y++) {
+          const dy = (y * 2 + 1 - l.y) * 1.15, dy2 = dy * dy;
+          for (let x = cx0; x <= cx1; x++) {
+            const dx = x * 2 + 1 - l.x, q = (dx * dx + dy2) * inv;
+            if (q >= 1) continue;
+            const f = 1 - q, w = l.k * f * Math.sqrt(f), o = (y * lw + x) * 4;
+            sums[o] += w * l.c[0]; sums[o + 1] += w * l.c[1]; sums[o + 2] += w * l.c[2]; sums[o + 3] += w;
+          }
+        }
       }
-      const I = Math.min(1, tot);
-      const ad = amb * (1 - I);
-      let wr = 255, wg = 190, wb = 110;
-      if (tot > 0.0001) { wr = r / tot; wg = gg / tot; wb = b / tot; }
-      const aw = Math.min(0.4, tot * 0.34);
-      const A = 1 - (1 - ad) * (1 - aw);
-      const o = (y * lw + x) * 4;
-      if (A <= 0.001) { d[o + 3] = 0; continue; }
-      d[o] = Math.round((dark[0] * ad * (1 - aw) + wr * aw) / A); d[o + 1] = Math.round((dark[1] * ad * (1 - aw) + wg * aw) / A);
-      d[o + 2] = Math.round((dark[2] * ad * (1 - aw) + wb * aw) / A); d[o + 3] = Math.round(A * 255);
+      const amb = 0.62, v = this.jamView || { x0: 0, y0: 0, vw: JAM_W, vh: JAM_H };
+      for (let y = 0; y < lh; y++) for (let x = 0; x < lw; x++) {
+        const i = (y * lw + x) * 4, tot = sums[i + 3], I = Math.min(1, tot);
+        let ad = amb * (1 - I), wr = 255, wg = 190, wb = 110;
+        if (tot > 0.0001) { wr = sums[i] / tot; wg = sums[i + 1] / tot; wb = sums[i + 2] / tot; }
+        const aw = Math.min(0.4, tot * 0.34);
+        // the dark rim round whatever the camera is showing
+        const nx = ((x * 2 + 1) - v.x0) / v.vw - 0.5, ny = ((y * 2 + 1) - v.y0) / v.vh - 0.5;
+        const dd = Math.sqrt(nx * nx + ny * ny) * 2, rim = Math.max(0, Math.min(1, (dd - 0.62) / 0.7)) * 0.55;
+        ad = 1 - (1 - ad) * (1 - rim);
+        const A = 1 - (1 - ad) * (1 - aw);
+        if (A <= 0.001) { d[i + 3] = 0; continue; }
+        d[i] = Math.round((10 * ad * (1 - aw) + wr * aw) / A); d[i + 1] = Math.round((8 * ad * (1 - aw) + wg * aw) / A);
+        d[i + 2] = Math.round((28 * ad * (1 - aw) + wb * aw) / A); d[i + 3] = Math.round(A * 255);
+      }
+      lctx.putImageData(img, 0, 0);
     }
-    lctx.putImageData(img, 0, 0);
     cx.imageSmoothingEnabled = true; cx.imageSmoothingQuality = 'high';
     cx.drawImage(lc, 0, 0, lw, lh, 0, 0, JAM_W, JAM_H);
     cx.imageSmoothingEnabled = false;
