@@ -197,19 +197,23 @@ export class Visualizer {
     ctx.clearRect(0, 0, w, h);
 
     const scale = this.sceneScale;
-    const sc = this.scene.render(w, h, scale);
-    ctx.drawImage(sc, 0, h - sc.height * scale, sc.width * scale, sc.height * scale);
-    const front = this.scene.frontCanvas;
+    const jam = this.scene.jamActive;
+    if (jam) this.scene.renderJam(ctx, w, h);
+    const sc = jam ? null : this.scene.render(w, h, scale);
+    if (sc) ctx.drawImage(sc, 0, h - sc.height * scale, sc.width * scale, sc.height * scale);
+    const front = jam ? null : this.scene.frontCanvas;
     if (front) {   // the start sign is in view: its words go on the board, and the party and the rest of the scene over them
       this._drawOneSceneText(ctx, this.scene.signTextItem());
       ctx.drawImage(front, 0, h - front.height * scale, front.width * scale, front.height * scale);
     }
 
     this.summon.render(ctx, w, h, timeSeconds, this.summonAlpha, this.zoomed ? scale : 3, this.bufferingName, this.hud);
-    this._drawSceneText(ctx);
-    this._drawEncounter(ctx);
-    this._drawStoryUi(ctx);
-    this._drawCampHint(ctx);
+    if (!jam) {
+      this._drawSceneText(ctx);
+      this._drawEncounter(ctx);
+      this._drawStoryUi(ctx);
+      this._drawCampHint(ctx);
+    }
 
     ctx.strokeStyle = 'rgb(192,192,192)'; ctx.lineWidth = 1;
     ctx.strokeRect(0.5, 0.5, w - 1, h - 1);
@@ -220,6 +224,15 @@ export class Visualizer {
     if (hud !== 1) ctx.scale(hud, hud);
     this._drawExpandButton(ctx);
     this._drawSettingsButton(ctx);
+    if (jam) {   // in the tavern only the music's controls stay: what is playing, the tuner, and the way back to the road
+      this._drawNowPlaying(ctx);
+      this._drawTunerButton(ctx);
+      this._drawJamButton(ctx);
+      this._drawSettingsMenu(ctx);
+      ctx.restore();
+      this._drawDevLog(ctx);
+      return;
+    }
     this._drawDayCounter(ctx);
     this._drawGoldCounter(ctx);
     this._drawStampChip(ctx);
@@ -232,6 +245,7 @@ export class Visualizer {
     this._drawSkillsButton(ctx);
     this._drawScrollButton(ctx);
     this._drawTShopButton(ctx);
+    this._drawJamButton(ctx);
     this._drawMultiplierPicker(ctx);
     this._drawDisc(ctx);
     this._drawScrollPanel(ctx);
@@ -629,6 +643,40 @@ export class Visualizer {
     this._text(ctx, this.scene.scrollCount + '/' + this.scene.scrollCapacity, r.x + 8 + 16 + 6, r.y + r.h / 2 + 0.5, { px: 9.5 * PT, color: this.scene.scrollCount >= this.scene.scrollCapacity ? 'rgb(255,226,150)' : 'white' });
   }
 
+  // ---- The Tavern Jam button: bottom-right corner of the adventure. Opens the jam session (see jam.js); inside it, the way back. ----
+
+  get _jamRect() { const size = this._compactDisc ? 32 : 44; return { x: this.vw - 8 - size, y: this.vh - 8 - size, w: size, h: size }; }
+  get _jamVisible() { return this.zoomed && (this.scene.jamActive || this.scene.canJam); }
+  _inJam(h) {
+    if (!this._jamVisible) return false;
+    const r = this._jamRect, dx = h.x - (r.x + r.w / 2), dy = h.y - (r.y + r.h / 2);
+    return dx * dx + dy * dy <= (r.w / 2) * (r.w / 2);
+  }
+
+  _drawJamButton(ctx) {
+    if (!this._jamVisible) return;
+    const r = this._jamRect, hot = this._overJam, cx = r.x + r.w / 2, cy = r.y + r.h / 2, k = r.w / 44;
+    ctx.beginPath(); ctx.arc(cx, cy, (r.w - 1) / 2, 0, Math.PI * 2);
+    ctx.fillStyle = rgba(12, 16, 44, hot ? 0.75 : 0.47); ctx.fill();
+    ctx.strokeStyle = hot ? 'rgb(255,214,120)' : rgba(210, 224, 255, 0.75); ctx.lineWidth = 1.6; ctx.stroke();
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    if (this.scene.jamActive) {   // the way back: an arrow turning round to the road
+      ctx.strokeStyle = 'white'; ctx.lineWidth = Math.max(2, 2.6 * k);
+      ctx.beginPath(); ctx.moveTo(cx + 9 * k, cy - 7 * k); ctx.lineTo(cx + 9 * k, cy + 2 * k); ctx.lineTo(cx - 8 * k, cy + 2 * k); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(cx - 3 * k, cy - 3 * k); ctx.lineTo(cx - 9 * k, cy + 2 * k); ctx.lineTo(cx - 3 * k, cy + 7 * k); ctx.stroke();
+    } else {   // a lute
+      ctx.save(); ctx.translate(cx, cy + 1 * k); ctx.rotate(-0.72);
+      ctx.fillStyle = 'rgb(222,160,84)'; ctx.beginPath(); ctx.ellipse(0, 6 * k, 8 * k, 9.5 * k, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = 'rgb(120,74,38)'; ctx.lineWidth = Math.max(1, 1.4 * k); ctx.stroke();
+      ctx.fillStyle = 'rgb(46,28,20)'; ctx.beginPath(); ctx.arc(0, 6 * k, 2.6 * k, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = 'rgb(86,56,34)'; ctx.lineWidth = Math.max(2, 3 * k); ctx.beginPath(); ctx.moveTo(0, -3 * k); ctx.lineTo(0, -14 * k); ctx.stroke();
+      ctx.fillStyle = 'rgb(255,214,120)'; ctx.fillRect(-3 * k, -18 * k, 6 * k, 4 * k);
+      ctx.restore();
+    }
+    ctx.lineCap = 'butt'; ctx.lineJoin = 'miter';
+    if (hot) this._tip(ctx, this.scene.jamActive ? t('Back to the road') : t('Tavern jam session'), r.x - 10, r.y + r.h / 2, false);
+  }
+
   _drawTunerButton(ctx) {
     if (!this.zoomed) return;
     const r = this._tunerRect, hot = this.hover.tuner;
@@ -656,7 +704,7 @@ export class Visualizer {
   }
 
   _drawCompendiumButton(ctx) {
-    if (!this.zoomed) return;
+    if (!this.zoomed || this.scene.jamActive) return;
     const r = this._compRect, hot = this.hover.comp;
     this._pill(ctx, r.x, r.y, r.w, r.h, 5, rgba(12, 16, 44, hot ? 0.75 : 0.47), rgba(210, 224, 255, hot ? 1 : 0.67));
     const bx = r.x + 5, by = r.y + 7;
@@ -748,7 +796,7 @@ export class Visualizer {
     return { x: 6, y: y, w: size, h: size };
   }
   // The item button belongs to every view the party is shown in, not only the enlarged one.
-  get _hotVisible() { return !this.scene.isShopping && !this.scene.isGameOver && !this.scene.starting && !this.scene.isInnMenu; }
+  get _hotVisible() { return !this.scene.isShopping && !this.scene.isGameOver && !this.scene.starting && !this.scene.isInnMenu && !this.scene.jamActive; }
   get _discCenter() { return { x: 8 + 46 + 22 + 6, y: this._hotRect.y + 22 }; }   // the disc opens inward; its edge keeps the button's 8 px margin
 
   /** In a short view (the party strip under the Radio and Local Music tabs) the four-way disc would not fit, so the slots open as a row. */
@@ -785,6 +833,7 @@ export class Visualizer {
 
   /** Closes the disc menu or the shop if one is up (for Escape). True if something was closed. */
   dismissOverlay() {
+    if (this.scene.jamActive && !this._settingsOpen && !this._devOpen) { if (!this.scene.jamClosing) this.scene.closeJam(); return true; }
     if (this.scene.isWaiting) { this.scene.cancelTargeting(); return true; }
     if (this.scene.isSwapping) { this.scene.innCancel(); return true; }
     if (this._devOpen) { this._closeDev(); return true; }
@@ -2293,6 +2342,7 @@ export class Visualizer {
       card: -1, tile: -1, levelUp: false
     };
     this._overHot = this._inHot(h);
+    this._overJam = this._inJam(h);
     this._overScroll = this._inScroll(h);
     this._overTShop = this._inTShop(h);
     const rs = this._scrollOpen ? this._scrollSlotAt(h) : { slot: -1, cross: false };
@@ -2319,8 +2369,8 @@ export class Visualizer {
     }
     this.hover = hover;
     this._overSkills = this._inSkills(h);
-    const overCoin = !s.isLevelSelect && !s.isDialogue && !s.isChoosing && s.isCoinAt(p.x, p.y);
-    this.canvas.style.cursor = hover.button || hover.settings || hover.restart || hover.dev || this._overSkills || hover.qslider || hover.qauto || hover.qawake || hover.tuner || hover.comp || this._overHot || this._overScroll || this._overTShop || this._scrollHover >= 0 || this._discHover >= 0 || hover.card >= 0 || hover.tile >= 0 || hover.levelUp || overCoin ? 'pointer' : 'default';
+    const overCoin = !s.isLevelSelect && !s.isDialogue && !s.isChoosing && !s.jamActive && s.isCoinAt(p.x, p.y);
+    this.canvas.style.cursor = this._overJam || hover.button || hover.settings || hover.restart || hover.dev || this._overSkills || hover.qslider || hover.qauto || hover.qawake || hover.tuner || hover.comp || this._overHot || this._overScroll || this._overTShop || this._scrollHover >= 0 || this._discHover >= 0 || hover.card >= 0 || hover.tile >= 0 || hover.levelUp || overCoin ? 'pointer' : 'default';
   }
 
   _onDown(e) {
@@ -2331,6 +2381,7 @@ export class Visualizer {
     const h = { x: p.x / this.hud, y: p.y / this.hud };
     const s = this.scene;
     if (this._devOpen) { this._devDown(p, e); return; }
+    if (this._inJam(h) && !this._settingsOpen) { Sound.play('DiscClick'); if (s.jamActive) { if (!s.jamClosing) s.closeJam(); } else s.openJam(); this._overJam = false; return; }
     if (s.isSkillChoice) {
       const r = this._skillHit(p);
       if (r.hit >= 0) {
@@ -2422,7 +2473,7 @@ export class Visualizer {
     for (let i = 0; i < cards.length; i++) if (this._inRect(p, cards[i])) { s.choose(i); this.hover.card = -1; return; }
     if (this._inSkills(h)) { this._overSkills = false; Sound.play('DiscClick'); s.openSkills(); this.canvas.style.cursor = 'default'; return; }
     if (this._inTuner(h)) { this.host.openTuner && this.host.openTuner(); return; }
-    if (this.zoomed && this._inRect(h, this._compRect)) { this.host.openCompendium && this.host.openCompendium(); return; }
+    if (this.zoomed && !s.jamActive && this._inRect(h, this._compRect)) { this.host.openCompendium && this.host.openCompendium(); return; }
     if (this._inRect(h, this._buttonRect)) { this.host.toggleFullscreen && this.host.toggleFullscreen(); return; }
 
     if (s.isLevelSelect) {
@@ -2431,6 +2482,6 @@ export class Visualizer {
       else { const who = s.memberAt(p.x, p.y); if (who) s.pickMember(who); }
     } else if (s.isDialogue) s.advanceDialogue();
     else if (s.isLevelFx) s.skipLevelFx();
-    else if (!s.isChoosing) s.collectCoinAt(p.x, p.y);
+    else if (!s.isChoosing && !s.jamActive) s.collectCoinAt(p.x, p.y);
   }
 }

@@ -127,7 +127,7 @@ export class PixelScene {
 
     this.onProgress = null;   // callback: the saved progress changed
 
-    this._initCoins(); this._initStory(); this._initTraits(); this._initEnemies(); this._initHealth(); this._initItems(); this._initInn(); this._initTips(); this._initScroll(); this._initStamps();
+    this._initCoins(); this._initStory(); this._initTraits(); this._initEnemies(); this._initHealth(); this._initItems(); this._initInn(); this._initTips(); this._initScroll(); this._initStamps(); this._initJam();
     this.starting = false; this.startRects = []; this.signRect = null; this.startHover = -1;
     // The furthest the player has got across all adventures (finished days; the page keeps it) and whether this defeat beat it.
     this.bestDays = 0; this.onBest = null; this.newRecord = false; this.deathCounted = false;
@@ -148,6 +148,13 @@ export class PixelScene {
   // ---- Stepping ---------------------------------------------------------------------------------------
 
   advance(dt, level) {
+    if (this.jamActive) {   // the Tavern Jam: the adventure holds while the party plays, but the music (and what it does to the room) goes on
+      this.time += dt;
+      this._updateAudio(dt, level);
+      this.clock.update(dt, this.marching ? level : -1);
+      this._advanceJam(dt);
+      return;
+    }
     if (this.tip === 'HpTarget' && this.targetItem === null) this._beginCoinTip();   // the tutorial heal was made or cancelled: on to the second tip
     if (this.targetItem !== null || this.targetScroll !== null) { this.targetT += dt; return; }   // an item is waiting for its target: everything stands still
     if (this.scrollPrompt !== null) { this.targetT += dt; return; }   // the scroll storage is full and the player is choosing what to throw away
@@ -1371,6 +1378,7 @@ import { installScroll } from './scrolls.js';
 import { installStamps } from './stamps.js';
 import { installSkills } from './skills.js';
 import { installLog } from './advlog.js';
+import { installJam } from './jam.js';
 setKindNames(k => PARTY_ENUM[k], n => KIND_FROM_ENUM[n]);
 installHealth(PixelScene);
 installInn(PixelScene);
@@ -1385,3 +1393,4 @@ installStamps(PixelScene);
 installDesert(PixelScene);
 installSkills(PixelScene);
 installLog(PixelScene);
+installJam(PixelScene);

@@ -7,6 +7,34 @@
 // This file is plain data (the generator reads it): { date: 'YYYY-MM-DD', title, notes: [...], es: { title, notes }, zh: { title, notes } }.
 export const JOURNAL = [
   {
+    date: '2026-11-25',
+    title: 'The Tavern Jam',
+    notes: [
+      'A new lute button in the bottom-right corner takes the party into a tavern to jam to the radio.',
+      'Everyone plays an instrument of their own: lutes, harps, shawms, drums, bells, pipes and more.',
+      'The camera drifts and zooms, and the fire and lanterns light the stage and dance with the music.',
+      'Now and then a hero stands up and swaps instruments at the rack.'
+    ],
+    es: {
+      title: 'La sesión en la taberna',
+      notes: [
+        'Un nuevo botón de laúd en la esquina inferior derecha lleva al grupo a una taberna a tocar con la radio.',
+        'Cada uno toca su propio instrumento: laúdes, arpas, chirimías, tambores, campanillas, flautas y más.',
+        'La cámara se mueve y hace zoom, y el fuego y los faroles iluminan el escenario y bailan con la música.',
+        'De vez en cuando un héroe se levanta y cambia de instrumento en el estante.'
+      ]
+    },
+    zh: {
+      title: '酒馆即兴演奏',
+      notes: [
+        '右下角新增一个鲁特琴按钮，点击后队伍会走进酒馆，跟着电台一起演奏。',
+        '每位成员都有自己的乐器：鲁特琴、竖琴、肖姆管、鼓、手铃、排箫等等。',
+        '镜头会缓缓移动和推拉，炉火和灯笼照亮舞台，并随音乐舞动。',
+        '偶尔会有英雄起身，到乐器架上换一件乐器。'
+      ]
+    }
+  },
+  {
     date: '2026-11-19',
     title: 'Swap game music files',
     notes: [

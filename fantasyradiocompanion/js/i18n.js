@@ -87,6 +87,7 @@ const ES = {
   'Star Hat: red (+1 HP / 2 s) or blue (half damage) hats for {d} min every {s} min': 'Sombrero estelar: rojo (+1 PV / 2 s) o azul (mitad de daño), {d} min cada {s} min',
   'Huzzah!': '¡Hurra!', 'Blood Moon!': '¡Luna de Sangre!',
   // HUD and shop
+  'Tavern jam session': 'Sesión de música en la taberna', 'Back to the road': 'Volver al camino',
   'Tuner: music & radio stations': 'Sintonizador: música y emisoras', 'Tap: use   Hold: switch': 'Toca: usar   Mantén: cambiar', 'Restart': 'Reiniciar',
   'Merchant': 'Mercader', 'In bag: {n}': 'En la bolsa: {n}', 'Leave': 'Salir', 'Tap anywhere to close': 'Toca en cualquier lugar para cerrar', 'Click anywhere to close': 'Haz clic en cualquier lugar para cerrar',
   'Synergy Elixir': 'Elixir de sinergia', 'Red Potion': 'Poción roja', 'Monster Berserker': 'Berserker de monstruos', 'Monster damage multiplier': 'Multiplicador de daño de los monstruos',
@@ -210,6 +211,7 @@ const ZH = {
   'Star Hat: red (+1 HP / 2 s) or blue (half damage) hats for {d} min every {s} min': '星星帽：红色（每 2 秒 +1 生命）或蓝色（伤害减半），持续 {d} 分钟，每 {s} 分钟一次',
   'Huzzah!': '万岁！', 'Blood Moon!': '血月！',
   // HUD and shop
+  'Tavern jam session': '酒馆即兴演奏', 'Back to the road': '回到路上',
   'Tuner: music & radio stations': '调谐器：音乐与电台', 'Tap: use   Hold: switch': '轻点：使用   长按：切换', 'Restart': '重新开始',
   'Merchant': '商人', 'In bag: {n}': '背包中：{n}', 'Leave': '离开', 'Tap anywhere to close': '点击任意位置关闭', 'Click anywhere to close': '点击任意位置关闭',
   'Synergy Elixir': '协同灵药', 'Red Potion': '红色药水', 'Monster Berserker': '怪物狂暴', 'Monster damage multiplier': '怪物伤害倍率',
